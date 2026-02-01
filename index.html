@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Meu Primeiro Jogo - André Dev</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a1a; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Ajusta o tamanho do palco para a tela toda
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let player = { x: 50, y: 50, size: 40 };
+
+        function draw() {
+            // Fundo com rastro (opcional, dá um efeito legal de movimento)
+            ctx.fillStyle = 'rgba(26, 26, 26, 0.2)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Desenha o jogador (André Dev Player)
+            ctx.fillStyle = '#00ff00'; 
+            ctx.shadowBlur = 15;
+            ctx.fillRect(player.x, player.y, player.size, player.size);
+            
+            requestAnimationFrame(draw);
+        }
+
+        // Segue o mouse
+        window.addEventListener('mousemove', (e) => {
+            player.x = e.clientX - player.size / 2 ;
+            player.y = e.clientY - player.size / 2;
+        });
+
+        draw();
+    </script>
+</body>
+</html>
