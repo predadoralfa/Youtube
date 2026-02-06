@@ -7,38 +7,58 @@
         body { margin: 0; overflow: hidden; background: #1a1a1a; }
         canvas { display: block; }
     </style>
+
 </head>
 <body>
 
-    <canvas id="gameCanvas"></canvas>
-
+    <canvas id="gameCanvas" width="600" height="600" style="border: 1px solid #555"></canvas>
+    <p>Itens: <span id="count">0</span></p>
     <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = document.getElementById('gameCanvas').getContext('2d');
 
-        // Ajusta o tamanho do palco para a tela toda
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
 
-        let player = { x: 50, y: 50, size: 40 };
+
+        const player = {
+            x:200,
+            y:200,
+            size:20
+        };
+        const item = {
+            x:Math.random() * 380,
+            y: Math.random() * 380,
+            size:10
+        }
+        let pontos = 0;
 
         function draw() {
-            // Fundo com rastro (opcional, dá um efeito legal de movimento)
-            ctx.fillStyle = 'rgba(26, 26, 26, 0.2)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // Desenha o jogador (André Dev Player)
-            ctx.fillStyle = '#00ff00'; 
-            ctx.shadowBlur = 15;
+            ctx.clearRect(0, 0, 600, 600)
+
+            //Desenho do player
+            ctx.fillStyle = 'blue';
             ctx.fillRect(player.x, player.y, player.size, player.size);
-            
+
+            //desenho do item            
+            ctx.fillStyle = 'gold'; 
+            ctx.fillRect(item.x, item.y, item.size, item.size);
+
+            //logica de colisão
+            if(
+                player.x < item.x + item.size && player.x + player.size > item.x &&
+                player.y < item.y + item.size && player.y + player.size > item.y
+            ) {
+                pontos++
+                document.getElementById('count').innerText = pontos;
+                item.x = Math.random() * 380,
+                item.y = Math.random() * 380;
+            }            
             requestAnimationFrame(draw);
         }
 
-        // Segue o mouse
-        window.addEventListener('mousemove', (e) => {
-            player.x = e.clientX - player.size / 2 ;
-            player.y = e.clientY - player.size / 2;
+        window.addEventListener('keydown', (e) => {
+            if(e.key == 'w')player.y -= 10;
+            if(e.key == 's')player.y += 10;
+            if(e.key == 'a')player.x -= 10;
+            if(e.key == 'd')player.x += 10;
         });
 
         draw();
