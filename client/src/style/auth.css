@@ -1,0 +1,186 @@
+/* Variáveis de Cores (Opcional, mas útil para consistência) */
+:root {
+  --primary-bg-color: #1a1a1a; /* Fundo escuro principal */
+  --secondary-bg-color: #2b2b2b; /* Fundo do modal */
+  --text-color: #e0e0e0; /* Cor do texto claro */
+  --placeholder-color: #888;
+  --border-color: #555; /* Borda dos inputs */
+  --button-bg-color: #a06a2c; /* Cor do botão inspirada no dourado/madeira */
+  --button-hover-bg-color: #c0803a;
+  --link-color: #6a9edb; /* Cor de link para o texto de switch */
+  --input-bg-color: #3d3d3d; /* Fundo dos inputs */
+}
+
+
+/* Container principal da página de autenticação */
+.auth-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden; /* Garante que a imagem de fundo não crie barras de rolagem indesejadas */
+  background-color: var(--primary-bg-color); /* Fallback caso a imagem não carregue */
+}
+
+
+/* Estilo para a imagem de fundo */
+.auth-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url('../img/auth.png'); /* Ajuste o caminho conforme necessário */
+  background-position: center;
+  filter: blur(5px) brightness(0.6); /* Desfoque e escurecimento para o tema */
+  z-index: 1; /* Para ficar abaixo do modal */
+}
+
+
+/* Wrapper para centralizar o modal e garantir que ele fique acima do background */
+.auth-modal-wrapper {
+  position: relative;
+  z-index: 2; /* Acima do background */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%; /* Para que o wrapper ocupe a largura total */
+  height: 100%; /* Para que o wrapper ocupe a altura total */
+}
+
+
+/* Estilo para os modais de Login e Registro */
+.auth-modal {
+  background-color: var(--secondary-bg-color);
+  padding: 40px;
+  border-radius: 8px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  color: var(--text-color);
+  width: 380px; /* Largura fixa para o modal */
+  max-width: 90%; /* Garante que não ultrapasse em telas pequenas */
+  text-align: center;
+  border: 1px solid var(--border-color); /* Borda sutil */
+  box-sizing: border-box; /* Inclui padding e borda na largura total */
+}
+
+
+.auth-modal h2 {
+  font-size: 2.2em;
+  margin-bottom: 30px;
+  color: #f0d8a8; /* Um dourado mais forte para o título */
+  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.7);
+  letter-spacing: 1.5px;
+}
+
+
+/* Grupo de input para melhor organização */
+.input-group {
+  margin-bottom: 25px;
+  text-align: left;
+}
+
+
+.input-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 1em;
+  color: var(--text-color);
+  font-weight: bold;
+}
+
+
+.auth-modal input {
+  width: 100%;
+  padding: 15px 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--input-bg-color);
+  color: var(--text-color);
+  font-size: 1.1em;
+  box-sizing: border-box; /* Inclui padding e borda na largura total */
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+
+.auth-modal input::placeholder {
+  color: var(--placeholder-color);
+}
+
+
+.auth-modal input:focus {
+  outline: none;
+  border-color: var(--button-hover-bg-color); /* Realce ao focar */
+  box-shadow: 0 0 0 3px rgba(160, 106, 44, 0.3); /* Sombra de foco */
+}
+
+
+/* Botão de ação */
+.auth-button {
+  width: 100%;
+  padding: 16px 20px;
+  background-color: var(--button-bg-color);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.2em;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 20px;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+
+.auth-button:hover {
+  background-color: var(--button-hover-bg-color);
+  transform: translateY(-2px);
+}
+
+
+.auth-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+
+/* Texto para alternar entre Login e Registro */
+.switch-mode {
+  margin-top: 30px;
+  font-size: 0.95em;
+  color: var(--text-color);
+}
+
+
+.switch-mode .link-text {
+  color: var(--link-color);
+  text-decoration: none;
+  cursor: pointer;
+  font-weight: bold;
+  transition: color 0.3s ease;
+}
+
+
+.switch-mode .link-text:hover {
+  color: #92c4f7; /* Um tom mais claro ao passar o mouse */
+  text-decoration: underline;
+}
+
+
+/* Estilos globais (pode ir no seu index.css ou app.css) */
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Uma fonte mais moderna */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #000; /* Fundo preto para evitar flashes brancos */
+}
+
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
