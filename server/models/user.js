@@ -24,10 +24,11 @@ module.exports = (sequelize, DataTypes) => {
         hooks: {
             beforeCreate: async (user) => {
                 if(user.senha) {
-                    const salt = await bcrypt.getSalt(10);
+                    const salt = await bcrypt.genSalt(10);
                     user.senha = await bcrypt.hash(user.senha, salt);
                 }
             }
         }
-    })
+    });
+    return User;
 }

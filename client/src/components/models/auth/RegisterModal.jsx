@@ -5,11 +5,12 @@ import { registerUser } from "../../../service/auth";
 export function RegisterModal({onSwitch}) {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [nome, setNome] = useState("");
 
     async function handleRegister() {
 
         try {
-            await registerUser({ email, password });
+            await registerUser({ nome, email, password });
             alert ("Registro enviado para o servidor");
 
             onSwitch();
@@ -22,6 +23,17 @@ export function RegisterModal({onSwitch}) {
     return (
         <div className="auth-modal">
         <h2>Registro</h2>
+
+
+        <div className="input-group">
+            <label htmlFor="register-email">Nome</label>
+            <input
+            id="register-nome"
+            placeholder="Seu nome"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            />
+        </div>
 
 
         <div className="input-group">
