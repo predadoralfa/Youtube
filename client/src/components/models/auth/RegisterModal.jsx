@@ -10,10 +10,10 @@ export function RegisterModal({onSwitch}) {
     async function handleRegister() {
 
         try {
-            await registerUser({ nome, email, password });
-            alert ("Registro enviado para o servidor");
+            const result = await registerUser({ nome, email, senha: password });
+            alert(result.message);
 
-            onSwitch();
+            //onSwitch();
         } catch (error) {
             console.error("Erro ao registrar:", error);
             alert("Erro ao registrar. Tente novamente.")
