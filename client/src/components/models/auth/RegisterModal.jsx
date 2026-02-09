@@ -13,7 +13,7 @@ export function RegisterModal({onSwitch}) {
             const result = await registerUser({ nome, email, senha: password });
             alert(result.message);
 
-            //onSwitch();
+            onSwitch();
         } catch (error) {
             console.error("Erro ao registrar:", error);
             alert("Erro ao registrar. Tente novamente.")
