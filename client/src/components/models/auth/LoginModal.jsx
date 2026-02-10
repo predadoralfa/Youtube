@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { loginUser } from "@/services/auth";
+import { loginUser } from "@/services/Auth";
 
 export function LoginModal({ onSwitch }) {
   const [email, setEmail] = useState("");

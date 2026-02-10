@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { registerUser } from "@/services/auth";
+import { registerUser } from "@/services/Auth";
 
 
 export function RegisterModal({onSwitch}) {
