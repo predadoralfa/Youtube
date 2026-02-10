@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import path from "node:path";
 
 export default defineConfig({
     plugins: [
@@ -7,4 +8,9 @@ export default defineConfig({
             jsxRuntime: "automatic",
         }),
     ],
+    resolve: {
+        alias: {
+            "@": path.resolve(__dirname, "src"),
+        },
+    },
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AuthPage } from "../pages/AuthPage";
+import { AuthPage } from "@/pages/AuthPage";
 
 export function WorldRoot() {
     const [hasToken, setHasToken] = useState(false);
