@@ -1,4 +1,6 @@
-import { API_BASE_URL } from "./Api";
+import { API_BASE_URL } from "./api";
+fetch(`${API_BASE_URL}/auth/register`, `${API_BASE_URL}/auth/login`);
+
 
 export async function registerUser(data) {
     const response = await fetch(
