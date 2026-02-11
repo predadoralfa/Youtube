@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./api";
+import { API_BASE_URL } from "./Api";
 
 export async function registerUser(payload) {
   const res = await fetch(`${API_BASE_URL}/auth/register`, {
