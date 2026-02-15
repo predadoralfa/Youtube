@@ -1,91 +1,127 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
-const { User } = require("../models");
+
+const { sequelize, GaUser, GaUserProfile } = require("../models"); // ajuste o caminho
+const { Op } = require("sequelize");
 
 const register = async (req, res) => {
-    try{
-        const{ email, senha, nome } = req.body;
+  const t = await sequelize.transaction();
 
+  try {
+    const { email, senha, nome } = req.body; // "nome" agora vira display_name
 
-        // 1. validação mínima
-        if( !email || !senha || !nome ){
-            return res.status(400).json({
-                message: "Dados obrigatório ausentes"
-            });
-        }
-
-        // 2. Verificação se o email já existe
-        const userExistente = await  User.findOne({ where: {email} });
-
-        if(userExistente){
-            return res.status(409).json({
-                message: "Email já cadastrado"
-            });
-        }
-
-        const novoUsuario = await User.create({
-            email,senha,nome
-        });
-        console.log("Novo usuário cadastrado")
-
-        return res.status(201).json({
-            success: true,
-            message: "Conta cadastrada",
-            user: {
-                id: novoUsuario.id,
-                email: novoUsuario.email,
-                nome: novoUsuario.nome
-            }
-        });
-
-
-
-    } catch (error) {
-        console.error("Erro ao registrar usuário", error);
-        return res.status(500).json({
-            message: "Erro interno do servidor"
-        });
+    // 1) validação mínima
+    if (!email || !senha || !nome) {
+      await t.rollback();
+      return res.status(400).json({ message: "Dados obrigatórios ausentes" });
     }
-}
+
+    // 2) normalizações básicas
+    const emailNorm = String(email).trim().toLowerCase();
+    const displayName = String(nome).trim();
+
+    if (displayName.length < 3 || displayName.length > 32) {
+      await t.rollback();
+      return res.status(400).json({ message: "Nome inválido (3-32 chars)" });
+    }
+
+    // 3) checa email (GaUser) e display_name (Profile)
+    const [emailExiste, nomeExiste] = await Promise.all([
+      GaUser.findOne({ where: { email: emailNorm }, transaction: t }),
+      GaUserProfile.findOne({ where: { display_name: displayName }, transaction: t }),
+    ]);
+
+    if (emailExiste) {
+      await t.rollback();
+      return res.status(409).json({ message: "Email já cadastrado" });
+    }
+
+    if (nomeExiste) {
+      await t.rollback();
+      return res.status(409).json({ message: "Nome já em uso" });
+    }
+
+    // 4) cria usuário (senha será hash pelo hook)
+    const novoUser = await GaUser.create(
+      { email: emailNorm, senha },
+      { transaction: t }
+    );
+
+    // 5) cria profile separado
+    const novoProfile = await GaUserProfile.create(
+      { user_id: novoUser.id, display_name: displayName },
+      { transaction: t }
+    );
+
+    await t.commit();
+
+    return res.status(201).json({
+      success: true,
+      message: "Conta cadastrada",
+      user: {
+        id: novoUser.id,
+        email: novoUser.email,
+        profile: {
+          display_name: novoProfile.display_name,
+        },
+      },
+    });
+  } catch (error) {
+    await t.rollback();
+
+    // Se você tiver constraint UNIQUE no banco, isso ajuda a responder bonito:
+    if (error?.name === "SequelizeUniqueConstraintError") {
+      return res.status(409).json({ message: "Email ou nome já cadastrado" });
+    }
+
+    console.error("Erro ao registrar usuário", error);
+    return res.status(500).json({ message: "Erro interno do servidor" });
+  }
+};
 
 
 const login = async (req, res) => {
-    try{
-        const{ email, senha } = req.body;
-        console.log("[AUTHSERVICE] ", email, senha)
+  try {
+    const { email, senha } = req.body;
+    console.log("[AUTHSERVICE] ", email);
 
+    if (!email || !senha) {
+      return res.status(400).json({ message: "Dados obrigatórios ausentes" });
+    }
 
-        // 1. validação mínima
-        if( !email || !senha ){
-            return res.status(400).json({
-                message: "Dados obrigatório ausentes"
-            });
-        }
+    const emailNorm = String(email).trim().toLowerCase();
 
-        const user = await User.findOne({ where: { email } });
-        if(!user) {
-            return res.status(401).json({error: "Sobrevivente não encotrado"});
-        }
+    // pega usuário + profile
+    const user = await GaUser.findOne({
+      where: { email: emailNorm },
+      include: [{ model: GaUserProfile, as: "profile", attributes: ["display_name"] }],
+    });
 
-        const senhaValida = await bcrypt.compare(senha, user.senha);
-        if(!senhaValida) {
-            return res.status(401).json({ error: "Credeciais inválidas"})
-        }
+    if (!user) {
+      return res.status(401).json({ error: "Sobrevivente não encontrado" });
+    }
 
-        console.log("[AUTHSERVICE] ID do jogador", user.id)
-        const token = jwt.sign(
-            { id: user.id, nome: user.nome },
-            process.env.JWT_SECRET || 'chave_mestra_extrema',
-            { expiresIn: '24h'}
-        );
+    const senhaValida = await bcrypt.compare(senha, user.senha);
+    if (!senhaValida) {
+      return res.status(401).json({ error: "Credenciais inválidas" });
+    }
 
-        //retorna dados
-        res.json({
-            token,
-            usuario: { id: user.id, nome: user.nome }
-        });
-    } catch (error) {
-        res.status(500).json({ error: "Erro interno do servidor"})
-    };    
-}
+    const displayName = user.profile?.display_name ?? null;
+
+    const token = jwt.sign(
+      { id: user.id, display_name: displayName },
+      process.env.JWT_SECRET || "chave_mestra_extrema",
+      { expiresIn: "24h" }
+    );
+
+    return res.json({
+      token,
+      usuario: { id: user.id, display_name: displayName },
+    });
+  } catch (error) {
+    console.error("Erro no login:", error);
+    return res.status(500).json({ error: "Erro interno do servidor" });
+  }
+};
+
 module.exports = { register, login };

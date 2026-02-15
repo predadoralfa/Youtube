@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { loginUser } from "@/services/Auth";
 
-export function LoginModal({ onSwitch }) {
+export function LoginModal({ onSwitch, onLoggedIn }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -9,9 +9,10 @@ export function LoginModal({ onSwitch }) {
 
       try {
           const result = await loginUser({ email, senha: password });
+
           if(result.token) {
-            localStorage.setItem("token", result.token);
-            window.location.href = "/";
+            onLoggedIn(result.token);
+
           } else {
             alert(result.error || "Erro ao logar");
           }

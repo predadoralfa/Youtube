@@ -9,9 +9,15 @@ export function WorldRoot() {
         setHasToken(!!token);
     }, []);
 
-    if(!hasToken) {
-        return <AuthPage/>       
+    const handleLogin = (token) => {
+        localStorage.setItem("token", token);
+        setHasToken(true);
+    };
+
+    if (!hasToken) {
+        return <AuthPage onLoggedIn={handleLogin} />;
     }
+
 
     return (
             <div>

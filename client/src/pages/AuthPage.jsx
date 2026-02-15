@@ -1,9 +1,8 @@
-import { LoginModal } from "@/components/models/auth/LoginModal";
-import { RegisterModal } from "@/components/models/auth/RegisterModal";
+import { LoginModal, RegisterModal } from "@/components/models/auth/";
 import { useState } from "react"
 import "@/style/auth.css"
 
-export function AuthPage() {
+export function AuthPage({ onLoggedIn }) {
     const [mode, setModo] = useState("login");
 
     return (
@@ -11,9 +10,13 @@ export function AuthPage() {
             <div className="auth-background"></div>
             <div className="auth-modal-wrapper">
                 { mode === "login" ? (
-                    <LoginModal onSwitch={ () => setModo("register")}/>
+                    <LoginModal onSwitch={ () => setModo("register")}
+                        onLoggedIn={onLoggedIn}
+                    />
                 ) : (
-                    <RegisterModal onSwitch={ () => setModo("login")}/>
+                    <RegisterModal onSwitch={ () => setModo("login")}
+                        onLoggedIn={onLoggedIn}
+                    />
                 )} 
             </div>
         </div> 
