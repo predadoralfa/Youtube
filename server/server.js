@@ -20,7 +20,7 @@ app.use ((req, res, next) => {
 app.use("/auth", authRouter)
 
 db.sequelize.authenticate();
-db.sequelize.sync();
+//db.sequelize.sync({ alter: true });
 
 //Start Server
 
