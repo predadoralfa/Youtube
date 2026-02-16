@@ -20,7 +20,6 @@ const sequelize = new Sequelize(
 const autenticarBanco = async () => {
     try{
        await sequelize.authenticate();
-       console.log('Conexão com o banco estabelicida com sucesso!') 
     } catch (error) {
         console.log("Erro ao conectar ao MYSQL", error)
     }    

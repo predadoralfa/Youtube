@@ -16,24 +16,31 @@ export function GameShell() {
     }
 
     (async () => {
-      const data = await bootstrapWorld(token);
+      console.log("[GAMESHELL] bootstrap start");
+      try {
+        const data = await bootstrapWorld(token);
+        console.log("[GAMESHELL] bootstrap done", data);
 
-      if (data?.error) {
-        console.error("[GAMESHELL] bootstrap error:", data);
+        if (!data || data?.error) {
+          console.error("[GAMESHELL] bootstrap error:", data);
 
-        if (data.status === 401) {
-          localStorage.removeItem("token");
-          window.location.reload();
+          if (data?.status === 401) {
+            localStorage.removeItem("token");
+            window.location.reload();
+            return;
+          }
+
           return;
         }
 
+        setSnapshot(data.snapshot);
+        console.log("[GAMESHELL] snapshot set", data.snapshot);
+      } catch (err) {
+        console.error("[GAMESHELL] exception:", err);
+      } finally {
         setLoading(false);
-        return;
+        console.log("[GAMESHELL] loading=false");
       }
-
-      setSnapshot(data.snapshot);
-      console.log("[SHELL], Snapshot", data.snapshot)
-      setLoading(false);
     })();
   }, []);
 

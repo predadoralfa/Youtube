@@ -1,4 +1,15 @@
-const { GaUserRuntime, GaInstance, GaLocal, GaLocalGeometry, GaLocalVisual, GaMaterial } = require("../models");
+// server/controller/worldController.js
+
+const {
+  GaUserRuntime,
+  GaInstance,
+  GaLocal,
+  GaLocalGeometry,
+  GaLocalVisual,
+  GaMaterial,
+  GaMeshTemplate,
+  GaRenderMaterial,
+} = require("../models");
 
 const bootstrap = async (req, res) => {
   try {
@@ -14,7 +25,7 @@ const bootstrap = async (req, res) => {
       return res.status(500).json({ message: "Runtime ausente (inconsistência)" });
     }
 
-    // 2) Instância + Local template (geometry + visual + material)
+    // 2) Instância + Local template (geometry + visual + materiais/mesh)
     const instance = await GaInstance.findByPk(runtime.instance_id, {
       attributes: ["id", "local_id", "instance_type", "status"],
       include: [
@@ -23,13 +34,55 @@ const bootstrap = async (req, res) => {
           as: "local",
           attributes: ["id", "code", "name", "local_type", "parent_id"],
           include: [
-            { model: GaLocalGeometry, as: "geometry", attributes: ["size_x", "size_z"] },
+            {
+              model: GaLocalGeometry,
+              as: "geometry",
+              attributes: ["size_x", "size_z"],
+            },
             {
               model: GaLocalVisual,
               as: "visual",
-              attributes: ["ground_material_id"],
+              attributes: [
+                "ground_material_id",
+                "ground_mesh_id",
+                "ground_render_material_id",
+                "version",
+              ],
               include: [
-                { model: GaMaterial, as: "groundMaterial", attributes: ["id", "code", "name", "friction", "restitution"] }
+                {
+                  model: GaMaterial,
+                  as: "groundMaterial",
+                  attributes: ["id", "code", "name", "friction", "restitution"],
+                },
+                {
+                  model: GaMeshTemplate,
+                  as: "groundMesh",
+                  attributes: [
+                    "id",
+                    "code",
+                    "mesh_kind",
+                    "primitive_type",
+                    "gltf_url",
+                    "default_scale_x",
+                    "default_scale_y",
+                    "default_scale_z",
+                  ],
+                  required: false,
+                },
+                {
+                  model: GaRenderMaterial,
+                  as: "groundRenderMaterial",
+                  attributes: [
+                    "id",
+                    "code",
+                    "kind",
+                    "base_color",
+                    "texture_url",
+                    "roughness",
+                    "metalness",
+                  ],
+                  required: false,
+                },
               ],
             },
           ],
@@ -42,7 +95,6 @@ const bootstrap = async (req, res) => {
     }
 
     if (instance.status !== "ONLINE") {
-      // por agora: bloqueia
       return res.status(409).json({ message: "Instância não está ONLINE" });
     }
 
@@ -51,18 +103,30 @@ const bootstrap = async (req, res) => {
       return res.status(500).json({ message: "Local inexistente (inconsistência)" });
     }
 
-    // 3) Payload mínimo para Fase 1 (chão invisível + limites)
+    // 3) Payload mínimo para Fase 1 (chão + limites)
     const sizeX = local.geometry?.size_x ?? 200;
     const sizeZ = local.geometry?.size_z ?? 200;
 
-    // version simples (depois vira hash/etag)
-    const localTemplateVersion = `local:${local.id}:v1`;
+    // version real do template visual (base do cache)
+    const v = local.visual?.version ?? 1;
+    const localTemplateVersion = `local:${local.id}:v${v}`;
 
-    console.log("[WORLD] user:", req.user);
+    // Logs úteis (sem dumpar o user inteiro)
+    console.log("[WORLD] user_id:", userId);
     console.log("[WORLD] instance:", { id: instance.id, status: instance.status, local_id: instance.local_id });
     console.log("[WORLD] local:", { id: local.id, code: local.code });
     console.log("[WORLD] geometry:", { sizeX, sizeZ });
+    console.log("[WORLD] visual_version:", v);
 
+    // Helpers para não explodir nulls
+    const groundMaterial = local.visual?.groundMaterial ?? null;
+    const groundMesh = local.visual?.groundMesh ?? null;
+    const groundRenderMaterial = local.visual?.groundRenderMaterial ?? null;
+
+    // Fallback de cor (ordem de prioridade)
+    const groundColor =
+      groundRenderMaterial?.base_color ??
+      "#5a5a5a";
 
     return res.json({
       ok: true,
@@ -81,7 +145,9 @@ const bootstrap = async (req, res) => {
           instance_type: instance.instance_type,
           status: instance.status,
         },
+
         localTemplateVersion,
+
         localTemplate: {
           local: {
             id: local.id,
@@ -90,23 +156,58 @@ const bootstrap = async (req, res) => {
             local_type: local.local_type,
             parent_id: local.parent_id,
           },
+
           geometry: {
             size_x: sizeX,
             size_z: sizeZ,
           },
+
           visual: {
-            // hoje ainda não existe render-material no banco, então isso é hint
+            // Material físico (gameplay/colisão)
             ground_material: {
-              id: local.visual?.groundMaterial?.id ?? null,
-              code: local.visual?.groundMaterial?.code ?? "DEFAULT",
-              name: local.visual?.groundMaterial?.name ?? "Default",
-              // físico (ainda), guardamos porque já está aí
-              friction: local.visual?.groundMaterial?.friction ?? null,
-              restitution: local.visual?.groundMaterial?.restitution ?? null,
+              id: groundMaterial?.id ?? null,
+              code: groundMaterial?.code ?? "DEFAULT",
+              name: groundMaterial?.name ?? "Default",
+              friction: groundMaterial?.friction ?? null,
+              restitution: groundMaterial?.restitution ?? null,
             },
-            // placeholder temporário (você pode trocar depois pelo metadado real)
-            ground_color: "#5a5a5a",
+
+            // Mesh declarativa do chão (render)
+            ground_mesh: groundMesh
+              ? {
+                  id: groundMesh.id,
+                  code: groundMesh.code,
+                  mesh_kind: groundMesh.mesh_kind,
+                  primitive_type: groundMesh.primitive_type,
+                  gltf_url: groundMesh.gltf_url,
+                  default_scale: {
+                    x: groundMesh.default_scale_x,
+                    y: groundMesh.default_scale_y,
+                    z: groundMesh.default_scale_z,
+                  },
+                }
+              : null,
+
+            // Material visual declarativo do chão (render)
+            ground_render_material: groundRenderMaterial
+              ? {
+                  id: groundRenderMaterial.id,
+                  code: groundRenderMaterial.code,
+                  kind: groundRenderMaterial.kind,
+                  base_color: groundRenderMaterial.base_color,
+                  texture_url: groundRenderMaterial.texture_url,
+                  roughness: groundRenderMaterial.roughness,
+                  metalness: groundRenderMaterial.metalness,
+                }
+              : null,
+
+            // Fallback (por enquanto o front pode usar isso direto)
+            ground_color: groundColor,
+
+            // versão do template visual (útil pro front/cache)
+            version: v,
           },
+
           debug: {
             bounds: { size_x: sizeX, size_z: sizeZ },
           },

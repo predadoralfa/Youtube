@@ -12,6 +12,7 @@ export function GameCanvas({ snapshot }) {
 
     const sizeX = snapshot?.localTemplate?.geometry?.size_x ?? 200;
     const sizeZ = snapshot?.localTemplate?.geometry?.size_z ?? 200;
+    const visual = snapshot?.localTemplate?.visual ?? {};
 
     // =============================
     // RENDERER
@@ -19,6 +20,8 @@ export function GameCanvas({ snapshot }) {
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.shadowMap.enabled = true;
+
     container.appendChild(renderer.domElement);
 
     // =============================
@@ -28,46 +31,72 @@ export function GameCanvas({ snapshot }) {
     scene.background = new THREE.Color(0x000000);
 
     // =============================
-    // CAMERA + LIGHT (vem dos módulos)
+    // CAMERA + LIGHT
     // =============================
-    const { camera, update, onWheel, onResize, setBounds } = setupCamera(container);
-    setupLight(scene);
+    const { camera, update, onWheel, onResize, setBounds } =
+      setupCamera(container);
 
-    // Enquadra o local (como ainda não há hero)
+    setupLight(scene);
     setBounds({ sizeX, sizeZ });
 
-    // eventos
-    renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
+    renderer.domElement.addEventListener("wheel", onWheel, {
+      passive: false,
+    });
     window.addEventListener("resize", onResize);
 
     // =============================
-    // CHÃO INVISÍVEL
+    // MATERIAL VISUAL DO CHÃO
     // =============================
-    const ground = new THREE.Mesh(
+    const color =
+      visual?.ground_render_material?.base_color ??
+      visual?.ground_color ??
+      "#5a5a5a";
+
+    const groundMaterial = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(color),
+    });
+
+    // =============================
+    // CHÃO VISÍVEL (plataforma real)
+    // =============================
+    const groundMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(sizeX, sizeZ),
+      groundMaterial
+    );
+
+    groundMesh.rotation.x = -Math.PI / 2;
+    groundMesh.receiveShadow = true;
+    scene.add(groundMesh);
+
+    // =============================
+    // COLISOR INVISÍVEL (conceito mantido)
+    // =============================
+    const groundCollider = new THREE.Mesh(
       new THREE.PlaneGeometry(sizeX, sizeZ),
       new THREE.MeshBasicMaterial({ visible: false })
     );
-    ground.rotation.x = -Math.PI / 2;
-    scene.add(ground);
+
+    groundCollider.rotation.x = -Math.PI / 2;
+    scene.add(groundCollider);
 
     // =============================
     // LIMITES (LineLoop)
     // =============================
     const halfX = sizeX / 2;
     const halfZ = sizeZ / 2;
+    const y = 0.2;
 
-    const y = 0.2; // ↑ sobe um pouco pra não “colar” no plano
     const pts = [
       new THREE.Vector3(-halfX, y, -halfZ),
-      new THREE.Vector3( halfX, y, -halfZ),
-      new THREE.Vector3( halfX, y,  halfZ),
-      new THREE.Vector3(-halfX, y,  halfZ),
+      new THREE.Vector3(halfX, y, -halfZ),
+      new THREE.Vector3(halfX, y, halfZ),
+      new THREE.Vector3(-halfX, y, halfZ),
     ];
 
     const boundsGeometry = new THREE.BufferGeometry().setFromPoints(pts);
     const boundsMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
     const bounds = new THREE.LineLoop(boundsGeometry, boundsMaterial);
-    bounds.frustumCulled = false; // debug seguro
+    bounds.frustumCulled = false;
     scene.add(bounds);
 
     // =============================
@@ -80,13 +109,12 @@ export function GameCanvas({ snapshot }) {
       if (!alive) return;
 
       const dt = Math.min(clock.getDelta(), 0.05);
-
-      // Ainda sem hero: update não faz nada, e tá certo.
       update(null, dt);
 
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
     };
+
     requestAnimationFrame(tick);
 
     // =============================
@@ -99,12 +127,16 @@ export function GameCanvas({ snapshot }) {
       window.removeEventListener("resize", onResize);
 
       const canvas = renderer.domElement;
-      if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      if (canvas && canvas.parentNode) {
+        canvas.parentNode.removeChild(canvas);
+      }
 
       renderer.dispose();
 
-      ground.geometry.dispose();
-      ground.material.dispose();
+      groundMesh.geometry.dispose();
+      groundMesh.material.dispose();
+
+      groundCollider.geometry.dispose();
 
       boundsGeometry.dispose();
       boundsMaterial.dispose();

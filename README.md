@@ -289,4 +289,184 @@ O banco e o jogo devem seguir o mesmo contrato:
 
 ---
 
+# 📄 Atualização de Estado – Plataforma Base Concluída
+
+Este documento registra as novidades implementadas nesta etapa do projeto, consolidando a conclusão do piso do cenário e a formalização da logística estrutural do banco de dados.
+
+---
+
+# ✅ 1) Plataforma do Cenário Concluída
+
+O piso do cenário agora é completamente **declarativo e dirigido pelo banco de dados**.
+
+## O que foi implementado
+
+- O tamanho do chão é definido por:
+  - `ga_local_geometry.size_x`
+  - `ga_local_geometry.size_z`
+
+- O material físico do chão vem de:
+  - `ga_local_visual.ground_material_id`
+  - Referenciando `ga_material`
+
+- O material visual do chão vem de:
+  - `ga_local_visual.ground_render_material_id`
+  - Referenciando `ga_render_material.base_color`
+
+- A malha renderizável pode ser definida por:
+  - `ga_local_visual.ground_mesh_id`
+  - Referenciando `ga_mesh_template`
+
+- O template visual possui versionamento:
+  - `ga_local_visual.version`
+
+---
+
+## Arquitetura Validada
+
+Fluxo confirmado e funcional:
+
+
+O front:
+
+- Não define tamanho
+- Não define material
+- Não define geometria
+- Apenas consome o snapshot
+
+---
+
+## Estrutura atual do render
+
+O cliente agora renderiza:
+
+- Plataforma visível baseada em dados do banco
+- Material visual vindo do `ga_render_material`
+- Collider invisível mantido por coerência arquitetural
+- Limites do local via `LineLoop`
+- Câmera configurada por bounds do local
+- Iluminação modular
+
+Ainda não existem:
+
+- Herói
+- Movimento
+- Gameplay
+- Objetos de cenário
+
+O foco foi validar a base estrutural do mundo.
+
+---
+
+# 🗄 2) Logística do Banco de Dados
+
+O banco agora é formalmente tratado como:
+
+> Modelo declarativo do universo do jogo
+
+---
+
+## Encadeamento Canônico
+
+
+---
+
+## Separação de Responsabilidades
+
+### Física
+- `ga_material`
+- Responsável por propriedades físicas (friction, restitution)
+
+### Visual
+- `ga_render_material`
+- Responsável por aparência (color, texture, pbr)
+
+### Geometria Renderizável
+- `ga_mesh_template`
+- Define tipo de malha (primitive ou gltf)
+
+Essa separação permite:
+
+- Alterar aparência sem alterar gameplay
+- Alterar física sem alterar render
+- Evoluir render sem quebrar contrato estrutural
+
+---
+
+## Integridade Estrutural
+
+- `ga_local.parent_id` usa `ON DELETE NO ACTION`
+- Hierarquia protegida contra exclusões acidentais
+- `code` é identificador estável e único
+- `ga_local_visual` é 1:1 com `ga_local`
+
+---
+
+## Versionamento do Template
+
+`ga_local_visual.version` agora existe para:
+
+- Controle de cache no frontend
+- Invalidação previsível
+- Evolução controlada do template visual
+
+Exemplo futuro:
+
+
+Agora retorna:
+
+- runtime (posição + yaw)
+- instância
+- template completo do local:
+  - geometry
+  - visual:
+    - ground_material (físico)
+    - ground_render_material (visual)
+    - ground_mesh (quando existir)
+    - version
+
+O snapshot está consistente e validado.
+
+---
+
+# 🧠 4) Estrutura de Inicialização do Backend
+
+Foi implementado:
+
+- Bootstrap assíncrono controlado
+- Conexão explícita via `sequelize.authenticate()`
+- Remoção de `sync()` automático
+- Preparação para uso de migrations
+
+O servidor agora sobe apenas após confirmar conexão com o banco.
+
+---
+
+# 🚧 5) Próximas Camadas Preparadas
+
+A base agora permite evoluir para:
+
+- Render de textura real
+- Render GLTF declarativo
+- Objetos de cenário declarativos
+- Cache baseado em versionamento
+- Introdução do herói
+- Sistema de movimentação
+- Relevo e elevação futura
+
+A fundação estrutural está concluída.
+
+---
+
+# 📌 Estado Consolidado
+
+✔ Backend estruturado  
+✔ Banco normalizado e coerente  
+✔ Separação física vs visual  
+✔ Versionamento implementado  
+✔ Bootstrap estável  
+✔ Plataforma renderizada via snapshot  
+✔ Pipeline validado  
+
+O projeto agora possui base técnica sólida para escalar sem refatorações estruturais futuras.
 
