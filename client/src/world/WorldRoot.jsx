@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AuthPage } from "@/pages/AuthPage";
+import { GameShell } from "@/World/GameShell";
 
 export function WorldRoot() {
     const [hasToken, setHasToken] = useState(false);
@@ -19,9 +20,5 @@ export function WorldRoot() {
     }
 
 
-    return (
-            <div>
-                <h1>Usuário no lobby</h1>
-            </div>
-        )
+    return <GameShell />
 }

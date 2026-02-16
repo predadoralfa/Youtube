@@ -6,6 +6,7 @@ const db = require("./models")
 
 //ROTAS
 const authRouter = require("./router/authRouter");
+const worldRouter = require ("./router/worldRouter")
 
 const app = express();
 
@@ -18,9 +19,10 @@ app.use ((req, res, next) => {
 })
 
 app.use("/auth", authRouter)
+app.use("/world", worldRouter)
 
 db.sequelize.authenticate();
-//db.sequelize.sync({ alter: true });
+db.sequelize.sync();
 
 //Start Server
 

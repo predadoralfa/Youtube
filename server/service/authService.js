@@ -53,6 +53,18 @@ const register = async (req, res) => {
       { transaction: t }
     );
 
+    // 6) cria status separado
+    const novoStats = await GaUserStats.create(
+      { user_id: novoUser.id },
+      { transaction: t }
+    );
+
+    // 7) cria localização separado
+    const novoRuntime = await GaUserRuntime.create(
+      { user_id: novoUser.id, instance_id: instanceIdInicial },
+      { transaction: t }
+    );
+
     await t.commit();
 
     return res.status(201).json({

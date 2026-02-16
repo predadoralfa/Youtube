@@ -24,6 +24,16 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true
       },
 
+      local_type: {
+        type: DataTypes.ENUM("UNIVERSO", "PLANETA", "SETOR", "CIDADE", "LOCAL"),
+        allowNull: false,
+      },
+
+      parent_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+      },
+
       is_active: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
@@ -32,27 +42,52 @@ module.exports = (sequelize, DataTypes) => {
     },
     {
       tableName: "ga_local",
-      indexes: [{ unique: true, fields: ["code"] }]
+
+      // espelha o MySQL: created_at / updated_at
+      timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+
+      indexes: [
+        { unique: true, fields: ["code"] },
+        { fields: ["parent_id"] }
+      ]
     }
   );
 
   GaLocal.associate = (models) => {
-    // 1:1
+    GaLocal.belongsTo(models.GaLocal, {
+      foreignKey: "parent_id",
+      as: "parent",
+      constraints: true,
+
+      // espelha o MySQL: ON DELETE NO ACTION
+      onDelete: "NO ACTION",
+      onUpdate: "CASCADE"
+    });
+
+    GaLocal.hasMany(models.GaLocal, {
+      foreignKey: "parent_id",
+      as: "children",
+      constraints: true
+    });
+
     GaLocal.hasOne(models.GaLocalGeometry, {
       foreignKey: "local_id",
-      as: "geometry"
+      as: "geometry",
+      constraints: true
     });
 
-    // 1:1
     GaLocal.hasOne(models.GaLocalVisual, {
       foreignKey: "local_id",
-      as: "visual"
+      as: "visual",
+      constraints: true
     });
 
-    // 1:N (depende de existir esse model e ter local_id)
     GaLocal.hasMany(models.GaInstance, {
       foreignKey: "local_id",
-      as: "instances"
+      as: "instances",
+      constraints: true
     });
   };
 

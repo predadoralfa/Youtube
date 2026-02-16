@@ -18,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
       instance_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
+        default: 4,
         references: {
           model: "ga_instance",
           key: "id"
@@ -29,19 +30,19 @@ module.exports = (sequelize, DataTypes) => {
       pos_x: {
         type: DataTypes.FLOAT,
         allowNull: false,
-        defaultValue: 0
+        defaultValue: 50
       },
 
       pos_y: {
         type: DataTypes.FLOAT,
         allowNull: false,
-        defaultValue: 0
+        defaultValue: 50
       },
 
       pos_z: {
         type: DataTypes.FLOAT,
         allowNull: false,
-        defaultValue: 0
+        defaultValue: 10
       },
 
       yaw: {

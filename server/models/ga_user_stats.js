@@ -18,7 +18,7 @@ module.exports = (sequelize, DataTypes) => {
       move_speed: {
         type: DataTypes.FLOAT,
         allowNull: false,
-        defaultValue: 2.7778
+        defaultValue: 2.7778 / 2
       }
     },
     {
