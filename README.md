@@ -158,12 +158,6 @@ ga_user
 
 ## Retorno (snapshot mínimo)
 
-Entrega o mínimo para o cliente montar o mundo:
-
-* **runtime**
-
-  * posição
-  * yaw/rotação
 * **instância**
 
   * id / status (conforme implementado)
@@ -219,12 +213,6 @@ O cliente renderiza:
 * Câmera configurada com bounds (`setBounds`)
 * Luz básica (setupLight)
 
-Ainda NÃO existe:
-
-* herói
-* movimento
-* gameplay
-* objetos de cenário
 
 Objetivo do render atual:
 
@@ -469,4 +457,152 @@ A fundação estrutural está concluída.
 ✔ Pipeline validado  
 
 O projeto agora possui base técnica sólida para escalar sem refatorações estruturais futuras.
+
+
+# Atualização Arquitetural – Player e Câmera Orbital
+
+## 📦 Marco Atual do Cliente
+
+- Player placeholder implementado
+- Câmera orbital funcional
+- Zoom via scroll ativo
+- Sistema de input desacoplado iniciado
+- Arquitetura declarativa preservada
+
+---
+
+# 👤 Player (Placeholder Visual)
+
+## Implementação
+
+- Representação atual: cilindro (`THREE.CylinderGeometry`)
+- Criado dentro do `GameCanvas`
+- Adicionado diretamente à `scene`
+- Sincronizado via `snapshot.runtime`
+
+## Responsabilidade
+
+- Refletir posição recebida do backend
+- Refletir rotação recebida do backend
+- Servir como alvo da câmera
+- Representar entidade jogável no cliente
+
+## Não Faz
+
+- Não decide movimento
+- Não aplica física
+- Não cria estado
+- Não executa gameplay
+
+## Fonte da Verdade
+
+- Backend (via snapshot)
+
+---
+
+# 🔄 Sincronização do Player
+
+- Função utilizada: `syncPlayer(playerMesh, snapshot.runtime)`
+- Executada a cada frame dentro do loop
+- Atualiza:
+  - `position`
+  - `rotation`
+
+O cliente apenas espelha o estado recebido.
+
+---
+
+# 🎥 Câmera Orbital (Rig Simplificado)
+
+## Conceito
+
+- Sistema inspirado em rig estilo Unreal (simplificado)
+- Orbita ao redor do player
+- Mira um ponto elevado do cilindro (simulando "cabeça")
+
+## Estrutura Interna
+
+- `pivot` → alvo da câmera
+- `yaw` → rotação horizontal
+- `pitch` → inclinação vertical
+- `distance` → distância da câmera
+
+## Comportamento
+
+- Inclinação padrão aproximada de 45°
+- Limite mínimo e máximo de zoom
+- Limite mínimo e máximo de pitch
+- Atualização via `update(hero, dt)`
+
+---
+
+# 🔍 Sistema de Zoom
+
+## Implementação
+
+- Função: `applyZoom(dir)`
+- Sensibilidade configurável (`zoomStep`)
+- Limites:
+  - `minDistance`
+  - `maxDistance`
+
+## Observação
+
+- Independente do evento DOM
+- Controlado por Intent (`CAMERA_ZOOM`)
+
+---
+
+# 🌀 Sistema de Órbita
+
+## Implementação
+
+- Função: `applyOrbit(deltaX, deltaY)`
+- Sensibilidade configurável (`orbitSensitivity`)
+- Pitch limitado para evitar:
+  - Top-down extremo
+  - Visão por baixo do chão
+
+## Controle
+
+- Controlado por Intent (`CAMERA_ORBIT`)
+- Input desacoplado via InputBus
+
+---
+
+# 🖱 Sistema de Input (Base Estrutural)
+
+## Fluxo Atual
+
+DOM → InputBus → Intent → GameCanvas → Camera
+
+## Intents Implementadas
+
+- `CAMERA_ZOOM`
+- `CAMERA_ORBIT`
+
+## Objetivo Arquitetural
+
+- Desacoplar input de lógica visual
+- Preparar estrutura para movimentação autoritativa futura
+- Manter o cliente como renderizador, não simulador
+
+---
+
+# 🧠 Arquitetura Preservada
+
+- Backend continua sendo a única fonte da verdade
+- Cliente não simula mundo
+- Cliente não executa regras
+- Cliente apenas renderiza snapshot
+
+---
+
+# 🚀 Próximos Passos Naturais
+
+- Movimento autoritativo vindo do backend
+- Interpolação visual no cliente
+- Inclusão de objetos estáticos (árvores, casas, etc.)
+- Ajustes finos de câmera
+- Eventual pós-processamento visual
 

@@ -1,3 +1,4 @@
+// src/world/scene/camera/camera.js
 import * as THREE from "three";
 
 export function setupCamera(container) {
@@ -7,60 +8,67 @@ export function setupCamera(container) {
     65,
     container.clientWidth / container.clientHeight,
     0.1,
-    5000 // ↑ era 1000, com local 1000x1000 fica apertado
+    5000
   );
 
-  // Posição inicial fixa (debug)
-  camera.position.set(6, 6, 6);
-  camera.lookAt(0, 0, 0);
+  // ===== Rig (Unreal-like) =====
+  const pivot = new THREE.Vector3(); // "bone" alvo (cabeça)
+  let yaw = 0;                       // rot horizontal
+  let pitch = THREE.MathUtils.degToRad(45); // 45° default
+  let distance = 35;
 
-  let distance = 8.0;
-  const minDistance = 3.5;
-  const maxDistance = 8000.0; // ↑ para mundos grandes
-  const zoomStep = 1.0;
+  const minDistance = 10;
+  const maxDistance = 90;
 
-  const up = new THREE.Vector3(0, 1, 0);
-  const forward = new THREE.Vector3();
-  const target = new THREE.Vector3();
-  const desired = new THREE.Vector3();
+  const minPitch = THREE.MathUtils.degToRad(15);  // não deixa virar topdown puro
+  const maxPitch = THREE.MathUtils.degToRad(80);  // não deixa olhar de baixo
 
-  // ✅ novo: enquadrar bounds quando não existe hero
+  const orbitSensitivity = 0.004; // ajuste fino
+  const zoomStep = 4.0;
+
   function setBounds({ sizeX = 200, sizeZ = 200 } = {}) {
+    // só para primeira visão; não mexe em yaw/pitch/distance
     const max = Math.max(sizeX, sizeZ);
-    const d = Math.max(12, max * 0.9);
-
-    distance = THREE.MathUtils.clamp(d, minDistance, maxDistance);
-
-    camera.position.set(0, distance * 0.6, distance);
+    const d = Math.min(120, Math.max(25, max * 0.12));
+    camera.position.set(0, d * 0.6, d);
     camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
   }
 
-  function update(hero, dt = 0) {
-    // Se não houver hero, mantém câmera fixa (bounds)
-    if (!hero) return;
-
-    forward.set(0, 0, 1).applyAxisAngle(up, hero.rotation.y).normalize();
-
-    target.copy(hero.position);
-    target.y += 1.2;
-
-    desired.copy(target);
-    desired.addScaledVector(forward, -distance);
-    desired.y += 2.2;
-
-    camera.position.lerp(desired, 0.12);
-    camera.lookAt(target);
+  function applyZoom(dir) {
+    distance = THREE.MathUtils.clamp(distance + dir * zoomStep, minDistance, maxDistance);
   }
 
-  function onWheel(e) {
-    e.preventDefault();
-    const dir = Math.sign(e.deltaY);
-    distance = THREE.MathUtils.clamp(
-      distance + dir * zoomStep,
-      minDistance,
-      maxDistance
+  function applyOrbit(deltaX, deltaY) {
+    yaw -= deltaX * orbitSensitivity;
+    pitch -= deltaY * orbitSensitivity;
+    pitch = THREE.MathUtils.clamp(pitch, minPitch, maxPitch);
+    console.log("[ORBIT]", deltaX, deltaY, "yaw", yaw, "pitch", pitch);
+
+  }
+
+  function update(hero, dt = 0) {
+    if (!hero) return;
+
+    // "bone": cabeça do cilindro (ajuste fino)
+    pivot.copy(hero.position);
+    pivot.y += 2.2;
+
+    // offset esférico (orbit)
+    const cosP = Math.cos(pitch);
+    const sinP = Math.sin(pitch);
+    const sinY = Math.sin(yaw);
+    const cosY = Math.cos(yaw);
+
+    const offset = new THREE.Vector3(
+      distance * cosP * sinY,
+      distance * sinP,
+      distance * cosP * cosY
     );
+
+    // atrás do alvo (invertendo Z do offset)
+    camera.position.copy(pivot).add(offset);
+    camera.lookAt(pivot);
   }
 
   function onResize() {
@@ -70,5 +78,12 @@ export function setupCamera(container) {
     camera.updateProjectionMatrix();
   }
 
-  return { camera, update, onWheel, onResize, setBounds };
+  // Mantém compatibilidade com seu onWheel atual, se quiser
+  function onWheel(e) {
+    e.preventDefault();
+    applyZoom(Math.sign(e.deltaY));
+  }
+
+
+  return { camera, update, applyOrbit, applyZoom, onWheel, onResize, setBounds };
 }

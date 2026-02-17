@@ -37,6 +37,16 @@
             WolrdRoot.jsx
             GameShell.jsx
 
+            entites/
+                character/
+                    Player.jsx
+                    CharacterFactor.jsx
+            
+            input/
+            i   inputBus.js          // barramento (pub/sub) simples
+                inputs.js            // mapeia DOM events -> intents
+                intents.js           // tipos: CAMERA_ZOOM, MOVE, INTERACT...
+
             scene/
                 GameCanvas.jsx
 
@@ -48,12 +58,19 @@
 
 ### ============================================================
 
-# server
+# server/
     package.json
     package-lock.json
     server.js
+    .sequelizerc
+    config/
+        config.csj
+
     middlewate/
         requireAuth.js
+
+    migrations/
+        ....
 
     models/
         muitos

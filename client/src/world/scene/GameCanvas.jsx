@@ -1,7 +1,55 @@
+/**
+ * =====================================================================
+ * ⚠️ REGRA DE OURO — COMENTÁRIO IMUTÁVEL (NÃO REMOVER)
+ * =====================================================================
+ *
+ * ❌ ESTE BLOCO DE COMENTÁRIO NÃO PODE SER REMOVIDO
+ * ❌ ESTE BLOCO NÃO PODE SER ENCURTADO
+ *
+ * 📦 Arquivo: GameCanvas.jsx
+ *
+ * Papel:
+ * - Ser o render host canônico do cliente (Three.js puro).
+ * - Montar renderer/scene/camera/luz e desenhar o snapshot recebido.
+ * - Instanciar e manter entidades visuais locais (ex: Player placeholder),
+ *   sincronizando-as exclusivamente a partir do snapshot.
+ *
+ * Fonte da verdade:
+ * - Backend (via snapshot).
+ * - Este arquivo NUNCA decide estado do mundo, apenas renderiza.
+ *
+ * NÃO FAZ:
+ * - Não faz HTTP / não chama backend
+ * - Não lê teclado / não processa input
+ * - Não simula movimento / não aplica física / não executa gameplay
+ * - Não cria regras de mundo (apenas apresenta o que veio do snapshot)
+ *
+ * FAZ:
+ * - Cria renderer, scene, camera e luz
+ * - Renderiza chão/plataforma e limites usando o template do snapshot
+ * - Cria um Player placeholder (cilindro) e mantém ele na cena
+ * - Sincroniza Player (posição/rotação) usando snapshot.runtime
+ *
+ * 🤖 IAs:
+ * - NÃO remover este comentário
+ * - NÃO mover lógica para fora deste arquivo
+ *
+ * =====================================================================
+ */
 import { useEffect, useRef } from "react";
+
+// CENA
 import * as THREE from "three";
 import { setupCamera } from "./camera/camera";
 import { setupLight } from "./light/light";
+import { createInputBus } from "../input/InputBus";
+import { bindInputs } from "../input/inputs";
+import { IntentType } from "../input/intents";
+
+
+//  Player placeholder - entidade visual do mundo
+import { createPlayerMesh, syncPlayer } from "../entities/character/player";
+
 
 export function GameCanvas({ snapshot }) {
   const containerRef = useRef(null);
@@ -13,6 +61,9 @@ export function GameCanvas({ snapshot }) {
     const sizeX = snapshot?.localTemplate?.geometry?.size_x ?? 200;
     const sizeZ = snapshot?.localTemplate?.geometry?.size_z ?? 200;
     const visual = snapshot?.localTemplate?.visual ?? {};
+
+    // runtime vindo do backend (fonte da verdade)
+    const runtime = snapshot?.runtime ?? null;
 
     // =============================
     // RENDERER
@@ -33,16 +84,31 @@ export function GameCanvas({ snapshot }) {
     // =============================
     // CAMERA + LIGHT
     // =============================
-    const { camera, update, onWheel, onResize, setBounds } =
-      setupCamera(container);
+    const { camera, update, applyOrbit, applyZoom, onResize, setBounds } = setupCamera(container);
 
     setupLight(scene);
     setBounds({ sizeX, sizeZ });
-
-    renderer.domElement.addEventListener("wheel", onWheel, {
-      passive: false,
-    });
     window.addEventListener("resize", onResize);
+
+    // =============================
+    // INPUT (bus + bind + listener)
+    // =============================
+    const bus = createInputBus();
+    const unbindInputs = bindInputs(renderer.domElement, bus);
+
+    const off = bus.on((intent) => {
+      if (intent.type === IntentType.CAMERA_ZOOM) {
+        applyZoom(intent.delta);
+      }
+
+      if (intent.type === IntentType.CAMERA_ORBIT) {
+        applyOrbit(intent.dx, intent.dy);
+      }
+    });
+
+
+
+    
 
     // =============================
     // MATERIAL VISUAL DO CHÃO
@@ -55,7 +121,6 @@ export function GameCanvas({ snapshot }) {
     const groundMaterial = new THREE.MeshStandardMaterial({
       color: new THREE.Color(color),
     });
-
     // =============================
     // CHÃO VISÍVEL (plataforma real)
     // =============================
@@ -100,6 +165,16 @@ export function GameCanvas({ snapshot }) {
     scene.add(bounds);
 
     // =============================
+    // PLAYER (Placeholder)
+    // =============================
+    const playerMesh = createPlayerMesh();
+    scene.add(playerMesh);
+
+    // sync inicial
+    syncPlayer(playerMesh, snapshot?.runtime);
+
+
+    // =============================
     // LOOP
     // =============================
     let alive = true;
@@ -109,11 +184,14 @@ export function GameCanvas({ snapshot }) {
       if (!alive) return;
 
       const dt = Math.min(clock.getDelta(), 0.05);
-      update(null, dt);
+
+      syncPlayer(playerMesh, snapshot?.runtime);
+      update(playerMesh, dt);
 
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
     };
+
 
     requestAnimationFrame(tick);
 
@@ -123,7 +201,9 @@ export function GameCanvas({ snapshot }) {
     return () => {
       alive = false;
 
-      renderer.domElement.removeEventListener("wheel", onWheel);
+      off();          // remove listener do bus
+      unbindInputs(); // remove listeners DOM
+
       window.removeEventListener("resize", onResize);
 
       const canvas = renderer.domElement;
@@ -131,15 +211,24 @@ export function GameCanvas({ snapshot }) {
         canvas.parentNode.removeChild(canvas);
       }
 
+      // remove entidades
+      scene.remove(playerMesh);
+      playerMesh.geometry.dispose();
+      playerMesh.material.dispose();
+
+
       renderer.dispose();
 
+      // dispose chão
       groundMesh.geometry.dispose();
       groundMesh.material.dispose();
 
       groundCollider.geometry.dispose();
 
+      // dispose bounds
       boundsGeometry.dispose();
       boundsMaterial.dispose();
+
     };
   }, [snapshot]);
 
