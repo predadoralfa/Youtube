@@ -1,13 +1,10 @@
 # cliente/
     vite.config.js
-    package.json
-    package-lock.json
     .env.development
     .env.production
     src/
         App.jsx
         main.jsx
-        3dx/
         components/
             models/
                 auth/
@@ -29,6 +26,7 @@
            Api.js
            Auth.js
            World.js
+           Socket.js
 
         style/
             auth.css
@@ -82,3 +80,12 @@
     services/
         authService.js
         worldService.js
+
+    socket/
+        index.js
+        handlers/
+            moveHandler.js
+
+    state/
+        runtimeStore.js
+

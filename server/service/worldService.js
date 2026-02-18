@@ -111,13 +111,6 @@ const bootstrap = async (req, res) => {
     const v = local.visual?.version ?? 1;
     const localTemplateVersion = `local:${local.id}:v${v}`;
 
-    // Logs úteis (sem dumpar o user inteiro)
-    console.log("[WORLD] user_id:", userId);
-    console.log("[WORLD] instance:", { id: instance.id, status: instance.status, local_id: instance.local_id });
-    console.log("[WORLD] local:", { id: local.id, code: local.code });
-    console.log("[WORLD] geometry:", { sizeX, sizeZ });
-    console.log("[WORLD] visual_version:", v);
-
     // Helpers para não explodir nulls
     const groundMaterial = local.visual?.groundMaterial ?? null;
     const groundMesh = local.visual?.groundMesh ?? null;
@@ -126,7 +119,7 @@ const bootstrap = async (req, res) => {
     // Fallback de cor (ordem de prioridade)
     const groundColor =
       groundRenderMaterial?.base_color ??
-      "#5a5a5a";
+      "#711010";
 
     return res.json({
       ok: true,
@@ -134,9 +127,11 @@ const bootstrap = async (req, res) => {
         runtime: {
           user_id: runtime.user_id,
           instance_id: runtime.instance_id,
-          pos_x: runtime.pos_x,
-          pos_y: runtime.pos_y,
-          pos_z: runtime.pos_z,
+          pos: {
+            x: runtime.pos_x,
+            y: runtime.pos_y,
+            z: runtime.pos_z,
+          },
           yaw: runtime.yaw,
         },
         instance: {

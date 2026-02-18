@@ -22,7 +22,7 @@ import * as THREE from "three";
  * - Não faz HTTP
  */
 
-export function createPlayerMesh({ radius = 6, height = 20, color = "#ff2d55" } = {}) {
+export function createPlayerMesh({ radius = 0.5, height = 1.75, color = "#ff2d55" } = {}) {
   const geo = new THREE.CylinderGeometry(radius, radius, height, 16);
   const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color) });
 

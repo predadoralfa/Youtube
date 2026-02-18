@@ -43,8 +43,6 @@ export function setupCamera(container) {
     yaw -= deltaX * orbitSensitivity;
     pitch -= deltaY * orbitSensitivity;
     pitch = THREE.MathUtils.clamp(pitch, minPitch, maxPitch);
-    console.log("[ORBIT]", deltaX, deltaY, "yaw", yaw, "pitch", pitch);
-
   }
 
   function update(hero, dt = 0) {
@@ -84,6 +82,11 @@ export function setupCamera(container) {
     applyZoom(Math.sign(e.deltaY));
   }
 
+  function getYaw() {
+  return yaw;
+}
 
-  return { camera, update, applyOrbit, applyZoom, onWheel, onResize, setBounds };
+
+
+  return { camera, update, applyOrbit, applyZoom, onWheel, onResize, setBounds, getYaw };
 }

@@ -1,3 +1,5 @@
+// input/inputBus.js
+
 export function createInputBus() {
   const listeners = new Set();
 

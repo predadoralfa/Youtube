@@ -2,11 +2,17 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const { createServer } = require("http");          
+const { Server } = require("socket.io");         
+
 const db = require("./models");
 
 // ROTAS
 const authRouter = require("./router/authRouter");
 const worldRouter = require("./router/worldRouter");
+
+// SOCKET
+const { registerSocket } = require("./socket");    
 
 const app = express();
 
@@ -33,14 +39,31 @@ async function bootstrap() {
     // NÃO usar sync() com migrations
     // await db.sequelize.sync();
 
-    app.listen(5100, () => {
+    // ✅ cria servidor HTTP a partir do app
+    const httpServer = createServer(app);
+
+    // ✅ sobe socket.io no mesmo servidor
+    const io = new Server(httpServer, {
+      cors: {
+        origin: "*", // depois você restringe
+        methods: ["GET", "POST"],
+        credentials: true,
+      },
+    });
+
+    // ✅ registra pipeline do socket (auth + handlers)
+    registerSocket(io);
+    console.log("[SOCKET] Rodando")
+
+    // ✅ agora escuta no httpServer, não no app
+    httpServer.listen(5100, () => {
       console.log("Servidor rodando na porta 5100");
     });
 
   } catch (error) {
     console.error("Erro ao iniciar servidor:");
     console.error(error);
-    process.exit(1); // encerra processo se não conectar
+    process.exit(1);
   }
 }
 
