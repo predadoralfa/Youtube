@@ -22,9 +22,26 @@ import * as THREE from "three";
  * - Não faz HTTP
  */
 
-export function createPlayerMesh({ radius = 0.5, height = 1.75, color = "#ff2d55" } = {}) {
+const COLORS = {
+  self: "#ff2d55",
+  other: "#2d7dff",
+};
+
+export function createPlayerMesh(
+  {
+    radius = 0.5,
+    height = 1.75,
+    color,
+    isSelf = true,
+  } = {}
+) {
+  // Se não foi passado color explícito, escolhe por categoria (self vs other)
+  const resolvedColor = color ?? (isSelf ? COLORS.self : COLORS.other);
+
   const geo = new THREE.CylinderGeometry(radius, radius, height, 16);
-  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color) });
+  const mat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(resolvedColor),
+  });
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true;
@@ -32,6 +49,9 @@ export function createPlayerMesh({ radius = 0.5, height = 1.75, color = "#ff2d55
 
   // “pisa” no chão
   mesh.position.y = height / 2;
+
+  // marcação útil para debug (sem depender de nomeplate ainda)
+  mesh.userData.isSelf = !!isSelf;
 
   return mesh;
 }

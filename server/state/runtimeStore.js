@@ -5,6 +5,18 @@ const runtimeStore = new Map(); // key: String(userId) -> runtime state
 
 const DEFAULT_SPEED = 4;
 
+// Chunking (interest management)
+const CHUNK_SIZE = 256; // configurável (Etapa 1: fixo)
+
+function computeChunk(pos) {
+  const x = Number(pos?.x ?? 0);
+  const z = Number(pos?.z ?? 0);
+  return {
+    cx: Math.floor(x / CHUNK_SIZE),
+    cz: Math.floor(z / CHUNK_SIZE),
+  };
+}
+
 // Connection states (string, não enum DB)
 const CONNECTION = {
   CONNECTED: "CONNECTED",
@@ -38,6 +50,21 @@ function setRuntime(userId, runtime) {
 }
 
 /**
+ * (NOVO) Útil para debug e para o persistenceManager decidir eviction.
+ */
+function hasRuntime(userId) {
+  return runtimeStore.has(String(userId));
+}
+
+/**
+ * (NOVO) Eviction explícita do runtime em memória.
+ * Retorna true se removeu, false se não existia.
+ */
+function deleteRuntime(userId) {
+  return runtimeStore.delete(String(userId));
+}
+
+/**
  * Iterador seguro para o persistenceManager varrer.
  * Não expõe o Map diretamente.
  */
@@ -49,6 +76,10 @@ function markRuntimeDirty(userId, nowMs = Date.now()) {
   const rt = getRuntime(userId);
   if (!rt) return false;
 
+  // (NOVO) OFFLINE não deve ficar sujando por gameplay/ruído.
+  // Persistir transição de conexão é feito por setConnectionState.
+  if (rt.connectionState === CONNECTION.OFFLINE) return false;
+
   rt.dirtyRuntime = true;
   rt.lastRuntimeDirtyAtMs = nowMs;
   return true;
@@ -57,6 +88,9 @@ function markRuntimeDirty(userId, nowMs = Date.now()) {
 function markStatsDirty(userId, nowMs = Date.now()) {
   const rt = getRuntime(userId);
   if (!rt) return false;
+
+  // (NOVO) mesmo racional: não manter OFFLINE sujo por stats.
+  if (rt.connectionState === CONNECTION.OFFLINE) return false;
 
   rt.dirtyStats = true;
   rt.lastStatsDirtyAtMs = nowMs;
@@ -104,6 +138,43 @@ async function ensureRuntimeLoaded(userId) {
     throw new Error("Runtime ausente no banco (ga_user_runtime)");
   }
 
+  // dentro de ensureRuntimeLoaded, depois de ler `row`
+  const inst = await db.GaInstance.findByPk(row.instance_id, {
+    attributes: ["id", "local_id"],
+    include: [
+      {
+        model: db.GaLocal,
+        as: "local",
+        attributes: ["id"],
+        include: [
+          {
+            model: db.GaLocalGeometry,
+            as: "geometry",
+            attributes: ["size_x", "size_z"],
+          },
+        ],
+      },
+    ],
+  });
+
+  const sizeX = Number(inst?.local?.geometry?.size_x);
+  const sizeZ = Number(inst?.local?.geometry?.size_z);
+
+  if (!Number.isFinite(sizeX) || sizeX <= 0 || !Number.isFinite(sizeZ) || sizeZ <= 0) {
+    throw new Error(
+      `Bounds inválido no DB (GaLocalGeometry) instance=${row.instance_id} local=${inst?.local?.id ?? "?"} sizeX=${sizeX} sizeZ=${sizeZ}`
+    );
+  }
+
+  const bounds = {
+    minX: -sizeX / 2,
+    maxX:  sizeX / 2,
+    minZ: -sizeZ / 2,
+    maxZ:  sizeZ / 2,
+    sizeX,
+    sizeZ,
+  };
+
   const speedFromStats = await loadSpeedFromStats(userId);
 
   const runtime = {
@@ -118,6 +189,12 @@ async function ensureRuntimeLoaded(userId) {
       z: Number(row.pos_z ?? 0),
     },
     yaw: Number(row.yaw ?? 0),
+
+    // estado replicável mínimo (preparação multiplayer)
+    hp: 100,
+    action: "idle",
+    rev: 0,
+    chunk: null, // { cx, cz } preenchido abaixo
 
     // stats cacheados no runtime
     speed: speedFromStats ?? DEFAULT_SPEED,
@@ -140,7 +217,12 @@ async function ensureRuntimeLoaded(userId) {
     lastMoveAtMs: 0,
     moveCountWindow: 0,
     moveWindowStartMs: 0,
+
+    // cache de bounds para evitar ler local/geometry repetidamente
+    bounds, 
   };
+
+  runtime.chunk = computeChunk(runtime.pos);
 
   runtimeStore.set(key, runtime);
   return runtime;
@@ -171,6 +253,8 @@ module.exports = {
   // store
   getRuntime,
   setRuntime,
+  hasRuntime,     // (NOVO)
+  deleteRuntime,  // (NOVO)
   getAllRuntimes,
   ensureRuntimeLoaded,
 
@@ -185,4 +269,8 @@ module.exports = {
   // constants
   DEFAULT_SPEED,
   CONNECTION,
+
+  // chunk helpers (Etapa 1)
+  CHUNK_SIZE,
+  computeChunk,
 };

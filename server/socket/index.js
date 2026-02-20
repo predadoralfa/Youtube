@@ -3,20 +3,65 @@ const jwt = require("jsonwebtoken");
 
 const {
   ensureRuntimeLoaded,
+  getRuntime,
   setConnectionState,
 } = require("../state/runtimeStore");
 
 const {
   flushUserRuntimeImmediate,
+  onEntityDespawn,
 } = require("../state/persistenceManager");
 
+const { addUserToInstance } = require("../state/presenceIndex");
+
 const { registerMoveHandler } = require("./handlers/moveHandler");
+const { registerWorldHandler } = require("./handlers/worldHandler");
+
+// userId -> socket.id (sessão autoritativa única)
+const activeSocketByUserId = new Map();
+
+let _despawnHookInstalled = false;
 
 function nowMs() {
   return Date.now();
 }
 
+function installPersistenceHooks(io) {
+  if (_despawnHookInstalled) return;
+  _despawnHookInstalled = true;
+
+  // OFFLINE definitivo -> despawn autoritativo
+  onEntityDespawn((evt) => {
+    try {
+      const entityId = String(evt.entityId);
+      const instanceId = String(evt.instanceId);
+      const rev = Number(evt.rev ?? 0);
+
+      // dedup de rooms alvo
+      const targets = new Set();
+      targets.add(`inst:${instanceId}`);
+
+      if (Array.isArray(evt.interestRooms)) {
+        for (const r of evt.interestRooms) targets.add(String(r));
+      }
+
+      const payload = { entityId, rev };
+
+      for (const room of targets) {
+        io.to(room).emit("entity:despawn", payload);
+      }
+
+      // opcional: log baixo ruído
+      // console.log(`[SOCKET] broadcast despawn entity=${entityId} instance=${instanceId}`);
+    } catch (e) {
+      console.error("[SOCKET] despawn hook error:", e);
+    }
+  });
+}
+
 function registerSocket(io) {
+  installPersistenceHooks(io);
+
   io.use((socket, next) => {
     try {
       const raw = socket.handshake?.auth?.token;
@@ -50,13 +95,38 @@ function registerSocket(io) {
   });
 
   io.on("connection", async (socket) => {
-    try {
-      const userId = socket.data.userId;
+    const userId = socket.data.userId;
 
-      // 1) garante runtime em memória
+    try {
+      // =========================
+      // (A) Sessão única por userId
+      // =========================
+      const prevSocketId = activeSocketByUserId.get(String(userId));
+      if (prevSocketId && prevSocketId !== socket.id) {
+        const prev = io.sockets.sockets.get(prevSocketId);
+        if (prev) {
+          // marca para não disparar DISCONNECTED_PENDING no socket antigo
+          prev.data._skipDisconnectPending = true;
+
+          // avisa cliente antigo (se quiser mostrar UI)
+          prev.emit("session:replaced", {
+            by: socket.id,
+            userId,
+          });
+
+          // derruba sessão antiga
+          prev.disconnect(true);
+        }
+      }
+
+      // define este como a sessão atual
+      activeSocketByUserId.set(String(userId), socket.id);
+
+      // =========================
+      // (B) Runtime + state CONNECTED
+      // =========================
       await ensureRuntimeLoaded(userId);
 
-      // 2) marca CONNECTED e cancela qualquer pending (reconnect)
       setConnectionState(
         userId,
         {
@@ -67,35 +137,52 @@ function registerSocket(io) {
         nowMs()
       );
 
-      // 3) checkpoint opcional (baixo custo, mas garante crash recovery do "CONNECTED")
-      // Se você achar agressivo, pode remover. Eu manteria por enquanto.
+      // checkpoint opcional (crash recovery do "CONNECTED")
       await flushUserRuntimeImmediate(userId);
 
-      // 4) registra handlers
+      // =========================
+      // (C) Handlers existentes
+      // =========================
       registerMoveHandler(socket);
 
-      // 5) lifecycle: disconnect vira pending 10s
+      registerWorldHandler(io, socket);
+
+      // =========================
+      // (E) lifecycle: disconnect vira pending 10s
+      // =========================
       socket.on("disconnect", async (reason) => {
-        const t = nowMs();
-        const offlineAt = t + 10_000;
+        try {
+          // socket substituído: não mexe em connectionState
+          if (socket.data._skipDisconnectPending) return;
 
-        // marca pending (personagem fica no mundo, mas sem controle)
-        setConnectionState(
-          userId,
-          {
-            connectionState: "DISCONNECTED_PENDING",
-            disconnectedAtMs: t,
-            offlineAllowedAtMs: offlineAt,
-          },
-          t
-        );
+          // se não for a sessão atual, ignora (evita race/overlap)
+          const currentId = activeSocketByUserId.get(String(userId));
+          if (currentId !== socket.id) return;
 
-        // checkpoint imediato: anti-exploit + crash recovery
-        await flushUserRuntimeImmediate(userId);
+          // limpa sessão atual
+          activeSocketByUserId.delete(String(userId));
 
-        console.log(
-          `[SOCKET] disconnect pending user=${userId} reason=${reason} offlineAt=${offlineAt}`
-        );
+          const t = nowMs();
+          const offlineAt = t + 10_000;
+
+          setConnectionState(
+            userId,
+            {
+              connectionState: "DISCONNECTED_PENDING",
+              disconnectedAtMs: t,
+              offlineAllowedAtMs: offlineAt,
+            },
+            t
+          );
+
+          await flushUserRuntimeImmediate(userId);
+
+          console.log(
+            `[SOCKET] disconnect pending user=${userId} reason=${reason} offlineAt=${offlineAt}`
+          );
+        } catch (e) {
+          console.error("[SOCKET] disconnect handler error:", e);
+        }
       });
 
       socket.emit("socket:ready", { ok: true });

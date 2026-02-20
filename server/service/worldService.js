@@ -1,4 +1,4 @@
-// server/controller/worldController.js
+// server/servece/worldService.js
 
 const {
   GaUserRuntime,
@@ -130,6 +130,9 @@ const bootstrap = async (req, res) => {
     const groundColor =
       groundRenderMaterial?.base_color ??
       "#711010";
+
+    console.log("[WORLD] USER ID = ",runtime.user_id, "INSTANCE = ",runtime.instance_id);
+    console.log("[WORLD] Altura = ",runtime.pos_y);
 
     return res.json({
       ok: true,

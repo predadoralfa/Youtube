@@ -53,7 +53,11 @@ import { bindInputs } from "../input/inputs";
 import { IntentType } from "../input/intents";
 
 import { getSocket } from "@/services/Socket";
-import { createPlayerMesh, syncPlayer } from "../entities/character/player";
+import { createPlayerMesh } from "../entities/character/player";
+
+// FIX: cores devem bater com player.jsx (self/other)
+const COLOR_SELF = "#ff2d55";
+const COLOR_OTHER = "#2d7dff";
 
 function normalize2D(x, z) {
   const len = Math.hypot(x, z);
@@ -61,7 +65,61 @@ function normalize2D(x, z) {
   return { x: x / len, z: z / len };
 }
 
-export function GameCanvas({ snapshot }) {
+function readPosYawFromRuntime(rt) {
+  if (!rt) return { x: 0, y: 0, z: 0, yaw: 0 };
+
+  const x = Number(rt.pos_x ?? rt.pos?.x ?? 0);
+  const y = Number(rt.pos_y ?? rt.pos?.y ?? 0);
+  const z = Number(rt.pos_z ?? rt.pos?.z ?? 0);
+  const yaw = Number(rt.yaw ?? 0);
+
+  return { x, y, z, yaw };
+}
+
+function readPosYawFromEntity(e) {
+  const x = Number(e?.pos?.x ?? 0);
+  const y = Number(e?.pos?.y ?? 0);
+  const z = Number(e?.pos?.z ?? 0);
+  const yaw = Number(e?.yaw ?? 0);
+  return { x, y, z, yaw };
+}
+
+function toWorldDir(inputDir, camYaw) {
+  // forward da câmera no plano XZ (para onde ela “olha”)
+  const fx = -Math.sin(camYaw);
+  const fz = -Math.cos(camYaw);
+
+  // right da câmera (90°)
+  const rx = fz;
+  const rz = -fx;
+
+  // input: W = z:-1 -> queremos forwardAmount = 1
+  const forwardAmount = -(inputDir.z || 0);
+  const strafeAmount = inputDir.x || 0;
+
+  const wx = rx * strafeAmount + fx * forwardAmount;
+  const wz = rz * strafeAmount + fz * forwardAmount;
+
+  return normalize2D(wx, wz);
+}
+
+// FIX: recolorir mesh quando selfId mudar (evita "troca de cor" errada)
+function applySelfColor(mesh, isSelf) {
+  if (!mesh) return;
+  const color = isSelf ? COLOR_SELF : COLOR_OTHER;
+  mesh.userData.isSelf = !!isSelf;
+
+  const mat = mesh.material;
+  if (Array.isArray(mat)) {
+    for (const m of mat) {
+      if (m?.color) m.color.set(color);
+    }
+  } else if (mat?.color) {
+    mat.color.set(color);
+  }
+}
+
+export function GameCanvas({ snapshot, worldStoreRef }) {
   const containerRef = useRef(null);
 
   // ✅ mantém sempre o runtime mais recente sem recriar o Three
@@ -70,6 +128,12 @@ export function GameCanvas({ snapshot }) {
   // ✅ (opcional) mantém também template/geometry mais recente
   const templateRef = useRef(snapshot?.localTemplate ?? null);
   const versionRef = useRef(snapshot?.localTemplateVersion ?? null);
+
+  // ✅ meshes replicados por entidade (multiplayer)
+  const meshByEntityIdRef = useRef(new Map());
+
+  // FIX: track de selfId para recolorir meshes existentes
+  const lastSelfIdRef = useRef(null);
 
   // Atualiza refs quando snapshot muda (sem remontar)
   useEffect(() => {
@@ -83,9 +147,12 @@ export function GameCanvas({ snapshot }) {
     if (!container) return;
 
     const tpl = templateRef.current;
-    const sizeX = tpl?.geometry?.size_x ?? 200;
-    const sizeZ = tpl?.geometry?.size_z ?? 200;
+    const sizeX = tpl?.geometry?.size_x;
+    const sizeZ = tpl?.geometry?.size_z;
     const visual = tpl?.visual ?? {};
+
+    const centerX = 0;
+    const centerZ = 0;
 
     // =============================
     // RENDERER
@@ -104,11 +171,11 @@ export function GameCanvas({ snapshot }) {
 
     // ✅ DEBUG: referências visuais (grid + eixos)
     const grid = new THREE.GridHelper(Math.max(sizeX, sizeZ), 20);
-    grid.position.y = 0.001;
+    grid.position.set(0, 0.001, 0);
     scene.add(grid);
 
     const axes = new THREE.AxesHelper(10);
-    axes.position.y = 0.01;
+    axes.position.set(0, 0.01, 0);
     scene.add(axes);
 
     // =============================
@@ -118,6 +185,8 @@ export function GameCanvas({ snapshot }) {
       setupCamera(container);
 
     setupLight(scene);
+
+    // Contrato: mundo 0..size (camera/bounds coerentes com size)
     setBounds({ sizeX, sizeZ });
     window.addEventListener("resize", onResize);
 
@@ -145,7 +214,7 @@ export function GameCanvas({ snapshot }) {
     });
 
     // =============================
-    // CHÃO
+    // CHÃO (mundo 0..size)
     // =============================
     const color =
       visual?.ground_render_material?.base_color ??
@@ -161,21 +230,23 @@ export function GameCanvas({ snapshot }) {
       groundMaterial
     );
     groundMesh.rotation.x = -Math.PI / 2;
+    groundMesh.position.set(0, 0, 0);
     groundMesh.receiveShadow = true;
     scene.add(groundMesh);
 
     // =============================
-    // LIMITES
+    // LIMITES (mundo 0..size)
     // =============================
+    const yLine = 0.2;
+
     const halfX = sizeX / 2;
     const halfZ = sizeZ / 2;
-    const y = 0.2;
 
     const pts = [
-      new THREE.Vector3(-halfX, y, -halfZ),
-      new THREE.Vector3(halfX, y, -halfZ),
-      new THREE.Vector3(halfX, y, halfZ),
-      new THREE.Vector3(-halfX, y, halfZ),
+      new THREE.Vector3(-halfX, yLine, -halfZ),
+      new THREE.Vector3( halfX, yLine, -halfZ),
+      new THREE.Vector3( halfX, yLine,  halfZ),
+      new THREE.Vector3(-halfX, yLine,  halfZ),
     ];
 
     const boundsGeometry = new THREE.BufferGeometry().setFromPoints(pts);
@@ -185,16 +256,7 @@ export function GameCanvas({ snapshot }) {
     scene.add(bounds);
 
     // =============================
-    // PLAYER
-    // =============================
-    const playerMesh = createPlayerMesh();
-    scene.add(playerMesh);
-
-    // sync inicial
-    syncPlayer(playerMesh, runtimeRef.current);
-
-    // =============================
-    // OVERLAY DEBUG (coords)
+    // OVERLAY DEBUG (coords + entities)
     // =============================
     const overlay = document.createElement("div");
     overlay.style.position = "absolute";
@@ -216,6 +278,10 @@ export function GameCanvas({ snapshot }) {
     let alive = true;
     const clock = new THREE.Clock();
 
+    // alvo fixo para fallback de câmera (evita alocar Vector3 por frame)
+    const fallbackTarget = new THREE.Object3D();
+    fallbackTarget.position.set(0, 0, 0);
+
     const tick = () => {
       if (!alive) return;
 
@@ -230,48 +296,115 @@ export function GameCanvas({ snapshot }) {
         socket.emit("move:intent", {
           dir: dirWorld,
           dt,
-          yawDesired: camYaw 
+          yawDesired: camYaw,
         });
       }
 
-      // 2) aplica estado confirmado do backend (sempre via ref atualizado)
-      const rt = runtimeRef.current;
-      syncPlayer(playerMesh, rt);
+      // 2) aplica estado confirmado (multiplayer via store)
+      const store = worldStoreRef?.current ?? null;
+      const entities = store?.getSnapshot?.() ?? null;
+      const selfId = store?.selfId ?? null;
 
-      // 3) overlay para você VER que está mudando
-      if (rt) {
-        overlay.textContent =
-          `pos: (${Number(rt.pos_x ?? rt.pos?.x ?? 0).toFixed(2)}, ` +
-          `${Number(rt.pos_y ?? rt.pos?.y ?? 0).toFixed(2)}, ` +
-          `${Number(rt.pos_z ?? rt.pos?.z ?? 0).toFixed(2)})  ` +
-          `yaw: ${Number(rt.yaw ?? 0).toFixed(2)}`;
+      if (Array.isArray(entities) && entities.length > 0) {
+        const selfKey = selfId == null ? null : String(selfId);
+
+        // FIX: se selfId mudou, recolore todos os meshes existentes
+        if (lastSelfIdRef.current !== selfKey) {
+          for (const [id, mesh] of meshByEntityIdRef.current.entries()) {
+            const isSelf = selfKey != null && id === selfKey;
+            applySelfColor(mesh, isSelf);
+          }
+          lastSelfIdRef.current = selfKey;
+        }
+
+        // garante/atualiza meshes para todas as entidades do interesse
+        const nextIds = new Set();
+
+        for (const e of entities) {
+          const entityIdRaw = e?.entityId;
+          if (entityIdRaw == null) continue;
+          const entityId = String(entityIdRaw);
+
+          nextIds.add(entityId);
+
+          let mesh = meshByEntityIdRef.current.get(entityId);
+          if (!mesh) {
+            mesh = createPlayerMesh({ isSelf: selfKey != null && entityId === selfKey });
+            meshByEntityIdRef.current.set(entityId, mesh);
+            scene.add(mesh);
+          }
+          // FIX: garante cor correta caso selfId mude após o mesh existir
+          const isSelfNow = selfKey != null && entityId === selfKey;
+          if (mesh.userData?.isSelf !== isSelfNow) {
+            applySelfColor(mesh, isSelfNow);
+          }
+
+          const { x, y, z, yaw } = readPosYawFromEntity(e);
+          mesh.position.set(x, y ?? 0, z);
+          mesh.rotation.y = yaw;
+        }
+
+        // remove meshes ausentes (despawn/interest swap)
+        for (const [entityId, mesh] of meshByEntityIdRef.current.entries()) {
+          if (nextIds.has(entityId)) continue;
+
+          scene.remove(mesh);
+          try {
+            mesh.geometry?.dispose?.();
+          } catch {}
+          try {
+            if (Array.isArray(mesh.material)) {
+              for (const m of mesh.material) m?.dispose?.();
+            } else {
+              mesh.material?.dispose?.();
+            }
+          } catch {}
+          meshByEntityIdRef.current.delete(entityId);
+        }
+
+        // Escolhe um "hero" visual para a câmera: self se existir, senão centro
+        const heroMesh = selfKey ? meshByEntityIdRef.current.get(selfKey) : null;
+
+        if (heroMesh) update(heroMesh, dt);
+        else update(fallbackTarget, dt);
+
+        // overlay
+        if (heroMesh) {
+          overlay.textContent =
+            `entities: ${entities.length}  ` +
+            `self: ${selfKey ?? "?"}  ` +
+            `pos: (${heroMesh.position.x.toFixed(2)}, ${heroMesh.position.y.toFixed(
+              2
+            )}, ${heroMesh.position.z.toFixed(2)})  ` +
+            `yaw: ${heroMesh.rotation.y.toFixed(2)}`;
+        } else {
+          overlay.textContent = `entities: ${entities.length}  self: ${selfKey ?? "?"}`;
+        }
       } else {
-        overlay.textContent = "runtime: null";
+        // 2b) fallback legado: usa runtime do snapshot (single-player placeholder)
+        const rt = runtimeRef.current;
+        const { x, y, z, yaw } = readPosYawFromRuntime(rt);
+
+        const legacyId = "__legacy_self__";
+        let mesh = meshByEntityIdRef.current.get(legacyId);
+        if (!mesh) {
+          mesh = createPlayerMesh({ isSelf: true });
+          meshByEntityIdRef.current.set(legacyId, mesh);
+          scene.add(mesh);
+        }
+
+        mesh.position.set(x, y ?? 0, z);
+        mesh.rotation.y = yaw;
+
+        overlay.textContent =
+          `entities: 0 (legacy)  ` +
+          `pos: (${x.toFixed(2)}, ${(y ?? 0).toFixed(2)}, ${z.toFixed(
+            2
+          )})  ` +
+          `yaw: ${yaw.toFixed(2)}`;
+
+        update(mesh, dt);
       }
-
-
-      function toWorldDir(inputDir, camYaw) {
-        // forward da câmera no plano XZ (para onde ela “olha”)
-        const fx = -Math.sin(camYaw);
-        const fz = -Math.cos(camYaw);
-
-        // right da câmera (90°)
-        const rx = fz;
-        const rz = -fx;
-
-        // input: W = z:-1 -> queremos forwardAmount = 1
-        const forwardAmount = -(inputDir.z || 0);
-        const strafeAmount = (inputDir.x || 0);
-
-        const wx = rx * strafeAmount + fx * forwardAmount;
-        const wz = rz * strafeAmount + fz * forwardAmount;
-
-        return normalize2D(wx, wz);
-      }
-
-
-      // 4) câmera (visual)
-      update(playerMesh, dt);
 
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
@@ -294,9 +427,21 @@ export function GameCanvas({ snapshot }) {
       const canvas = renderer.domElement;
       if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
 
-      scene.remove(playerMesh);
-      playerMesh.geometry.dispose();
-      playerMesh.material.dispose();
+      // dispose meshes replicados
+      for (const [, mesh] of meshByEntityIdRef.current.entries()) {
+        scene.remove(mesh);
+        try {
+          mesh.geometry?.dispose?.();
+        } catch {}
+        try {
+          if (Array.isArray(mesh.material)) {
+            for (const m of mesh.material) m?.dispose?.();
+          } else {
+            mesh.material?.dispose?.();
+          }
+        } catch {}
+      }
+      meshByEntityIdRef.current.clear();
 
       scene.remove(grid);
       scene.remove(axes);

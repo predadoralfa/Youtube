@@ -1,10 +1,16 @@
 // server/state/persistenceManager.js
 const db = require("../models");
+const EventEmitter = require("events");
+
 const {
   getAllRuntimes,
   getRuntime,
   setConnectionState,
+  hasRuntime,
+  deleteRuntime,
 } = require("./runtimeStore");
+
+const { getUserPresenceState, removeUserFromInstance } = require("./presenceIndex");
 
 // Defaults (sobrescreva via env)
 const PERSIST_TICK_MS = Number(process.env.PERSIST_TICK_MS ?? 500);
@@ -15,21 +21,35 @@ const MIN_RUNTIME_FLUSH_GAP_MS = Number(process.env.MIN_RUNTIME_FLUSH_GAP_MS ?? 
 const MIN_STATS_FLUSH_GAP_MS = Number(process.env.MIN_STATS_FLUSH_GAP_MS ?? 1500);
 
 let _timer = null;
+let _running = false;
+
+// Eventos internos do runtime/persistência (não depende de socket.io)
+const persistenceEvents = new EventEmitter();
 
 function nowMs() {
   return Date.now();
+}
+
+function bumpRev(rt) {
+  const cur = Number(rt.rev ?? 0);
+  rt.rev = Number.isFinite(cur) ? cur + 1 : 1;
 }
 
 function startPersistenceLoop() {
   if (_timer) return;
 
   _timer = setInterval(async () => {
+    if (_running) return; // evita overlap se o tick demorar
+    _running = true;
+
     const t0 = nowMs();
     try {
-      tickDisconnects(t0);
+      await tickDisconnects(t0);
       await flushDirtyBatch({ maxUsersPerTick: MAX_FLUSH_PER_TICK, now: t0 });
     } catch (err) {
       console.error("[PERSIST] loop error:", err);
+    } finally {
+      _running = false;
     }
   }, PERSIST_TICK_MS);
 
@@ -42,31 +62,81 @@ function stopPersistenceLoop() {
   if (!_timer) return;
   clearInterval(_timer);
   _timer = null;
+  _running = false;
   console.log("[PERSIST] loop stopped");
 }
 
 /**
  * Regras do plano:
  * - DISCONNECTED_PENDING fica no mundo por 10s
- * - após offlineAllowedAtMs: vira OFFLINE e pode ser removido do mundo (futuro)
+ * - após offlineAllowedAtMs: vira OFFLINE e pode ser removido do mundo
+ *
+ * ETAPA 6:
+ * - Ao virar OFFLINE real, emitir entity:despawn (via evento interno)
+ * - Remover da presença (em memória) para baseline futuro não incluir
+ *
+ * Importante:
+ * - Ao virar OFFLINE, fazemos flush imediato e eviction do runtime do Map
+ *   para impedir "cache fantasma" sobrescrevendo o banco.
  */
-function tickDisconnects(now) {
+async function tickDisconnects(now) {
   for (const rt of getAllRuntimes()) {
     if (rt.connectionState !== "DISCONNECTED_PENDING") continue;
     if (rt.offlineAllowedAtMs == null) continue;
 
     if (now >= rt.offlineAllowedAtMs) {
-      // Finaliza logout lógico (não despawnamos aqui; só marcamos estado)
-      setConnectionState(rt.userId, {
-        connectionState: "OFFLINE",
-        disconnectedAtMs: rt.disconnectedAtMs ?? now,
-        offlineAllowedAtMs: rt.offlineAllowedAtMs,
-      }, now);
+      const userId = rt.userId;
 
-      // Aqui o runtime foi marcado dirtyRuntime pelo setConnectionState.
-      // O flush vai acontecer pelo batch.
+      // snapshot de presença ANTES de remover (para broadcast por rooms no consumidor)
+      const presence = getUserPresenceState(userId);
+
+      // rev monotônico: "despawn" é uma revisão do estado replicável
+      bumpRev(rt);
+
+      // Finaliza logout lógico (marca dirtyRuntime)
+      setConnectionState(
+        userId,
+        {
+          connectionState: "OFFLINE",
+          disconnectedAtMs: rt.disconnectedAtMs ?? now,
+          offlineAllowedAtMs: rt.offlineAllowedAtMs,
+        },
+        now
+      );
+
+      // DEBUG: runtime ainda está em memória?
       console.log(
-        `[PERSIST] logout finalized user=${rt.userId} state=OFFLINE`
+        `[PERSIST] OFFLINE reached user=${userId} hasRuntime(beforeFlush)=${hasRuntime(
+          userId
+        )} dirtyRuntime=${!!rt.dirtyRuntime}`
+      );
+
+      // Flush final do OFFLINE imediatamente (não depende do batch)
+      await flushUserRuntime(userId, now);
+
+      // Remove da presença em memória (OFFLINE real sai do mundo)
+      // (isso NÃO toca banco, e evita entidade fantasma no baseline)
+      removeUserFromInstance(userId);
+
+      // Emite evento interno: o layer de socket decide como/para quem broadcastar
+      // payload inclui rooms de interest "anteriores" para despawn consistente.
+      persistenceEvents.emit("entity:despawn", {
+        entityId: String(userId),
+        instanceId: presence?.instanceId ?? String(rt.instanceId),
+        interestRooms: presence?.interestRooms
+          ? Array.from(presence.interestRooms)
+          : [],
+        rev: Number(rt.rev ?? 0),
+        atMs: now,
+      });
+
+      // Eviction: remove runtime do cache quente
+      const removed = deleteRuntime(userId);
+
+      console.log(
+        `[PERSIST] logout finalized user=${userId} state=OFFLINE evicted=${removed} hasRuntime(afterEvict)=${hasRuntime(
+          userId
+        )}`
       );
     }
   }
@@ -183,21 +253,7 @@ async function flushUserStats(userId, now) {
   if (!rt.dirtyStats) return false;
 
   try {
-    // Neste momento, stats “autoritativos” não estão sendo editados no runtime,
-    // exceto refreshRuntimeStats que atualiza speed cacheado.
-    // Se no futuro você mantiver mais stats em memória, expanda aqui.
-
-    // ⚠️ Hoje vamos persistir apenas move_speed se você quiser.
-    // Como speed vem do DB e é cache, normalmente não precisa write-back.
-    // Então por padrão: apenas limpa dirtyStats para não ficar batendo.
-    // Se você começar a mutar stats em runtime, aí sim faça UPDATE.
-
-    // Exemplo (se decidir persistir):
-    // await db.GaUserStats.update(
-    //   { move_speed: rt.speed },
-    //   { where: { user_id: rt.userId } }
-    // );
-
+    // Por padrão: apenas limpa dirtyStats para não ficar batendo.
     rt.dirtyStats = false;
     return true;
   } catch (err) {
@@ -214,6 +270,14 @@ async function flushUserRuntimeImmediate(userId) {
   return flushUserRuntime(userId, nowMs());
 }
 
+/**
+ * API de assinatura para o layer de socket/broadcast (sem acoplamento)
+ * Ex: persistenceEvents.on("entity:despawn", (evt) => { ... broadcast ... })
+ */
+function onEntityDespawn(handler) {
+  persistenceEvents.on("entity:despawn", handler);
+}
+
 module.exports = {
   startPersistenceLoop,
   stopPersistenceLoop,
@@ -224,4 +288,8 @@ module.exports = {
   flushUserRuntime,
   flushUserStats,
   flushUserRuntimeImmediate,
+
+  // eventos (ETAPA 6)
+  persistenceEvents,
+  onEntityDespawn,
 };

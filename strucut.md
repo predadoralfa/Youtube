@@ -85,8 +85,10 @@
         index.js
         handlers/
             moveHandler.js
-
+            worldHandler.js
+            
     state/
         runtimeStore.js
         persistenceManager.js
+        persistenceIndex.js
 
