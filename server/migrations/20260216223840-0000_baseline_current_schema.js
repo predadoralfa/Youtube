@@ -1,3 +1,4 @@
+//criado dia 16/02/2026
 'use strict';
 
 /** @type {import('sequelize-cli').Migration} */

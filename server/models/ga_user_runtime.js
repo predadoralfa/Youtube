@@ -49,8 +49,24 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.FLOAT,
         allowNull: false,
         defaultValue: 0
-      }
+      },
+      connection_state: {
+        type: DataTypes.STRING(32),
+        allowNull: false,
+        defaultValue: "OFFLINE",
+      },
+
+      disconnected_at: {
+        type: DataTypes.BIGINT,
+        allowNull: true,
+      },
+
+      offline_allowed_at: {
+        type: DataTypes.BIGINT,
+        allowNull: true,
+      },
     },
+    
     {
       tableName: "ga_user_runtime",
       timestamps: true,

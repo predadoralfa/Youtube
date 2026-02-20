@@ -18,7 +18,17 @@ const bootstrap = async (req, res) => {
     // 1) Runtime (âncora do mundo)
     const runtime = await GaUserRuntime.findOne({
       where: { user_id: userId },
-      attributes: ["user_id", "instance_id", "pos_x", "pos_y", "pos_z", "yaw"],
+      attributes: [
+        "user_id",
+        "instance_id",
+        "pos_x",
+        "pos_y",
+        "pos_z",
+        "yaw",
+        "connection_state",
+        "disconnected_at",
+        "offline_allowed_at"
+      ],
     });
 
     if (!runtime) {
@@ -133,6 +143,11 @@ const bootstrap = async (req, res) => {
             z: runtime.pos_z,
           },
           yaw: runtime.yaw,
+
+          // ✅ observabilidade / debug do anti-combat-log
+          connection_state: runtime.connection_state,
+          disconnected_at: runtime.disconnected_at,
+          offline_allowed_at: runtime.offline_allowed_at,
         },
         instance: {
           id: instance.id,
@@ -216,3 +231,5 @@ const bootstrap = async (req, res) => {
 };
 
 module.exports = { bootstrap };
+
+

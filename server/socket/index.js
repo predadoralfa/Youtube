@@ -1,7 +1,20 @@
-// socket/index.js
+// server/socket/index.js
 const jwt = require("jsonwebtoken");
-const { ensureRuntimeLoaded } = require("../state/runtimeStore");
+
+const {
+  ensureRuntimeLoaded,
+  setConnectionState,
+} = require("../state/runtimeStore");
+
+const {
+  flushUserRuntimeImmediate,
+} = require("../state/persistenceManager");
+
 const { registerMoveHandler } = require("./handlers/moveHandler");
+
+function nowMs() {
+  return Date.now();
+}
 
 function registerSocket(io) {
   io.use((socket, next) => {
@@ -17,7 +30,6 @@ function registerSocket(io) {
         ? String(raw).slice("Bearer ".length)
         : String(raw);
 
-      // mesmo fallback do requireAuth
       const decoded = jwt.verify(
         token,
         process.env.JWT_SECRET || "chave_mestra_extrema"
@@ -35,16 +47,56 @@ function registerSocket(io) {
     } catch (err) {
       return next(new Error("UNAUTHORIZED"));
     }
-  });console.log("[SOCKET] JWT_SECRET exists?", !!process.env.JWT_SECRET);
+  });
 
   io.on("connection", async (socket) => {
     try {
       const userId = socket.data.userId;
 
+      // 1) garante runtime em memória
       await ensureRuntimeLoaded(userId);
-      registerMoveHandler(socket);
-      
 
+      // 2) marca CONNECTED e cancela qualquer pending (reconnect)
+      setConnectionState(
+        userId,
+        {
+          connectionState: "CONNECTED",
+          disconnectedAtMs: null,
+          offlineAllowedAtMs: null,
+        },
+        nowMs()
+      );
+
+      // 3) checkpoint opcional (baixo custo, mas garante crash recovery do "CONNECTED")
+      // Se você achar agressivo, pode remover. Eu manteria por enquanto.
+      await flushUserRuntimeImmediate(userId);
+
+      // 4) registra handlers
+      registerMoveHandler(socket);
+
+      // 5) lifecycle: disconnect vira pending 10s
+      socket.on("disconnect", async (reason) => {
+        const t = nowMs();
+        const offlineAt = t + 10_000;
+
+        // marca pending (personagem fica no mundo, mas sem controle)
+        setConnectionState(
+          userId,
+          {
+            connectionState: "DISCONNECTED_PENDING",
+            disconnectedAtMs: t,
+            offlineAllowedAtMs: offlineAt,
+          },
+          t
+        );
+
+        // checkpoint imediato: anti-exploit + crash recovery
+        await flushUserRuntimeImmediate(userId);
+
+        console.log(
+          `[SOCKET] disconnect pending user=${userId} reason=${reason} offlineAt=${offlineAt}`
+        );
+      });
 
       socket.emit("socket:ready", { ok: true });
       console.log(`[SOCKET] connected user=${userId}`);
