@@ -1178,190 +1178,95 @@ Observação: o arquivo tenta acessar `usersByChunk` via `require("../../state/p
 - Serve como base para multiplayer escalável (broadcast seletivo por interest).
 
 ## Arquivo
-`server/state/persistenceManager.js`
+# server/state/persistenceManager.js
+
+## Objetivo
+
+Facade público do sistema de persistência.
+
+Este módulo:
+
+- Reexporta o loop de persistência.
+- Reexporta flush batch.
+- Reexporta writers.
+- Expõe eventos internos.
+- Fornece checkpoint imediato para disconnect.
+
+Não contém lógica própria complexa.
+É a superfície oficial da camada de persistência.
 
 ---
 
-## O que faz
+## Loop
 
-Gerencia a **persistência controlada** do estado em memória (runtimes) para o banco, usando modelo **hot + batch**, e também finaliza presença após disconnect (anti-combat-log).
+- startPersistenceLoop()
+- stopPersistenceLoop()
 
-Responsável por:
-
-- Rodar loop periódico (`startPersistenceLoop`).
-- Finalizar `DISCONNECTED_PENDING -> OFFLINE` após 10s.
-- Remover jogador do índice de presença (para não aparecer em baseline).
-- Persistir runtimes/stats marcados como dirty, com throttling.
-- Emitir evento interno `entity:despawn` para o layer de socket broadcastar.
-
-Não depende de Socket.IO (usa EventEmitter).
+Responsáveis por iniciar/parar o ciclo hot + batch.
 
 ---
 
-## Configuração
+## Processamento
 
-Defaults (sobrescreva via env):
+- tickDisconnects(now)
+- flushDirtyBatch(options)
 
-- `PERSIST_TICK_MS` (default `500ms`)
-- `MAX_FLUSH_PER_TICK` (default `200`)
-
-Throttling por usuário:
-
-- `MIN_RUNTIME_FLUSH_GAP_MS` (default `900ms`)
-- `MIN_STATS_FLUSH_GAP_MS` (default `1500ms`)
+Permitem execução manual ou controlada pelo loop.
 
 ---
 
-## Dependências
+## Writers
 
-### Banco
-- `db.GaUserRuntime.update(...)` para persistir runtime.
+- flushUserRuntime(userId, now)
+- flushUserStats(userId, now)
 
-### runtimeStore
-- `getAllRuntimes()` (varredura segura do store)
-- `getRuntime(userId)` (leitura do runtime em memória)
-- `setConnectionState(userId, patch)` (mudança de estado em memória + marca dirty)
-
-### presenceIndex
-- `getUserPresenceState(userId)` (snapshot de rooms/interest antes do despawn)
-- `removeUserFromInstance(userId)` (remove presença em memória)
+Camada que toca o banco.
 
 ---
 
-## Loop de Persistência
+## Checkpoint Imediato
 
-Função `startPersistenceLoop()`:
+### flushUserRuntimeImmediate(userId)
 
-- Inicia `setInterval` a cada `PERSIST_TICK_MS`.
-- Protege contra overlap com `_running` (tick lento não sobrepõe outro).
-- Por tick:
-  1. `tickDisconnects(now)`
-  2. `flushDirtyBatch({ maxUsersPerTick: MAX_FLUSH_PER_TICK, now })`
+Usado no disconnect.
 
-Função `stopPersistenceLoop()` encerra o timer.
+Regra:
 
----
+- No momento do disconnect, o runtime deve ser persistido imediatamente.
+- Não depende do batch periódico.
 
-## Regras de Disconnect (Anti-Combat-Log)
+Internamente chama:
 
-Função `tickDisconnects(now)`:
-
-Varre todos runtimes e busca:
-
-- `connectionState === "DISCONNECTED_PENDING"`
-- `offlineAllowedAtMs != null`
-- `now >= offlineAllowedAtMs`
-
-Quando atende:
-
-1. Captura snapshot de presença **antes** de remover:
-   - `presence = getUserPresenceState(userId)`
-2. Incrementa `rev` monotônico (`bumpRev(rt)`), tratando despawn como “revisão”.
-3. Finaliza logout lógico no runtime:
-   - `setConnectionState(..., connectionState:"OFFLINE", disconnectedAtMs, offlineAllowedAtMs)`
-4. Remove do índice de presença em memória:
-   - `removeUserFromInstance(userId)`
-5. Emite evento interno:
-   - `persistenceEvents.emit("entity:despawn", {...})`
-
-Payload do evento inclui:
-
-- `entityId`
-- `instanceId` (do presence snapshot ou fallback do runtime)
-- `interestRooms` (rooms anteriores para despawn consistente)
-- `rev` (monotônico)
-- `atMs` (telemetria)
-
-Objetivo: tirar o OFFLINE real do “mundo visível” e permitir broadcast autoritativo via socket layer.
+flushUserRuntime(userId, nowMs())
 
 ---
 
-## Batch Flush (Hot + Batch)
+## Eventos Internos
 
-Função `flushDirtyBatch({ maxUsersPerTick, now })`:
+- persistenceEvents
+- onEntityDespawn(handler)
 
-- Coleta candidatos com:
-  - `dirtyRuntime` ou `dirtyStats`
-- Ordena por “mais antigo sujo”:
-  - usa `lastRuntimeDirtyAtMs` ou `lastStatsDirtyAtMs`
-- Processa até `maxUsersPerTick`:
+Permitem que outras camadas (ex: socket) reajam a:
 
-### Runtime
-- Só flush se respeitar gap mínimo:
-  - `now - _lastRuntimeFlushAtMs >= MIN_RUNTIME_FLUSH_GAP_MS`
-- Chama `flushUserRuntime(userId, now)`
-- Se ok:
-  - atualiza `_lastRuntimeFlushAtMs`
-  - incrementa contador de flush do tick
+- Despawn autoritativo
+- Finalização OFFLINE
 
-### Stats
-- Mesmo padrão com `MIN_STATS_FLUSH_GAP_MS`
-- Chama `flushUserStats(userId, now)`
-
-Resultado: evita travar event loop e controla carga no banco.
+Sem acoplamento direto.
 
 ---
 
-## Flush de Runtime
+## Papel Arquitetural
 
-Função `flushUserRuntime(userId, now)`:
+Este arquivo:
 
-- Lê runtime (`getRuntime`).
-- Se `dirtyRuntime` ainda true:
-  - Monta payload e faz `UPDATE` por PK `user_id`:
+- Centraliza a API pública de persistência.
+- Evita imports diretos dos submódulos.
+- Mantém desacoplamento entre:
+  - Runtime
+  - Persistência
+  - Socket
 
-Campos persistidos:
-
-- `instance_id`
-- `pos_x`, `pos_y`, `pos_z`
-- `yaw`
-- `connection_state`
-- `disconnected_at`
-- `offline_allowed_at`
-
-Após sucesso:
-
-- `rt.dirtyRuntime = false`
-- Loga apenas quando `state !== CONNECTED` (reduz ruído).
-
----
-
-## Flush de Stats
-
-Função `flushUserStats(userId, now)`:
-
-- Hoje: apenas limpa `dirtyStats` (place-holder).
-- Preparado para evoluir para write-back parcial (dirty fields).
-
----
-
-## Flush Imediato
-
-Função `flushUserRuntimeImmediate(userId)`:
-
-- Checkpoint imediato para uso em eventos críticos (ex: disconnect).
-- Internamente chama `flushUserRuntime(userId, nowMs())`.
-
----
-
-## Eventos Internos (Desacoplamento)
-
-Implementa `EventEmitter` (`persistenceEvents`) para integração sem acoplamento:
-
-- `onEntityDespawn(handler)` registra callback para:
-  - `entity:despawn` (OFFLINE definitivo)
-
-O layer de socket decide como broadcastar (rooms/instância/chunks).
-
----
-
-## Papel no Sistema
-
-- Mantém hot path limpo (handlers só marcam dirty).
-- Controla quando e quanto escreve no banco.
-- Implementa janela de 10s contra combat logging.
-- Remove OFFLINE do mundo em memória (baseline não inclui).
-- Emite despawn autoritativo para replicação consistente.
+É o ponto oficial de integração da camada de persistência.
 
 
 
@@ -1853,6 +1758,165 @@ Payload esperado:
   "x": number,
   "z": number
 }
+
+
+
+# server/state/persistence/disconnects.js
+
+## Objetivo
+
+Finalizar desconexões pendentes e materializar o estado **OFFLINE definitivo**.
+
+Este módulo:
+
+- Varre runtimes em memória.
+- Detecta `DISCONNECTED_PENDING` que expirou (now >= offlineAllowedAtMs).
+- Converte para `OFFLINE`, persiste imediatamente e remove do mundo.
+- Emite evento interno de despawn para o layer de socket broadcastar.
+- Faz eviction do runtime do cache quente para evitar "cache fantasma".
+
+Não depende de Socket.IO diretamente.
+Não decide broadcast, apenas emite evento interno.
+
+---
+
+## Regra de Negócio
+
+- Ao desconectar: runtime entra em `DISCONNECTED_PENDING` e continua existindo no mundo por 10s.
+- Ao atingir `offlineAllowedAtMs`: vira `OFFLINE` definitivo e sai do mundo.
+
+Consequências ao virar OFFLINE:
+- Não pode aparecer em baseline futuro.
+- Deve gerar despawn replicável.
+- Deve persistir imediatamente no banco.
+- Deve ser removido do runtimeStore em memória.
+
+---
+
+## tickDisconnects(now)
+
+Loop principal:
+
+1. Itera sobre `getAllRuntimes()`.
+2. Filtra apenas runtimes com:
+   - `connectionState === "DISCONNECTED_PENDING"`
+   - `offlineAllowedAtMs != null`
+3. Se `now >= offlineAllowedAtMs`:
+   - Captura `presence` antes de remover (rooms/interest para despawn consistente).
+   - `bumpRev(rt)`:
+     - despawn conta como revisão monotônica do estado replicável.
+   - `setConnectionState(... OFFLINE ...)`:
+     - marca runtime dirty (persistível).
+   - `flushUserRuntime(userId, now)`:
+     - flush final imediato (não espera batch).
+   - `removeUserFromInstance(userId)`:
+     - remove do índice de presença para não aparecer em baseline.
+   - `persistenceEvents.emit("entity:despawn", payload)`:
+     - evento interno com:
+       - entityId
+       - instanceId
+       - interestRooms anteriores
+       - rev
+       - atMs
+   - `deleteRuntime(userId)`:
+     - eviction do runtime em memória.
+
+---
+
+## Payload do Evento Interno
+
+Evento: `entity:despawn`
+
+{
+  entityId: String(userId),
+  instanceId: presence?.instanceId ?? String(rt.instanceId),
+  interestRooms: [...presence.interestRooms] || [],
+  rev: Number(rt.rev ?? 0),
+  atMs: now
+}
+
+
+# server/state/persistence/loop.js
+
+## Objetivo
+
+Executar o loop periódico de persistência do sistema (modelo hot + batch).
+
+Este módulo:
+
+- Agenda execução contínua.
+- Processa desconexões expiradas.
+- Executa flush controlado de runtimes/stats sujos.
+- Evita sobreposição de execução (overlap).
+- Não acessa banco diretamente.
+- Não conhece socket.
+
+É o orquestrador do ciclo de persistência.
+
+---
+
+## startPersistenceLoop()
+
+Inicia `setInterval` com frequência definida por:
+
+- `PERSIST_TICK_MS`
+
+A cada tick:
+
+1. Evita execução simultânea (`_running`).
+2. Captura timestamp (`nowMs()`).
+3. Executa:
+   - `tickDisconnects(t0)` → finaliza OFFLINE expirados.
+   - `flushDirtyBatch({ maxUsersPerTick, now })` → flush controlado.
+4. Captura e loga erros.
+5. Libera flag `_running`.
+
+Loga configuração ao iniciar.
+
+---
+
+## stopPersistenceLoop()
+
+- Cancela o timer.
+- Reseta estado interno.
+- Loga parada do loop.
+
+---
+
+## Controle de Overlap
+
+Flag `_running` impede:
+
+- Dois ticks executando simultaneamente.
+- Corrupção de estado.
+- Pressão excessiva no banco se tick atrasar.
+
+---
+
+## Configuração
+
+Controlado por:
+
+- `PERSIST_TICK_MS`
+- `MAX_FLUSH_PER_TICK`
+
+Permite ajuste fino de carga.
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- É o scheduler do sistema de persistência.
+- Separa gameplay (hot path) da escrita no banco.
+- Controla carga e previsibilidade.
+- Garante execução periódica consistente.
+
+É o relógio da persistência autoritativa.
+
+
+
 
 
 # server/state/runtime/dirty.js
@@ -2359,6 +2423,84 @@ Este arquivo:
 É a interface de consulta do interest management.
 
 
+
+# server/state/persistence/writers.js
+
+## Objetivo
+
+Executar a escrita efetiva no banco (flush) do estado sujo em memória.
+
+Este módulo:
+
+- Atualiza `ga_user_runtime`.
+- Limpa flags `dirty`.
+- Não agenda execução (isso é responsabilidade do loop).
+- Não decide quem flushar (isso é responsabilidade do flushBatch).
+- Não conhece socket.
+
+É a camada que toca o banco.
+
+---
+
+## flushUserRuntime(userId, now)
+
+Responsável por persistir:
+
+- `instance_id`
+- `pos_x`, `pos_y`, `pos_z`
+- `yaw`
+- `connection_state`
+- `disconnected_at`
+- `offline_allowed_at`
+
+Regras:
+
+- Só executa se runtime existir.
+- Só executa se `dirtyRuntime === true`.
+- Faz `UPDATE` por PK `user_id`.
+- Após sucesso:
+  - `dirtyRuntime = false`.
+- Loga apenas se estado != CONNECTED.
+
+Retorna:
+- `true` se escreveu.
+- `false` se não escreveu ou falhou.
+
+---
+
+## flushUserStats(userId, now)
+
+Responsável por persistir stats sujos.
+
+Hoje:
+
+- Apenas limpa `dirtyStats`.
+- Não escreve nada no banco (placeholder).
+
+Preparado para expansão futura (payload parcial por campo).
+
+Retorna:
+- `true` se limpou dirty.
+- `false` se não havia runtime ou não estava dirty.
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- Isola acesso ao banco.
+- Garante que apenas runtimes marcados como dirty sejam escritos.
+- Mantém separação clara entre:
+  - Gameplay (hot path)
+  - Agendamento (loop)
+  - Decisão de batch (flushBatch)
+  - Escrita real (writers)
+
+É a camada final de persistência do modelo hot + batch.
+
+
+
 # server/state/presence/mutate.js
 
 ## Objetivo
@@ -2477,3 +2619,451 @@ Inicializa a infraestrutura completa do servidor:
 
 Não contém lógica de gameplay.
 É apenas o ponto de entrada da aplicação.
+
+
+# server/state/movement/chunkTransition.js
+
+## Objetivo
+
+Orquestrar **spawn/despawn incremental** quando um jogador muda de chunk.
+
+Este módulo:
+
+- Usa o diff `entered/left` vindo do presence (`moveUserChunk`).
+- Emite eventos de replicação:
+  - `entity:spawn`
+  - `entity:despawn`
+- Implementa duas direções de visibilidade:
+  - A) Outros passam a ver (ou deixam de ver) você
+  - B) Você passa a ver (ou deixa de ver) outros
+- Filtra entidades OFFLINE.
+- Não toca banco.
+- Depende de Socket.IO (io + socket) apenas para emissão de eventos.
+
+---
+
+## handleChunkTransition(io, socket, runtime, movedInfo)
+
+### Entradas
+
+- `io`: servidor Socket.IO (broadcast por room)
+- `socket`: socket do jogador que se moveu (envio direto)
+- `runtime`: runtime autoritativo do mover
+- `movedInfo`: retorno de `moveUserChunk`, incluindo:
+  - `diff.entered` (rooms que entraram no interesse)
+  - `diff.left` (rooms que saíram do interesse)
+
+---
+
+## A) Outros veem você (broadcast por rooms)
+
+Converte o mover em entidade replicável:
+
+- `selfEntity = toEntity(runtime)`
+
+Para cada room em `entered`:
+
+- `io.to(room).emit("entity:spawn", selfEntity)`
+
+Para cada room em `left`:
+
+- `io.to(room).emit("entity:despawn", { entityId, rev })`
+
+Efeito: os observadores recebem atualização sem varrer toda instância.
+
+---
+
+## B) Você vê outros (envio direto ao socket do mover)
+
+Se `socket` não existir, sai (modo headless / testes / chamadas sem socket).
+
+### Quando entrou em rooms novas
+
+- Varre usuários presentes em cada room `entered` (`getUsersInRoom`).
+- Deduplica com `seen`.
+- Ignora self.
+- Lê runtime do outro (`getRuntime`).
+- Ignora se não existe ou se está OFFLINE.
+- Emite direto para o mover:
+  - `socket.emit("entity:spawn", toEntity(otherRt))`
+
+Objetivo: o mover recebe “spawns” dos novos visíveis.
+
+---
+
+### Quando saiu de rooms
+
+Problema: um usuário pode estar em uma room que saiu mas ainda ser visível via overlap (outro chunk ainda no raio).
+
+Solução:
+
+1. Recalcula o chunk atual do mover (`computeChunkFromPos(runtime.pos)`).
+2. Calcula `visibleNow = getUsersInChunks(instanceId, cx, cz)` (baseline de visibilidade atual).
+3. Para cada usuário nos rooms `left`:
+   - Se ainda está em `visibleNow`, não despawna.
+   - Caso contrário, emite:
+     - `socket.emit("entity:despawn", { entityId, rev })`
+
+`rev` usado é o `rev` atual do runtime do outro (ou 0 se ausente).
+
+---
+
+## Regras e Garantias
+
+- Deduplicação por `seen` evita múltiplos spawns/despawns para o mesmo usuário em transições com várias rooms.
+- Entidades OFFLINE não são spawnadas.
+- Despawn para o mover é conservador:
+  - só ocorre se o alvo não estiver mais visível no novo interest.
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- Conecta presenceIndex (diff de rooms) com replicação (spawn/despawn).
+- Evita broadcasts globais, usando rooms.
+- Mantém consistência de visibilidade com verificação `visibleNow`.
+- Suporta multiplayer escalável por interest management.
+
+É o “difusor” incremental da transição espacial.
+
+
+
+# server/state/movement/entity.js
+
+## Objetivo
+
+Fornecer helpers para:
+
+- Controle de revisão monotônica (`rev`)
+- Serialização do runtime para formato replicável
+
+Este módulo:
+
+- Não acessa banco.
+- Não conhece socket.
+- Não modifica estruturas externas além do runtime recebido.
+- É usado pelo sistema de replicação multiplayer.
+
+---
+
+## bumpRev(rt)
+
+Incrementa `rt.rev` de forma segura.
+
+Regra:
+
+- Se `rev` for número válido → `rev + 1`
+- Se inválido/ausente → inicia em `1`
+
+Uso:
+
+- Movimento
+- Despawn
+- Qualquer alteração replicável
+
+`rev` garante ordenação monotônica no cliente.
+
+---
+
+## toEntity(rt)
+
+Serializa runtime completo para spawn/baseline.
+
+Retorna:
+
+
+{
+  entityId,
+  displayName,
+  pos,
+  yaw,
+  hp,
+  action,
+  rev
+}
+
+
+
+# server/state/movement/loop.js
+
+## Objetivo
+
+Executar o tick autoritativo de movimento em intervalo fixo.
+
+Este módulo:
+
+- Agenda execução periódica do sistema de movimento.
+- Chama `tickOnce(io, now)` a cada intervalo.
+- Não contém lógica de movimento.
+- Não acessa banco.
+- Não manipula runtime diretamente.
+
+É apenas o scheduler do sistema de movimento.
+
+---
+
+## startMovementTick(io)
+
+Inicia `setInterval` com frequência definida por:
+
+- `MOVEMENT_TICK_MS`
+
+A cada tick:
+
+1. Captura timestamp (`nowMs()`).
+2. Executa `tickOnce(io, now)`.
+3. Captura e loga erros.
+
+Proteções:
+
+- Não inicia se já estiver rodando.
+- Usa `unref()` quando disponível para não bloquear shutdown do processo.
+
+Loga início do loop.
+
+---
+
+## stopMovementTick()
+
+- Cancela o intervalo.
+- Reseta estado interno.
+- Loga parada.
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- Define o ritmo do movimento autoritativo.
+- Separa agendamento da lógica (`tickOnce`).
+- Garante execução previsível e periódica.
+- Permite controle claro de start/stop (ex: boot, shutdown, testes).
+
+É o relógio do sistema de movimento.
+
+
+
+# server/state/movement/math.js
+
+## Objetivo
+
+Fornecer funções matemáticas puras para o sistema de movimento.
+
+Este módulo:
+
+- Não acessa banco.
+- Não depende de socket.
+- Não modifica runtime diretamente.
+- Apenas executa cálculos auxiliares.
+
+É a base matemática do movimento autoritativo.
+
+---
+
+## clamp(n, min, max)
+
+Limita um número ao intervalo definido.
+
+Regra:
+
+- Se `n < min` → retorna `min`
+- Se `n > max` → retorna `max`
+- Caso contrário → retorna `n`
+
+---
+
+## normalize2D(x, z)
+
+Normaliza vetor 2D.
+
+Regra:
+
+- Se comprimento muito pequeno → retorna `{ x: 0, z: 0 }`
+- Caso contrário → retorna vetor unitário
+
+Usado para evitar velocidade maior em diagonal.
+
+---
+
+## clampPosToBounds(pos, bounds)
+
+Limita posição aos limites do mapa.
+
+Requisitos:
+
+- `bounds.minX`, `maxX`, `minZ`, `maxZ` devem ser válidos.
+
+Retorna:
+
+
+{
+  x,
+  y,
+  z
+}
+
+
+
+# server/state/movement/tickOnce.js
+
+## Objetivo
+
+Executar **um tick autoritativo de movimento** focado em **CLICK-to-move**.
+
+Este módulo:
+
+- Varre todos runtimes em memória.
+- Move apenas entidades em `moveMode === "CLICK"`.
+- Calcula `dt` no servidor.
+- Aplica bounds server-side.
+- Atualiza `pos`, `yaw`, `action`, `rev`.
+- Marca runtime como dirty (persistência hot + batch).
+- Faz replicação incremental (`entity:delta`) para interessados.
+- Envia feedback local (`move:state`) para o próprio jogador.
+- Gerencia transição de chunk (rooms + spawn/despawn incremental).
+
+Não acessa banco diretamente.
+Depende de Socket.IO para join/leave e emissão de eventos.
+
+---
+
+## Entradas e Dependências
+
+- `getAllRuntimes()` e `markRuntimeDirty()` (runtime store)
+- `moveUserChunk()` e `computeChunkFromPos()` (presenceIndex)
+- `getActiveSocket()` (sessão ativa por userId)
+- Math helpers (`computeDtSeconds`, `normalize2D`, `clampPosToBounds`, `readRuntimeSpeedStrict`)
+- Entity helpers (`bumpRev`, `toDelta`)
+- Replicação:
+  - `emitDeltaToInterest(io, socket, userId, delta)`
+  - `handleChunkTransition(io, socket, rt, movedInfo)`
+
+---
+
+## Regras de Processamento
+
+### 1) Filtragem inicial
+
+Ignora runtime se:
+
+- `connectionState` é `DISCONNECTED_PENDING` ou `OFFLINE`
+- `moveMode !== "CLICK"`
+- `moveTarget` ausente
+
+Objetivo: não “andar durante pending” e não processar WASD aqui.
+
+---
+
+### 2) Delta time autoritativo
+
+- `dt = computeDtSeconds(now, rt.moveTickAtMs, DT_MAX)`
+- Atualiza `rt.moveTickAtMs = now`
+- Se `dt <= 0` → skip
+
+O servidor controla o avanço do tempo.
+
+---
+
+### 3) Validações obrigatórias
+
+- `speed = readRuntimeSpeedStrict(rt)` (sem fallback silencioso)
+- `rt.bounds` deve existir
+- `moveTarget.x/z` deve ser finito
+
+Se `moveTarget` corrompido:
+- zera target
+- `moveMode = "STOP"`
+- `action = "idle"`
+- `bumpRev` + `markRuntimeDirty`
+- continua
+
+---
+
+### 4) Condição de parada (stopRadius)
+
+Calcula distância até o target.
+
+Se `dist <= stopRadius` (server-side):
+
+- `moveTarget = null`
+- `moveMode = "STOP"`
+- `action = "idle"` (se necessário)
+- `bumpRev` + `markRuntimeDirty`
+- Replica delta para outros (`emitDeltaToInterest`)
+- Envia `move:state` para self (inclui chunk)
+
+Importante: stop é decidido no servidor.
+
+---
+
+### 5) Movimento por passo
+
+- Calcula direção `dir = normalize2D(dx, dz)`
+- Calcula posição desejada:
+  - `pos + dir * speed * dt`
+- Aplica bounds:
+  - `clampPosToBounds(desired, rt.bounds)`
+- Calcula yaw autoritativo:
+  - `yaw = atan2(dir.x, dir.z)`
+
+Se não mudou posição nem yaw → skip.
+
+Commit:
+
+- `rt.pos = clampedPos`
+- `rt.yaw = newYaw`
+- `rt.action = "move"`
+- `bumpRev` + `markRuntimeDirty`
+
+---
+
+## Transição de Chunk (Interest)
+
+Após mover:
+
+1. Recalcula `{ cx, cz }`.
+2. Detecta mudança comparando com `rt.chunk`.
+3. Se mudou:
+   - `movedInfo = moveUserChunk(userId, cx, cz)`
+   - Atualiza `rt.chunk = { cx, cz }`
+   - Se socket existe:
+     - `join` rooms `entered`
+     - `leave` rooms `left`
+   - Orquestra replicação incremental de visibilidade:
+     - `handleChunkTransition(io, socket, rt, movedInfo)`
+
+---
+
+## Replicação
+
+### Para outros
+
+- `delta = toDelta(rt)`
+- `emitDeltaToInterest(io, socket, userId, delta)`
+
+Contrato: update incremental baseado em `rev`.
+
+### Para o próprio jogador
+
+Se socket existe, emite:
+
+- `move:state` com:
+  - pos, yaw, rev, chunk
+
+Isso é feedback local (não é autoridade do client).
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- Implementa simulação autoritativa de click-to-move no servidor.
+- Unifica: dt server-side + speed strict + bounds obrigatórios.
+- Integra interest management por chunk (rooms) com replicação incremental.
+- Mantém persistência desacoplada (apenas marca dirty).
+
+É o “coração” do loop de click-to-move.
