@@ -1699,65 +1699,30 @@ Ele apenas fornece as primitivas necessárias para que o `socket/index.js` apliq
 Map<userId(string), socket>
 
 
-# server/socket/handlers/clickMoveHandler.md
-
-## Arquivo
-`server/socket/handlers/clickMoveHandler.js`
-
----
+# server/socket/handlers/clickMoveHandler.js
 
 ## Objetivo
 
-Registrar e processar a intenção de **movimento por clique** enviada pelo cliente via evento Socket.IO:
+Registrar e processar a intenção **click-to-move** enviada pelo cliente.
 
-Esse handler **não executa movimento diretamente**.  
-Ele apenas configura o runtime para que o sistema de tick autoritativo processe o deslocamento posteriormente.
+Este handler:
 
-É um ponto de entrada de intenção, não de simulação.
+- Recebe `move:click` via Socket.IO.
+- Valida payload e aplica regras de aceitação.
+- Atualiza apenas o estado de click no runtime (moveMode/target).
+- Não executa movimento diretamente.
+- Não emite replicação (`delta/spawn/despawn`).
+- Não toca banco.
 
----
-
-## Papel Arquitetural
-
-- Consome input do cliente.
-- Valida dados mínimos.
-- Aplica regras de segurança básicas.
-- Atualiza estado do runtime em memória.
-- Não acessa banco.
-- Não replica estado.
-- Não incrementa `rev`.
-- Não calcula física.
-- Não emite eventos de movimento.
-
-Ele prepara o runtime para o loop autoritativo.
+O deslocamento real acontece no **tick autoritativo** (`movement/tickOnce.js`).
 
 ---
 
-## Dependências
+## Evento: `move:click`
 
-### runtimeStore
+### Payload esperado
 
-- `ensureRuntimeLoaded(userId)`
-- `getRuntime(userId)`
-- `isWASDActive(rt, nowMs)`
-
-Não interage com:
-- persistenceManager
-- presenceIndex
-- socket rooms
-
----
-
-## Evento Registrado
-
-### `move:click`
-
-Payload esperado:
-
-{
-  "x": number,
-  "z": number
-}
+{ x: number, z: number }
 
 
 
@@ -3067,3 +3032,497 @@ Este arquivo:
 - Mantém persistência desacoplada (apenas marca dirty).
 
 É o “coração” do loop de click-to-move.
+
+
+# server/socket/handlers/move/applyWASD.js
+
+## Objetivo
+
+Aplicar um **intent de movimento WASD** diretamente no runtime autoritativo.
+
+Este módulo:
+
+- Atualiza `pos`, `yaw`, `moveMode`, `action` e estado de input (`inputDir`).
+- Calcula `dt` no servidor (não confia no client).
+- Aplica bounds server-side.
+- Não emite eventos (sem socket emit aqui).
+- Não toca banco.
+- Retorna um resumo do que mudou para o handler decidir replicação/persistência.
+
+É um “aplicador puro” de intent para o runtime.
+
+---
+
+## applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive })
+
+### Entradas
+
+- `runtime`: estado autoritativo em memória.
+- `nowMs`: clock do servidor.
+- `dir`: vetor desejado `{x,z}` do client.
+- `yawDesired`: orientação desejada (camera).
+- `isWASDActive`: política server-side (timeout) para decidir se WASD está ativo.
+
+---
+
+## Regras Principais
+
+### 1) dt autoritativo
+
+- `dt = computeDtSeconds(nowMs, runtime.wasdTickAtMs, DT_MAX)`
+- Atualiza `runtime.wasdTickAtMs = nowMs`
+
+Cliente não decide dt.
+
+---
+
+### 2) yaw desejado (se fornecido)
+
+- Normaliza ângulo para [-π, π] via `atan2(sin, cos)`
+- Atualiza `runtime.yaw` se mudou
+- Flag: `yawChanged`
+
+---
+
+### 3) normalização e estado de input
+
+- Normaliza direção: `d = normalize2D(dir.x, dir.z)`
+- Sempre atualiza:
+  - `runtime.inputDir = d`
+  - `runtime.inputDirAtMs = nowMs`
+
+Motivo: política de timeout server-side não depende de “keyup”.
+
+---
+
+### 4) política de prioridade WASD vs CLICK
+
+- `wasdActiveNow = isWASDActive(runtime, nowMs)`
+
+Se WASD ativo:
+
+- WASD **cancela CLICK**:
+  - se `moveMode === "CLICK"` → zera `moveTarget` e muda para `WASD`
+- Garante `moveMode === "WASD"`
+- Garante `action === "move"`
+
+Se WASD não ativo:
+
+- Se estava em `WASD` → volta para `STOP`
+- Se direção é zero → garante `action === "idle"`
+
+Flag: `modeOrActionChanged`
+
+---
+
+### 5) velocidade estrita
+
+- `speed = readRuntimeSpeedStrict(runtime)`
+- Se inválido:
+  - retorna `ok:false` com `reason:"invalid_speed"`
+
+Sem fallback silencioso.
+
+---
+
+### 6) movimento com bounds (somente se dir != 0)
+
+Se direção não-nula:
+
+- Exige `runtime.bounds`
+  - se ausente → `ok:false reason:"missing_bounds"`
+- Calcula `desired = pos + d * speed * dt`
+- Aplica `clampPosToBounds(desired, bounds)`
+  - se inválido → `ok:false reason:"invalid_bounds"`
+- Se mudou `x/z`:
+  - `runtime.pos = clampedPos`
+  - `moved = true`
+
+Se direção nula:
+- Não move.
+
+---
+
+## Retorno
+
+Sempre retorna um resumo:
+
+
+{
+  ok: boolean,
+  reason: string|null,
+  yawChanged: boolean,
+  moved: boolean,
+  modeOrActionChanged: boolean,
+  dir: { x, z } // normalizado
+}
+
+
+
+# server/socket/handlers/move/broadcast.js
+
+## Objetivo
+
+Aplicar a etapa de **replicação pós-WASD** a partir do socket handler.
+
+Este módulo:
+
+- Não aplica movimento (isso ocorre em `applyWASDIntent`).
+- Decide replicação e efeitos colaterais de rede após o runtime ser atualizado:
+  - `rev++`
+  - `markRuntimeDirty`
+  - transição de chunk (presence + rooms + spawn/despawn)
+  - `entity:delta` para o interest
+  - `move:state` para o próprio jogador
+- Não toca banco.
+
+É o “broadcast layer” do WASD.
+
+---
+
+## emitDeltaToInterestFromSocket(socket, userId, payload)
+
+Emite `entity:delta` para todas as rooms do interest do usuário:
+
+- rooms = `getInterestRoomsForUser(userId)`
+- para cada room:
+  - `socket.to(room).emit("entity:delta", payload)`
+
+Não envia eco para o próprio socket (usa `socket.to`).
+
+---
+
+## broadcastWASDResult({ socket, userId, runtime, nowMs })
+
+Pipeline executado após WASD ser aplicado no runtime.
+
+### 1) Revisão monotônica + dirty
+
+- `bumpRev(runtime)`  
+  Regra: qualquer mudança replicável incrementa `rev`.
+
+- `markRuntimeDirty(userId, nowMs)`  
+  Hot path: marca para persistência posterior (batch).
+
+---
+
+### 2) Detecção de mudança de chunk
+
+- Calcula `{ cx, cz } = computeChunkFromPos(runtime.pos)`
+- Compara com `runtime.chunk`
+- Se mudou:
+
+1. Atualiza presença:
+   - `movedInfo = moveUserChunk(userId, cx, cz)`
+2. Atualiza fonte local:
+   - `runtime.chunk = { cx, cz }`
+3. Aplica join/leave no socket:
+   - `socket.join(r)` para `entered`
+   - `socket.leave(r)` para `left`
+4. Orquestra spawn/despawn incremental:
+   - `handleChunkTransition(socket.server, socket, runtime, movedInfo)`
+
+---
+
+### 3) Delta para outros
+
+- `delta = toDelta(runtime)`
+- `emitDeltaToInterestFromSocket(socket, userId, delta)`
+
+Replica atualização incremental para observadores.
+
+---
+
+### 4) Feedback local
+
+Emite `move:state` para o próprio jogador:
+
+{
+  entityId,
+  pos,
+  yaw,
+  rev,
+  chunk
+}
+
+
+
+# server/socket/handlers/world/baseline.js
+
+## Objetivo
+
+Construir o **baseline autoritativo** enviado ao cliente após `world:join` ou `world:resync`.
+
+Este módulo:
+
+- Consolida o estado visível do jogador.
+- Separa claramente:
+  - `you` (self completo)
+  - `others` (entidades visíveis sem self)
+- Filtra entidades OFFLINE.
+- Não toca banco.
+- Não depende de socket.
+
+É um builder de snapshot multiplayer.
+
+---
+
+## buildBaseline(rt)
+
+### Entrada
+
+- `rt`: runtime autoritativo do jogador.
+
+---
+
+## Fluxo
+
+1. Calcula interesse espacial:
+
+   - `{ cx, cz } = computeInterestFromRuntime(rt)`
+
+2. Constrói entidade do self:
+
+   - `you = toEntity(rt)`
+
+3. Obtém usuários visíveis:
+
+   - `visibleUserIds = getUsersInChunks(instanceId, cx, cz)`
+
+4. Para cada `uid` visível:
+
+   - `other = getRuntime(uid)`
+   - Ignora se:
+     - runtime inexistente
+     - `connectionState === "OFFLINE"`
+     - for o próprio jogador
+   - Converte com `toEntity(other)`
+   - Adiciona em `others`
+
+---
+
+## Retorno
+
+{
+  instanceId: String(rt.instanceId),
+  you,
+  chunk: { cx, cz },
+  others
+}
+
+
+
+# server/socket/handlers/world/join.js
+
+## Objetivo
+
+Implementar o fluxo autoritativo de `world:join`.
+
+Este módulo:
+
+- Garante runtime carregado em memória.
+- Impede join se o jogador estiver OFFLINE.
+- Indexa presença no `presenceIndex` (idempotente).
+- Aplica rooms autoritativas no socket (instância + chunks do interest).
+- Retorna baseline obrigatório para o cliente.
+
+Não toca banco diretamente (apenas via `ensureRuntimeLoaded`).
+Não decide simulação.
+É a porta de entrada do mundo via socket.
+
+---
+
+## handleWorldJoin({ socket })
+
+### Entrada
+
+- `socket`: conexão Socket.IO já autenticada (contém `socket.data.userId`).
+
+---
+
+## Fluxo
+
+1. Resolve identidade:
+   - `userId = socket.data.userId`
+
+2. Garante runtime em memória:
+   - `await ensureRuntimeLoaded(userId)`
+   - `rt = getRuntime(userId)`
+   - Se não existir → erro `RUNTIME_NOT_LOADED`
+
+3. Bloqueia estado inválido:
+   - Se `rt.connectionState === "OFFLINE"` → erro `CANNOT_JOIN_OFFLINE`
+
+4. Indexa presença (idempotente):
+   - `info = addUserToInstance(userId, rt.instanceId, rt.pos)`
+   - Retorna chunk atual e `interestRooms`.
+
+5. Calcula e aplica rooms autoritativas:
+   - `targetRooms = buildRooms(instanceId, info.interestRooms)`
+   - `applyRooms(socket, targetRooms)`
+
+Rooms incluem:
+- `inst:<instanceId>`
+- `chunk:<instanceId>:<cx>:<cz>` do interest
+
+6. Marca estado no socket:
+   - `socket.data.instanceId = instanceId`
+   - `socket.data._worldJoined = true`
+
+7. Constrói baseline obrigatório:
+   - `baseline = buildBaseline(rt)`
+
+8. Retorna:
+   - `{ rt, baseline }`
+
+---
+
+## Retorno
+
+
+{
+  rt,        // runtime autoritativo em memória
+  baseline   // snapshot inicial (you + others + chunk)
+}
+
+
+# server/socket/handlers/world/resync.js
+
+## Objetivo
+
+Implementar o fluxo autoritativo de `world:resync`.
+
+Este módulo:
+
+- Garante runtime carregado.
+- Recalcula interest (cx/cz) a partir do runtime.
+- Atualiza presenceIndex (chunk/interest) via `moveUserChunk`.
+- Se o usuário não estava indexado, recria presença com `addUserToInstance`.
+- Reaplica rooms autoritativas no socket.
+- Emite baseline completo para reancorar o cliente.
+
+Não toca banco diretamente (apenas via `ensureRuntimeLoaded`).
+É um mecanismo de correção/reatualização de estado no cliente.
+
+---
+
+## handleWorldResync({ socket })
+
+### Entrada
+
+- `socket`: conexão Socket.IO autenticada (`socket.data.userId`).
+
+---
+
+## Fluxo
+
+1. Resolve identidade:
+   - `userId = socket.data.userId`
+
+2. Garante runtime em memória:
+   - `await ensureRuntimeLoaded(userId)`
+   - `rt = getRuntime(userId)`
+   - Se faltar → erro `RUNTIME_NOT_LOADED`
+
+3. Bloqueia estado inválido:
+   - Se `rt.connectionState === "OFFLINE"` → erro `CANNOT_RESYNC_OFFLINE`
+
+4. Recalcula interest a partir do runtime:
+   - `{ cx, cz } = computeInterestFromRuntime(rt)`
+
+5. Atualiza presença/chunk (se já existia):
+   - `moved = moveUserChunk(userId, cx, cz)`
+
+6. Se não havia index (moved == null), cria:
+   - `info = addUserToInstance(userId, rt.instanceId, rt.pos)`
+
+7. Determina interestRooms autoritativo:
+   - Se `moved` existe → `interestRooms = moved.next.interestRooms`
+   - Senão → `interestRooms = info.interestRooms`
+
+8. Reaplica rooms do socket:
+   - `targetRooms = buildRooms(instanceId, interestRooms)`
+   - `applyRooms(socket, targetRooms)`
+
+9. Marca estado no socket:
+   - `socket.data.instanceId = instanceId`
+   - `socket.data._worldJoined = true`
+
+10. Constrói baseline:
+   - `baseline = buildBaseline(rt)`
+
+11. Retorna:
+   - `{ rt, baseline }`
+
+---
+
+## Retorno
+
+
+{
+  rt,        // runtime autoritativo
+  baseline   // snapshot (you + others + chunk)
+}
+
+
+# server/socket/handlers/world/rooms.js
+
+## Objetivo
+
+Gerenciar rooms autoritativas do socket com base na instância e no interest calculado pelo servidor.
+
+Este módulo:
+
+- Não calcula interest.
+- Não decide visibilidade.
+- Apenas sincroniza as rooms do socket com um conjunto alvo.
+- Evita duplicação ou vazamento de rooms antigas.
+
+É a camada de sincronização entre presenceIndex e Socket.IO.
+
+---
+
+## getSocketJoinedRooms(socket)
+
+Retorna:
+
+- `Set<string>` com as rooms atuais do socket.
+- Exclui automaticamente a room privada (`socket.id`).
+
+Uso:
+- Base para calcular diff entre rooms atuais e desejadas.
+
+---
+
+## applyRooms(socket, targetRooms)
+
+Sincroniza rooms do socket com `targetRooms`.
+
+Fluxo:
+
+1. Obtém rooms atuais via `getSocketJoinedRooms`.
+2. Para cada room atual que não está em `targetRooms`:
+   - `socket.leave(r)`
+3. Para cada room em `targetRooms` que o socket ainda não está:
+   - `socket.join(r)`
+
+Garantia:
+- Após execução, o socket estará exatamente nas rooms definidas pelo servidor.
+
+---
+
+## buildRooms(instanceId, interestRoomsSet)
+
+Constrói o conjunto de rooms autoritativas:
+
+- Sempre inclui:
+  - `inst:<instanceId>`
+- Inclui todas as rooms do interest (chunks).
+
+Retorna:
+Set<string>
+inst:42
+chunk:42:10:15
+chunk:42:10:16
+chunk:42:11:15
+...
