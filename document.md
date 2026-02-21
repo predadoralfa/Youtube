@@ -468,258 +468,42 @@ O cliente não calcula estado de mundo.
 Apenas consome este snapshot e renderiza.
 
 
-# socket/index.js — Registro e Autenticação de Socket
-
-# server/socket/index.md
-
-## Arquivo
-`server/socket/index.js`
-
----
+# server/socket/index.js
 
 ## Objetivo
 
-Implementar o **pipeline central do Socket.IO** do backend, cobrindo:
+Registrar e orquestrar o ciclo de vida completo do Socket.IO no servidor.
 
-- Autenticação JWT no handshake (gate autoritativo).
-- Garantia de **sessão única por `userId`** (1 usuário, 1 socket ativo).
-- Integração com o runtime em memória (`runtimeStore`) e com persistência controlada (`persistenceManager`).
-- Registro de handlers de gameplay (WASD e click-to-move) e de mundo (baseline/rooms).
-- Ciclo de vida de conexão: `CONNECTED -> DISCONNECTED_PENDING -> OFFLINE` (anti-combat-log de 10s).
-- Broadcast de despawn autoritativo quando uma entidade vira OFFLINE definitivo.
+Este módulo:
 
-Este arquivo é infraestrutura de runtime, não contém simulação de movimento nem regras de combate.
+- Instala middlewares globais (auth + hooks de persistência).
+- Garante sessão única por usuário.
+- Marca usuário como CONNECTED no runtime.
+- Registra handlers de gameplay.
+- Configura fluxo de disconnect com grace period.
+- Isola wiring do resto do sistema.
 
----
-
-## Dependências
-
-### Autenticação
-- `jsonwebtoken` para validar JWT.
-
-### Runtime (estado quente)
-De `../state/runtimeStore`:
-- `ensureRuntimeLoaded(userId)`
-- `getRuntime(userId)` *(importado, mas não utilizado neste arquivo)*
-- `setConnectionState(userId, patch, nowMs)`
-
-### Persistência (hot + batch)
-De `../state/persistenceManager`:
-- `flushUserRuntimeImmediate(userId)`
-- `onEntityDespawn(handler)`
-
-### Presence / Interest Index
-De `../state/presenceIndex`:
-- `addUserToInstance` *(importado, mas não utilizado neste arquivo; o join real ocorre no `worldHandler`)*
-
-### Handlers Socket
-- `registerMoveHandler(socket)` (WASD)
-- `registerClickMoveHandler(socket)` (click-to-move: só seta alvo)
-- `registerWorldHandler(io, socket)` (world join/resync/baseline/rooms)
-
-### Sessão Única
-De `./sessionIndex`:
-- `getActiveSocket(userId)`
-- `setActiveSocket(userId, socket)`
-- `clearActiveSocket(userId, socketId)`
+É o ponto central de entrada do multiplayer via WebSocket.
 
 ---
 
-## Conceitos e Contratos
+## registerSocket(io)
 
-### Contrato de identidade no socket
-Após autenticação, injeta em `socket.data`:
+### 1) Instala hooks globais
 
-- `socket.data.userId` (obrigatório)
-- `socket.data.displayName` (opcional)
+- `installPersistenceHooks(io)`
+  - Escuta eventos internos (ex: despawn autoritativo).
+  - Conecta camada de persistência ao layer de socket.
 
-Isso se torna a identidade autoritativa do canal WS.
-
-### Estados de conexão (runtime)
-Manipula explicitamente:
-
-- `CONNECTED`
-- `DISCONNECTED_PENDING`
-- (OFFLINE finalizado pelo `persistenceManager`, não por este arquivo)
-
-### Janela anti-combat-log
-Ao desconectar:
-
-- marca `DISCONNECTED_PENDING`
-- define `offlineAllowedAtMs = now + 10s`
-- após esse deadline, o `persistenceManager` finaliza `OFFLINE` e emite despawn.
+- `installAuthMiddleware(io)`
+  - Valida token.
+  - Injeta `socket.data.userId`.
 
 ---
 
-## Hook de Persistência: Despawn Autoritativo
+### 2) Evento de conexão
 
-### `installPersistenceHooks(io)`
-
-Instala uma vez (guardado por `_despawnHookInstalled`) um listener:
-
-- `onEntityDespawn((evt) => {...})`
-
-Quando o `persistenceManager` declara OFFLINE definitivo, o hook:
-
-1. Monta `targets` (rooms de broadcast) com deduplicação:
-   - sempre inclui `inst:<instanceId>`
-   - inclui também `evt.interestRooms` se fornecido
-
-2. Emite para cada room:
-   - evento: `entity:despawn`
-   - payload: `{ entityId, rev }`
-
-Observações:
-- Esse arquivo não calcula interest nem lista jogadores: ele apenas usa as rooms fornecidas.
-- `rev` é tratado como monotônico (o despawn é uma revisão).
-
----
-
-## Autenticação no Handshake
-
-### `io.use((socket, next) => ...)`
-
-Fluxo:
-
-1. Lê token de:
-   - `socket.handshake.auth.token`
-2. Aceita dois formatos:
-   - `<token>`
-   - `Bearer <token>` (remove prefixo)
-3. Valida:
-   - `jwt.verify(token, JWT_SECRET || "chave_mestra_extrema")`
-4. Exige:
-   - `decoded.id` exista
-5. Injeta:
-   - `socket.data.userId = decoded.id`
-   - `socket.data.displayName = decoded.display_name ?? null`
-6. Caso falhe:
-   - `next(new Error("UNAUTHORIZED"))`
-
-Contrato compatível com o HTTP middleware `requireAuth`.
-
----
-
-## Conexão: Pipeline Principal
-
-### `io.on("connection", async (socket) => {...})`
-
-#### (A) Sessão única por `userId`
-
-1. Obtém sessão anterior via `getActiveSocket(userId)`.
-2. Se existe e é diferente do socket atual:
-   - define flag no socket antigo:
-     - `prev.data._skipDisconnectPending = true`
-     - Isso impede que o `disconnect` do antigo marque o runtime como pending.
-   - emite para o cliente antigo:
-     - `session:replaced` com `{ by: socket.id, userId }`
-   - derruba o antigo:
-     - `prev.disconnect(true)`
-3. Registra o novo como sessão atual:
-   - `setActiveSocket(userId, socket)`
-
-Garantia real:
-- Este arquivo, junto com `sessionIndex`, implementa efetivamente “1 userId = 1 sessão ativa” no **processo atual**.
-
-Limitação:
-- Não resolve sessão única em cenário multi-node sem coordenação externa.
-
-#### (B) Runtime + marca CONNECTED
-
-1. `ensureRuntimeLoaded(userId)` garante runtime em memória.
-2. `setConnectionState(... CONNECTED ...)`:
-   - zera `disconnectedAtMs` e `offlineAllowedAtMs`
-3. `flushUserRuntimeImmediate(userId)`:
-   - checkpoint imediato do estado CONNECTED (crash recovery / consistência)
-
-#### (C) Registro de handlers
-
-- `registerMoveHandler(socket)` (WASD)
-- `registerClickMoveHandler(socket)` (click-to-move)
-- `registerWorldHandler(io, socket)` (baseline/rooms/join/resync)
-
-Este arquivo não conhece detalhes de gameplay desses handlers, apenas os conecta ao socket.
-
-#### (D) Ready signal
-
-Emite para o cliente:
-- `socket:ready` `{ ok: true }`
-
----
-
-## Disconnect: `DISCONNECTED_PENDING` (10s)
-
-### `socket.on("disconnect", async (reason) => {...})`
-
-Fluxo defensivo:
-
-1. Se socket foi substituído:
-   - `if (socket.data._skipDisconnectPending) return;`
-2. Se não for a sessão atual (race/overlap):
-   - lê `current = getActiveSocket(userId)`
-   - se `current.id !== socket.id`, ignora
-3. Limpa sessão atual:
-   - `clearActiveSocket(userId, socket.id)`
-4. Calcula janela:
-   - `t = nowMs()`
-   - `offlineAt = t + 10_000`
-5. Marca runtime:
-   - `setConnectionState(... DISCONNECTED_PENDING ...)`
-   - grava `disconnectedAtMs` e `offlineAllowedAtMs`
-6. Persiste imediatamente:
-   - `flushUserRuntimeImmediate(userId)`
-7. Log de telemetria:
-   - inclui `reason` e `offlineAt`
-
-Importante:
-- Este arquivo **não finaliza OFFLINE**. Ele apenas agenda via deadline.
-- A transição para OFFLINE e o despawn real são responsabilidade do `persistenceManager`.
-
----
-
-## O Que Este Arquivo NÃO Faz
-
-Não:
-
-- Calcula movimento.
-- Replica `entity:delta` diretamente (isso é do move/world handlers).
-- Controla presenceIndex diretamente (apesar do import existir).
-- Faz baseline.
-- Persiste em batch.
-- Decide OFFLINE definitivo.
-
-Ele orquestra autenticação, sessão, lifecycle e integração entre camadas.
-
----
-
-## Segurança e Robustez
-
-### Proteções implementadas
-- JWT obrigatório no handshake.
-- Aceita prefixo Bearer para compatibilidade.
-- Sessão única com derrubada explícita de conexão anterior.
-- Proteções contra race condition no disconnect (checa sessão atual).
-- Flag `_skipDisconnectPending` para evitar “pending fantasma” na sessão antiga.
-- Checkpoint imediato em eventos críticos (CONNECTED e DISCONNECTED_PENDING).
-
-### Limitações relevantes
-- Fallback de JWT secret (`"chave_mestra_extrema"`) é conveniente para dev, mas perigoso em produção se `JWT_SECRET` estiver ausente.
-- Sessão única é por processo, não global.
-- `getRuntime` e `addUserToInstance` estão importados mas não usados: sugere drift/artefato e merece limpeza para reduzir ambiguidade.
-
----
-
-## Papel no Sistema
-
-Este arquivo é o **núcleo de infraestrutura WebSocket** do MMO autoritativo:
-
-- Garante identidade e sessão única.
-- Encosta o socket no runtime em memória.
-- Integra com persistência controlada e broadcast de despawn.
-- Conecta handlers que implementam a lógica do mundo e movimento.
-- Implementa lifecycle de presença com janela anti-combat-log.
-
-É um ponto crítico para consistência, porque controla as transições de estado mais sensíveis do jogador (online/pending/offline).
+io.on("connection", async (socket) => { ... })
 
 
 # cliente/src/World/state/entitiesStore.md
@@ -2500,8 +2284,6 @@ Atualiza:
 - `userIndex[userId] = { instanceId, cx, cz, interestRooms }`
 
 Retorna snapshot:
-
-```js
 {
   instanceId,
   cx,
@@ -3526,3 +3308,201 @@ chunk:42:10:15
 chunk:42:10:16
 chunk:42:11:15
 ...
+
+
+# server/socket/wiring/auth.js
+
+## Objetivo
+
+Instalar middleware de autenticação JWT no Socket.IO.
+
+Este módulo:
+
+- Valida token antes de permitir conexão.
+- Decodifica identidade do usuário.
+- Injeta dados autoritativos em `socket.data`.
+- Bloqueia conexão se token inválido ou ausente.
+
+É o gate de autenticação do layer WebSocket.
+
+---
+
+## installAuthMiddleware(io)
+
+Registra:
+
+io.use((socket, next) => { ... })
+
+
+# server/socket/wiring/persistenceHooks.js
+
+## Objetivo
+
+Conectar eventos internos da camada de persistência ao layer de Socket.IO.
+
+Este módulo:
+
+- Escuta eventos emitidos pelo `persistenceManager`.
+- Traduz eventos internos (ex: OFFLINE definitivo) em broadcasts de rede.
+- Garante despawn autoritativo consistente.
+- Evita múltiplas instalações do mesmo hook.
+
+É a ponte entre persistência e replicação via socket.
+
+---
+
+## installPersistenceHooks(io)
+
+Instala o hook apenas uma vez:
+
+let _despawnHookInstalled = false;
+
+
+
+# server/socket/wiring/session.js
+
+## Objetivo
+
+Implementar política de **sessão única por userId**.
+
+Este módulo:
+
+- Garante que apenas um socket esteja ativo por usuário.
+- Derruba sessão anterior ao conectar uma nova.
+- Evita disparo indevido de `DISCONNECTED_PENDING` na sessão substituída.
+- Protege contra race conditions ao limpar sessão ativa.
+
+Não toca banco.
+Opera apenas sobre `sessionIndex`.
+
+---
+
+## enforceSingleSession(userId, socket)
+
+Aplicado no momento da conexão.
+
+### Fluxo
+
+1. Busca socket ativo atual:
+   - `prev = getActiveSocket(userId)`
+
+2. Se existir e for diferente do novo socket:
+
+   - Marca:
+     ```js
+     prev.data._skipDisconnectPending = true;
+     ```
+     Evita que o handler de disconnect da sessão antiga
+     marque `DISCONNECTED_PENDING`.
+
+   - Notifica sessão antiga:
+     ```js
+     prev.emit("session:replaced", { by, userId })
+     ```
+
+   - Força desconexão:
+     ```js
+     prev.disconnect(true)
+     ```
+
+3. Registra novo socket como ativo:
+   - `setActiveSocket(userId, socket)`
+
+Garantia:
+- Apenas um socket ativo por usuário no sistema.
+
+---
+
+## clearIfCurrentSession(userId, socket)
+
+Chamado no disconnect.
+
+### Objetivo
+
+Evitar race condition quando:
+
+- Uma sessão nova já substituiu a anterior.
+- A antiga dispara disconnect depois.
+
+### Fluxo
+
+1. Lê socket ativo atual:
+   - `current = getActiveSocket(userId)`
+
+2. Se:
+   - não existir
+   - ou id diferente do socket atual
+
+→ retorna `false` (não limpa)
+
+3. Se for o mesmo:
+   - `clearActiveSocket(userId, socket.id)`
+   - retorna `true`
+
+---
+
+## Garantias
+
+- Não há dupla presença ativa por usuário.
+- Disconnect da sessão antiga não afeta sessão nova.
+- Evita inconsistência de estado CONNECTED/OFFLINE.
+- Mantém runtime consistente com sessão ativa.
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- Impõe invariante crítica: **1 userId → 1 sessão ativa**.
+- Evita bugs de “duplo movimento” ou duplicação de entidade.
+- Protege fluxo de lifecycle contra race conditions.
+- Mantém coerência entre socket e runtime.
+
+É o controlador de identidade ativa do multiplayer.
+
+
+# server/socket/wiring/lifecycle.js
+
+## Objetivo
+
+Orquestrar transições de lifecycle de conexão do usuário no runtime autoritativo.
+
+Este módulo:
+
+- Marca o usuário como `CONNECTED` na conexão.
+- Marca como `DISCONNECTED_PENDING` no disconnect com janela de 10s.
+- Executa flush imediato do runtime em ambas as transições.
+- Respeita política de sessão única (skip + race protection).
+
+Não toca banco diretamente (flush é via persistenceManager).
+
+---
+
+## onConnected(userId)
+
+Executado na conexão bem-sucedida.
+
+### Fluxo
+
+1. Garante runtime carregado:
+   - `await ensureRuntimeLoaded(userId)`
+
+2. Atualiza estado de conexão (em memória) via `setConnectionState`:
+   - `connectionState: "CONNECTED"`
+   - `disconnectedAtMs: null`
+   - `offlineAllowedAtMs: null`
+
+3. Flush imediato:
+   - `await flushUserRuntimeImmediate(userId)`
+
+Motivo:
+- Crash recovery e consistência: estado CONNECTED persiste sem depender do batch.
+
+---
+
+## installDisconnectHandler({ socket, userId, clearIfCurrentSession })
+
+Instala listener:
+
+socket.on("disconnect", async (reason) => { ... })
