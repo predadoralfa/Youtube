@@ -85,10 +85,32 @@
         index.js
         sessionIndex.js
 
+
         handlers/
             moveHandler.js
             worldHandler.js
             clickMoveHandler.js
+            move/
+                applyWASD.js
+                broadcast.js
+                config.js
+                throttle.js
+                validate.js
+
+            world/
+                baseline.js
+                entity.js
+                interest.js
+                join.js
+                resync.js
+                rooms.js
+
+        wiring/
+            auth.js
+            handlers.js
+            lifecycle.js
+            persistenceHook.js
+            session.js
             
     state/
         runtimeStore.js
@@ -110,3 +132,23 @@
             read.js
             mutate.js
             store.js
+
+        persistence/
+            config.js
+            clock.js
+            disconnects.js
+            events.js
+            flusbatch.js
+            loop.js
+            rev.js
+            writers.js
+
+        movement/
+            chunkTransition.js
+            clock.js
+            config.js
+            emit.js
+            entity.js
+            loop.js
+            math.js
+            tickOnce.js
