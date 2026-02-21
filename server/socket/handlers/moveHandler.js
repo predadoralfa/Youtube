@@ -3,6 +3,8 @@ const {
   getRuntime,
   ensureRuntimeLoaded,
   markRuntimeDirty,
+  // (NOVO) regra única para “WASD ativo”, com timeout
+  isWASDActive,
 } = require("../../state/runtimeStore");
 
 const {
@@ -188,13 +190,14 @@ function registerMoveHandler(socket) {
       if (!allowMove(runtime, nowMs)) return;
 
       const dir = payload?.dir;
-      const dtRaw = payload?.dt;
       const yawDesired = payload?.yawDesired;
 
       if (!dir || !isFiniteNumber(dir.x) || !isFiniteNumber(dir.z)) return;
-      if (!isFiniteNumber(dtRaw)) return;
 
-      const dt = clamp(dtRaw, 0, DT_MAX);
+      // dt autoritativo do servidor (não confia no client)
+      const last = Number(runtime.wasdTickAtMs ?? 0);
+      const dt = clamp(((nowMs - (last > 0 ? last : nowMs)) / 1000), 0, DT_MAX);
+      runtime.wasdTickAtMs = nowMs;
 
       // yaw vem da camera (se veio)
       let yawChanged = false;
@@ -208,6 +211,48 @@ function registerMoveHandler(socket) {
 
       // direção normalizada
       const d = normalize2D(dir.x, dir.z);
+
+      // ==============================
+      // (NOVO) Sempre atualizar estado de input
+      // ==============================
+      runtime.inputDir = d;
+      runtime.inputDirAtMs = nowMs;
+
+      // ==============================
+      // (NOVO) Regras de prioridade: WASD cancela CLICK
+      // ==============================
+      const wasdActiveNow = isWASDActive(runtime, nowMs); // usa timeout interno
+
+      let modeOrActionChanged = false;
+
+      if (wasdActiveNow) {
+        if (runtime.moveMode === "CLICK") {
+          runtime.moveTarget = null;
+          runtime.moveMode = "WASD";
+          modeOrActionChanged = true;
+        } else if (runtime.moveMode !== "WASD") {
+          runtime.moveMode = "WASD";
+          modeOrActionChanged = true;
+        }
+
+        // coerência de action (mínimo)
+        if (runtime.action !== "move") {
+          runtime.action = "move";
+          modeOrActionChanged = true;
+        }
+      } else {
+        // sem input efetivo recente
+        if (runtime.moveMode === "WASD") {
+          runtime.moveMode = "STOP";
+          modeOrActionChanged = true;
+        }
+        if (d.x === 0 && d.z === 0) {
+          if (runtime.action !== "idle") {
+            runtime.action = "idle";
+            modeOrActionChanged = true;
+          }
+        }
+      }
 
       const speed = readRuntimeSpeedStrict(runtime);
       if (speed == null) {
@@ -250,9 +295,10 @@ function registerMoveHandler(socket) {
         }
       }
 
-      if (!moved && !yawChanged) return;
+      // ✅ se nada mudou, mas modo/action mudou, ainda precisa replicar
+      if (!moved && !yawChanged && !modeOrActionChanged) return;
 
-      // rev monotônico sempre que algo muda (pos ou yaw)
+      // rev monotônico sempre que algo muda (pos ou yaw ou action/mode)
       bumpRev(runtime);
 
       // ✅ hot path não toca DB: só marca dirty em memória

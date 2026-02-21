@@ -5,6 +5,10 @@ const runtimeStore = new Map(); // key: String(userId) -> runtime state
 
 const DEFAULT_SPEED = 4;
 
+// (NOVO) Janela para considerar WASD "ativo" sem depender de keyup.
+// Se o client parar de emitir intents (perde foco, lag, etc), isso expira.
+const INPUT_DIR_ACTIVE_MS = 250;
+
 // Chunking (interest management)
 const CHUNK_SIZE = 256; // configurável (Etapa 1: fixo)
 
@@ -115,8 +119,27 @@ function setConnectionState(userId, patch, nowMs = Date.now()) {
   return true;
 }
 
+/**
+ * (NOVO) Regra única de "WASD ativo" (para click não cancelar WASD, e WASD cancelar click).
+ * Não depende do client mandar dir=0.
+ */
+function isWASDActive(rt, nowMs = Date.now()) {
+  if (!rt) return false;
+  const d = rt.inputDir;
+  if (!d) return false;
+
+  const hasDir = (Number(d.x) !== 0) || (Number(d.z) !== 0);
+  if (!hasDir) return false;
+
+  const at = Number(rt.inputDirAtMs ?? 0);
+  if (!Number.isFinite(at) || at <= 0) return false;
+
+  return (nowMs - at) <= INPUT_DIR_ACTIVE_MS;
+}
+
 async function ensureRuntimeLoaded(userId) {
   const key = String(userId);
+  
   if (runtimeStore.has(key)) return runtimeStore.get(key);
 
   const row = await db.GaUserRuntime.findOne({
@@ -219,7 +242,25 @@ async function ensureRuntimeLoaded(userId) {
     moveWindowStartMs: 0,
 
     // cache de bounds para evitar ler local/geometry repetidamente
-    bounds, 
+    bounds,
+
+    // ==============================
+    // (NOVO) Click-to-move + Input
+    // ==============================
+
+    // Click-to-move state
+    moveMode: "STOP",          // "STOP" | "WASD" | "CLICK"
+    moveTarget: null,          // { x, z } | null
+    moveStopRadius: 0.45,      // ajuste fino server-side
+    moveTickAtMs: 0,
+    wasdTickAtMs: 0,           // last movement tick timestamp (server clock)
+
+    // Input state (para regra de prioridade e cancelamento)
+    inputDir: { x: 0, z: 0 },  // último dir normalizado recebido do client
+    inputDirAtMs: 0,           // timestamp do inputDir (server clock)
+
+    // Anti-spam simples de click
+    lastClickAtMs: 0,
   };
 
   runtime.chunk = computeChunk(runtime.pos);
@@ -262,6 +303,10 @@ module.exports = {
   markRuntimeDirty,
   markStatsDirty,
   setConnectionState,
+
+  // (NOVO) input/click helpers
+  INPUT_DIR_ACTIVE_MS,
+  isWASDActive,
 
   // stats helper
   refreshRuntimeStats,

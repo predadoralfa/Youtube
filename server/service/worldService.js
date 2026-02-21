@@ -1,4 +1,4 @@
-// server/servece/worldService.js
+// server/service/worldService.js
 
 const {
   GaUserRuntime,

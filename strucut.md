@@ -83,12 +83,16 @@
 
     socket/
         index.js
+        sessionIndex.js/////////////////
+
         handlers/
             moveHandler.js
             worldHandler.js
+            clickMoveHandler.js////////////
             
     state/
         runtimeStore.js
         persistenceManager.js
         persistenceIndex.js
+        movementTick.js//////////////
 

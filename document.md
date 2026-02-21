@@ -470,146 +470,529 @@ Apenas consome este snapshot e renderiza.
 
 # socket/index.js — Registro e Autenticação de Socket
 
-# socket/index.js — Pipeline de Conexão WebSocket
+# server/socket/index.md
 
 ## Arquivo
 `server/socket/index.js`
 
 ---
 
-## O que faz
+## Objetivo
 
-Configura autenticação e ciclo de vida das conexões Socket.IO, incluindo:
+Implementar o **pipeline central do Socket.IO** do backend, cobrindo:
 
-- **JWT auth** no handshake.
-- **Sessão única por userId** (substitui conexão antiga).
-- Integração com **runtimeStore** (presença CONNECTED / DISCONNECTED_PENDING).
-- Integração com **persistenceManager** (flush imediato e hook de despawn).
-- Integração com **presenceIndex** (join de rooms por instância + interest rooms).
+- Autenticação JWT no handshake (gate autoritativo).
+- Garantia de **sessão única por `userId`** (1 usuário, 1 socket ativo).
+- Integração com o runtime em memória (`runtimeStore`) e com persistência controlada (`persistenceManager`).
+- Registro de handlers de gameplay (WASD e click-to-move) e de mundo (baseline/rooms).
+- Ciclo de vida de conexão: `CONNECTED -> DISCONNECTED_PENDING -> OFFLINE` (anti-combat-log de 10s).
+- Broadcast de despawn autoritativo quando uma entidade vira OFFLINE definitivo.
 
----
-
-## Autenticação
-
-Middleware `io.use`:
-
-- Lê `socket.handshake.auth.token`.
-- Aceita `<token>` ou `Bearer <token>`.
-- Valida via `jwt.verify(token, JWT_SECRET || "chave_mestra_extrema")`.
-- Exige `decoded.id`.
-- Injeta:
-  - `socket.data.userId`
-  - `socket.data.displayName`
-- Rejeita conexão com `Error("UNAUTHORIZED")` se inválido.
-
-Contrato compatível com `requireAuth`: `{ id, display_name }`.
+Este arquivo é infraestrutura de runtime, não contém simulação de movimento nem regras de combate.
 
 ---
 
-## Sessão Única por Usuário
+## Dependências
 
-Estrutura:
+### Autenticação
+- `jsonwebtoken` para validar JWT.
 
-- `activeSocketByUserId: Map<userId, socketId>`
+### Runtime (estado quente)
+De `../state/runtimeStore`:
+- `ensureRuntimeLoaded(userId)`
+- `getRuntime(userId)` *(importado, mas não utilizado neste arquivo)*
+- `setConnectionState(userId, patch, nowMs)`
 
-Ao conectar:
+### Persistência (hot + batch)
+De `../state/persistenceManager`:
+- `flushUserRuntimeImmediate(userId)`
+- `onEntityDespawn(handler)`
 
-- Se já existe socket ativo para o mesmo `userId`:
-  - Marca no socket antigo `prev.data._skipDisconnectPending = true` (evita virar pending no disconnect do antigo).
-  - Emite `session:replaced` no cliente antigo.
-  - Derruba o socket antigo (`prev.disconnect(true)`).
-- Registra o socket atual como sessão autoritativa.
+### Presence / Interest Index
+De `../state/presenceIndex`:
+- `addUserToInstance` *(importado, mas não utilizado neste arquivo; o join real ocorre no `worldHandler`)*
 
-Isso evita overlap e race de presença (1 userId = 1 sessão).
+### Handlers Socket
+- `registerMoveHandler(socket)` (WASD)
+- `registerClickMoveHandler(socket)` (click-to-move: só seta alvo)
+- `registerWorldHandler(io, socket)` (world join/resync/baseline/rooms)
+
+### Sessão Única
+De `./sessionIndex`:
+- `getActiveSocket(userId)`
+- `setActiveSocket(userId, socket)`
+- `clearActiveSocket(userId, socketId)`
 
 ---
 
-## Hooks de Persistência
+## Conceitos e Contratos
 
-Função `installPersistenceHooks(io)` (instalada uma vez):
+### Contrato de identidade no socket
+Após autenticação, injeta em `socket.data`:
 
-- Registra `onEntityDespawn` (evento disparado quando entidade vira **OFFLINE definitivo**).
-- Faz broadcast `entity:despawn` para rooms alvo:
-  - Sempre inclui `inst:<instanceId>`
-  - Inclui também `evt.interestRooms` (se vierem no evento)
-- Payload emitido:
-  - `{ entityId, rev }`
+- `socket.data.userId` (obrigatório)
+- `socket.data.displayName` (opcional)
 
-Objetivo: despawn autoritativo replicado para quem tem interesse.
+Isso se torna a identidade autoritativa do canal WS.
+
+### Estados de conexão (runtime)
+Manipula explicitamente:
+
+- `CONNECTED`
+- `DISCONNECTED_PENDING`
+- (OFFLINE finalizado pelo `persistenceManager`, não por este arquivo)
+
+### Janela anti-combat-log
+Ao desconectar:
+
+- marca `DISCONNECTED_PENDING`
+- define `offlineAllowedAtMs = now + 10s`
+- após esse deadline, o `persistenceManager` finaliza `OFFLINE` e emite despawn.
 
 ---
 
-## Conexão
+## Hook de Persistência: Despawn Autoritativo
 
-Ao conectar (`io.on("connection")`):
+### `installPersistenceHooks(io)`
 
-1. Garante sessão única por `userId`.
-2. Carrega runtime (`ensureRuntimeLoaded`).
-3. Marca presença em memória como **CONNECTED**:
-   - `connectionState: "CONNECTED"`
-   - `disconnectedAtMs: null`
-   - `offlineAllowedAtMs: null`
-4. Faz checkpoint imediato:
+Instala uma vez (guardado por `_despawnHookInstalled`) um listener:
+
+- `onEntityDespawn((evt) => {...})`
+
+Quando o `persistenceManager` declara OFFLINE definitivo, o hook:
+
+1. Monta `targets` (rooms de broadcast) com deduplicação:
+   - sempre inclui `inst:<instanceId>`
+   - inclui também `evt.interestRooms` se fornecido
+
+2. Emite para cada room:
+   - evento: `entity:despawn`
+   - payload: `{ entityId, rev }`
+
+Observações:
+- Esse arquivo não calcula interest nem lista jogadores: ele apenas usa as rooms fornecidas.
+- `rev` é tratado como monotônico (o despawn é uma revisão).
+
+---
+
+## Autenticação no Handshake
+
+### `io.use((socket, next) => ...)`
+
+Fluxo:
+
+1. Lê token de:
+   - `socket.handshake.auth.token`
+2. Aceita dois formatos:
+   - `<token>`
+   - `Bearer <token>` (remove prefixo)
+3. Valida:
+   - `jwt.verify(token, JWT_SECRET || "chave_mestra_extrema")`
+4. Exige:
+   - `decoded.id` exista
+5. Injeta:
+   - `socket.data.userId = decoded.id`
+   - `socket.data.displayName = decoded.display_name ?? null`
+6. Caso falhe:
+   - `next(new Error("UNAUTHORIZED"))`
+
+Contrato compatível com o HTTP middleware `requireAuth`.
+
+---
+
+## Conexão: Pipeline Principal
+
+### `io.on("connection", async (socket) => {...})`
+
+#### (A) Sessão única por `userId`
+
+1. Obtém sessão anterior via `getActiveSocket(userId)`.
+2. Se existe e é diferente do socket atual:
+   - define flag no socket antigo:
+     - `prev.data._skipDisconnectPending = true`
+     - Isso impede que o `disconnect` do antigo marque o runtime como pending.
+   - emite para o cliente antigo:
+     - `session:replaced` com `{ by: socket.id, userId }`
+   - derruba o antigo:
+     - `prev.disconnect(true)`
+3. Registra o novo como sessão atual:
+   - `setActiveSocket(userId, socket)`
+
+Garantia real:
+- Este arquivo, junto com `sessionIndex`, implementa efetivamente “1 userId = 1 sessão ativa” no **processo atual**.
+
+Limitação:
+- Não resolve sessão única em cenário multi-node sem coordenação externa.
+
+#### (B) Runtime + marca CONNECTED
+
+1. `ensureRuntimeLoaded(userId)` garante runtime em memória.
+2. `setConnectionState(... CONNECTED ...)`:
+   - zera `disconnectedAtMs` e `offlineAllowedAtMs`
+3. `flushUserRuntimeImmediate(userId)`:
+   - checkpoint imediato do estado CONNECTED (crash recovery / consistência)
+
+#### (C) Registro de handlers
+
+- `registerMoveHandler(socket)` (WASD)
+- `registerClickMoveHandler(socket)` (click-to-move)
+- `registerWorldHandler(io, socket)` (baseline/rooms/join/resync)
+
+Este arquivo não conhece detalhes de gameplay desses handlers, apenas os conecta ao socket.
+
+#### (D) Ready signal
+
+Emite para o cliente:
+- `socket:ready` `{ ok: true }`
+
+---
+
+## Disconnect: `DISCONNECTED_PENDING` (10s)
+
+### `socket.on("disconnect", async (reason) => {...})`
+
+Fluxo defensivo:
+
+1. Se socket foi substituído:
+   - `if (socket.data._skipDisconnectPending) return;`
+2. Se não for a sessão atual (race/overlap):
+   - lê `current = getActiveSocket(userId)`
+   - se `current.id !== socket.id`, ignora
+3. Limpa sessão atual:
+   - `clearActiveSocket(userId, socket.id)`
+4. Calcula janela:
+   - `t = nowMs()`
+   - `offlineAt = t + 10_000`
+5. Marca runtime:
+   - `setConnectionState(... DISCONNECTED_PENDING ...)`
+   - grava `disconnectedAtMs` e `offlineAllowedAtMs`
+6. Persiste imediatamente:
    - `flushUserRuntimeImmediate(userId)`
-5. Registra handlers:
-   - `registerMoveHandler(socket)`
-6. Emite:
-   - `socket:ready`
+7. Log de telemetria:
+   - inclui `reason` e `offlineAt`
+
+Importante:
+- Este arquivo **não finaliza OFFLINE**. Ele apenas agenda via deadline.
+- A transição para OFFLINE e o despawn real são responsabilidade do `persistenceManager`.
 
 ---
 
-## world:join
+## O Que Este Arquivo NÃO Faz
 
-Evento `world:join` (mínimo, sem baseline completo):
+Não:
 
-- Re-garante runtime carregado.
-- Lê runtime atual via `getRuntime(userId)`.
-- Indexa presença espacial em memória:
-  - `addUserToInstance(userId, rt.instanceId, rt.pos)`
-- Entra em rooms:
-  - `inst:<instanceId>`
-  - cada room em `interestRooms` (chunk-based)
-- Marca flags no socket:
-  - `socket.data.instanceId`
-  - `socket.data._worldJoined = true`
-- Ack (se fornecido):
-  - sucesso: `{ ok:true, instanceId, cx, cz }`
-  - erro: `{ ok:false, error }`
+- Calcula movimento.
+- Replica `entity:delta` diretamente (isso é do move/world handlers).
+- Controla presenceIndex diretamente (apesar do import existir).
+- Faz baseline.
+- Persiste em batch.
+- Decide OFFLINE definitivo.
 
-Papel: preparar interest/broadcast sem depender de um “worldHandler” maior.
+Ele orquestra autenticação, sessão, lifecycle e integração entre camadas.
 
 ---
 
-## Desconexão
+## Segurança e Robustez
 
-Evento `disconnect`:
+### Proteções implementadas
+- JWT obrigatório no handshake.
+- Aceita prefixo Bearer para compatibilidade.
+- Sessão única com derrubada explícita de conexão anterior.
+- Proteções contra race condition no disconnect (checa sessão atual).
+- Flag `_skipDisconnectPending` para evitar “pending fantasma” na sessão antiga.
+- Checkpoint imediato em eventos críticos (CONNECTED e DISCONNECTED_PENDING).
 
-- Ignora se:
-  - socket foi substituído (`_skipDisconnectPending`)
-  - socket não é a sessão atual do user (race/overlap)
-- Remove `activeSocketByUserId` do usuário.
-- Marca estado como **DISCONNECTED_PENDING** (janela anti-combat-log):
-  - `disconnectedAtMs = now`
-  - `offlineAllowedAtMs = now + 10s`
-- Faz flush imediato:
-  - `flushUserRuntimeImmediate(userId)`
-- Loga motivo e deadline.
-
-Após os 10s, o `persistenceManager` é quem finaliza para **OFFLINE** e dispara despawn.
+### Limitações relevantes
+- Fallback de JWT secret (`"chave_mestra_extrema"`) é conveniente para dev, mas perigoso em produção se `JWT_SECRET` estiver ausente.
+- Sessão única é por processo, não global.
+- `getRuntime` e `addUserToInstance` estão importados mas não usados: sugere drift/artefato e merece limpeza para reduzir ambiguidade.
 
 ---
 
 ## Papel no Sistema
 
-- Protege canal WebSocket com JWT.
-- Garante **1 sessão autoritativa por userId**.
-- Controla presença (CONNECTED / DISCONNECTED_PENDING) no runtime em memória.
-- Faz checkpoints imediatos em eventos críticos.
-- Conecta interest management (rooms por chunk) via `presenceIndex`.
-- Replica despawn autoritativo via hook do `persistenceManager`.
+Este arquivo é o **núcleo de infraestrutura WebSocket** do MMO autoritativo:
 
-Não calcula movimento.
-O `moveHandler` processa intents e só marca runtime como sujo.
+- Garante identidade e sessão única.
+- Encosta o socket no runtime em memória.
+- Integra com persistência controlada e broadcast de despawn.
+- Conecta handlers que implementam a lógica do mundo e movimento.
+- Implementa lifecycle de presença com janela anti-combat-log.
+
+É um ponto crítico para consistência, porque controla as transições de estado mais sensíveis do jogador (online/pending/offline).
+
+
+# cliente/src/World/state/entitiesStore.md
+
+## Arquivo
+`cliente/src/World/state/entitiesStore.js`
+
+---
+
+## Objetivo
+
+Implementar um **store autoritativo (client-side) de entidades replicadas** a partir do servidor, consumindo eventos típicos do multiplayer:
+
+- `world:baseline` (baseline completo do interesse atual)
+- `entity:spawn` (entrada no interesse)
+- `entity:delta` (atualização incremental)
+- `entity:despawn` (saída do interesse)
+
+Características-chave:
+
+- **Não depende de React** (é um módulo puro de estado).
+- Mantém entidades em `Map` para acesso O(1).
+- Controla **revisão monotônica (`rev`) por `entityId`** para rejeitar updates fora de ordem.
+- **Baseline sempre vence** (replace completo do estado replicado).
+- Normaliza IDs para `string` para evitar bugs `1` vs `"1"`.
+
+Este store não calcula estado autoritativo do mundo: apenas consolida replicação recebida.
+
+---
+
+## Estrutura de Estado
+
+O store encapsula um `state` interno:
+
+- `entities: Map<string, Entity>`
+- `selfId: string | null`
+- `instanceId: any | null`
+- `chunk: { cx, cz } | null`
+- `t: number` (timestamp/telemetria recebida do baseline)
+
+### Entidade normalizada (`Entity`)
+Campos garantidos:
+
+- `entityId: string`
+- `displayName: string | null`
+- `pos: { x:number, y?:number, z:number }`
+- `yaw: number`
+- `hp: number`
+- `action: string`
+- `rev: number`
+
+---
+
+## Normalização e Compatibilidade
+
+### Normalização de IDs
+
+Função central:
+
+- `toId(raw)` => `String(raw)` ou `null`
+
+Aplicada em:
+
+- baseline (selfId e lista de entidades)
+- delta (entityId)
+- despawn (entityId)
+
+Motivação:
+
+- Evitar inconsistências entre `number` e `string` vindo do backend ou do socket layer.
+
+### Compatibilidade de payload de baseline
+
+O baseline pode chegar em dois formatos:
+
+- `payload.others` (novo)
+- `payload.entities` (legado)
+
+O store aceita ambos e escolhe o que existir.
+
+---
+
+## Debug (Opcional)
+
+Existe um mecanismo de debug de IDs:
+
+- `DEBUG_IDS = false` por padrão
+- `debugIds(...)` loga apenas se habilitado
+
+Uso: validar rapidamente se normalização e exclusões de self estão corretas.
+
+---
+
+## API Pública
+
+O módulo exporta uma factory:
+
+- `createEntitiesStore()`
+
+Retorna um objeto com:
+
+### Leitura
+- `entities` (referência ao `Map` interno)
+- getters:
+  - `selfId`
+  - `instanceId`
+  - `chunk`
+  - `t`
+- `getSnapshot()` => `Entity[]` (array estável para render)
+
+### Mutação
+- `clear()`
+- `applyBaseline(payload)`
+- `applySpawn(entityRaw)`
+- `applyDelta(delta)`
+- `applyDespawn(entityIdRaw)`
+
+---
+
+## Regras de Aplicação de Estado
+
+### 1) `clear()`
+
+Zera completamente:
+
+- `entities`
+- `selfId`
+- `instanceId`
+- `chunk`
+- `t`
+
+Uso típico: logout, troca de mundo, reset total do cliente.
+
+---
+
+### 2) `applyBaseline(payload)`
+
+Regra-mãe:
+
+- **Baseline sempre vence** e é tratado como verdade completa do interesse atual.
+
+Fluxo:
+
+1. Valida `payload.ok === true`.
+2. `entities.clear()` (replace completo).
+3. Atualiza:
+   - `instanceId`
+   - `chunk`
+   - `t`
+
+4. Resolve o `you` (self) antes de inserir others:
+   - `you` pode ser:
+     - primitive (`string | number`) => vira `selfId`
+     - objeto => vira entidade normalizada (`youEntity`) e `selfId`
+
+5. Decide lista replicada:
+   - `payload.others` (preferido)
+   - fallback `payload.entities`
+   - fallback `[]`
+
+6. Insere cada entidade normalizada no `Map`, com regra:
+   - **não inserir self como "other"**
+     - se `e.entityId === nextSelfId`, ignora
+
+7. Atualiza `selfId` no estado:
+   - Se baseline não enviar `you`, mantém `selfId` anterior (evita ownership swap para null).
+
+8. Garante que self exista no Map se `youEntity` foi recebido:
+   - Se não existe ou `youEntity.rev` é maior/igual ao atual, sobrescreve.
+
+Ponto crítico:
+- Evita bug comum onde o servidor inclui o próprio jogador no baseline de "others" e o cliente passa a tratar self como outro.
+
+---
+
+### 3) `applySpawn(entityRaw)`
+
+Objetivo:
+- Inserir entidade que entrou no interesse.
+
+Regras:
+
+- Normaliza a entidade.
+- Se `entityId === selfId`, ignora (self nunca entra como “other”).
+- Aplica apenas se `rev` for maior que o atual:
+  - Sem entidade existente: insere
+  - Com entidade existente: só substitui se `e.rev > cur.rev`
+
+---
+
+### 4) `applyDespawn(entityIdRaw)`
+
+Objetivo:
+- Remover entidade que saiu do interesse.
+
+Regras:
+
+- Normaliza `entityId`.
+- Se `entityId === selfId`, ignora (proteção contra despawn acidental do self).
+- `entities.delete(entityId)`.
+
+Observação:
+- O store não aplica `rev` no despawn (é remoção direta). A proteção aqui é evitar self-despawn.
+
+---
+
+### 5) `applyDelta(delta)`
+
+Objetivo:
+- Atualizar incrementalmente uma entidade existente.
+
+Regras obrigatórias:
+
+1. Normaliza `entityId`.
+2. `rev` deve existir e ser finito.
+3. **Só aplica se `nextRev > curRev`** (monotônico estrito).
+4. Se entidade não existe, cria uma base default e aplica delta.
+
+Merge:
+
+- `pos`: merge parcial (preserva campos ausentes), via `mergePos`
+- `yaw`, `hp`, `action`: atualiza apenas se vier no delta
+- `rev`: sempre atualizado para `nextRev`
+
+Este mecanismo garante:
+- Rejeição de pacotes fora de ordem.
+- Robustez contra spawn perdido (delta pode criar a entidade).
+
+---
+
+## O Que Este Store NÃO Faz
+
+Não:
+
+- Prediz movimento.
+- Interpola.
+- Resolve colisão.
+- Calcula chunk/interest.
+- Confirma ações.
+- Aplica regras de combate.
+- Decide autoridade.
+
+Ele apenas consolida replicação recebida do backend.
+
+---
+
+## Segurança e Robustez
+
+### Garantias fortes
+- `entityId` sempre string (normalização defensiva).
+- `rev` monotônico evita regressões de estado.
+- Baseline substitui completamente o estado (cura divergências acumuladas).
+- Proteção explícita contra:
+  - inserir self como other
+  - despawn do self
+  - delta sem rev válido
+
+### Limitações / riscos
+- `entities` é exposto como referência (apesar de getters existirem). Consumidores podem mutar indevidamente se não houver disciplina.
+- Despawn não usa `rev`: se chegar um despawn atrasado, não há mecanismo interno para “reviver” sem baseline/spawn posterior (isso normalmente é aceitável dado o contrato de interest).
+- `instanceId` e `chunk` não são normalizados (dependem do formato do backend).
+
+---
+
+## Papel no Sistema
+
+`entitiesStore` é o **ponto único de consolidação client-side do estado replicado**:
+
+- Baseline cura e reancora o cliente.
+- Spawn/delta/despawn atualizam incrementalmente.
+- `rev` é a regra central de consistência.
+
+Ele serve como “cache do interesse atual” no cliente, mantendo o render independente de Socket.IO e independente de React.
 
 
 
@@ -1492,6 +1875,102 @@ Fluxo:
 - Evita “entidade fantasma” (não baseline OFFLINE).
 - Prepara o pipeline para replicação incremental (diff/entered/left) em etapas futuras.
 
+
+# server/socket/sessionIndex.md
+
+## Arquivo
+`server/socket/sessionIndex.js`
+
+---
+
+## Objetivo
+
+Manter um **índice em memória da sessão WebSocket ativa por usuário**, permitindo que o servidor associe um `userId` a um único `socket` ativo.
+
+Este arquivo **não implementa a política de sessão única por si só**.  
+Ele apenas fornece as primitivas necessárias para que o `socket/index.js` aplique essa política.
+
+---
+
+## Natureza do Componente
+
+- Estrutura puramente em memória.
+- Complexidade O(1) para `get`, `set` e `delete`.
+- Não acessa banco.
+- Não conhece runtimeStore.
+- Não escuta eventos.
+- Não valida estado do socket.
+- Não executa cleanup automático.
+
+É um **índice passivo de sessão**, não um gerenciador ativo.
+
+---
+
+## Estrutura Interna
+
+
+Map<userId(string), socket>
+
+
+# server/socket/handlers/clickMoveHandler.md
+
+## Arquivo
+`server/socket/handlers/clickMoveHandler.js`
+
+---
+
+## Objetivo
+
+Registrar e processar a intenção de **movimento por clique** enviada pelo cliente via evento Socket.IO:
+
+Esse handler **não executa movimento diretamente**.  
+Ele apenas configura o runtime para que o sistema de tick autoritativo processe o deslocamento posteriormente.
+
+É um ponto de entrada de intenção, não de simulação.
+
+---
+
+## Papel Arquitetural
+
+- Consome input do cliente.
+- Valida dados mínimos.
+- Aplica regras de segurança básicas.
+- Atualiza estado do runtime em memória.
+- Não acessa banco.
+- Não replica estado.
+- Não incrementa `rev`.
+- Não calcula física.
+- Não emite eventos de movimento.
+
+Ele prepara o runtime para o loop autoritativo.
+
+---
+
+## Dependências
+
+### runtimeStore
+
+- `ensureRuntimeLoaded(userId)`
+- `getRuntime(userId)`
+- `isWASDActive(rt, nowMs)`
+
+Não interage com:
+- persistenceManager
+- presenceIndex
+- socket rooms
+
+---
+
+## Evento Registrado
+
+### `move:click`
+
+Payload esperado:
+
+{
+  "x": number,
+  "z": number
+}
 
 
 

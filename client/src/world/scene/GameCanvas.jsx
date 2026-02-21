@@ -191,29 +191,6 @@ export function GameCanvas({ snapshot, worldStoreRef }) {
     window.addEventListener("resize", onResize);
 
     // =============================
-    // INPUT (bus + bind + listener)
-    // =============================
-    const bus = createInputBus();
-    const unbindInputs = bindInputs(renderer.domElement, bus);
-
-    let moveDir = { x: 0, z: 0 };
-
-    const off = bus.on((intent) => {
-      if (intent.type === IntentType.CAMERA_ZOOM) {
-        applyZoom(intent.delta);
-        return;
-      }
-      if (intent.type === IntentType.CAMERA_ORBIT) {
-        applyOrbit(intent.dx, intent.dy);
-        return;
-      }
-      if (intent.type === IntentType.MOVE_DIRECTION) {
-        const raw = intent?.dir ?? { x: 0, z: 0 };
-        moveDir = normalize2D(raw.x || 0, raw.z || 0);
-      }
-    });
-
-    // =============================
     // CHÃO (mundo 0..size)
     // =============================
     const color =
@@ -235,6 +212,74 @@ export function GameCanvas({ snapshot, worldStoreRef }) {
     scene.add(groundMesh);
 
     // =============================
+    // (CLICK) Raycast infra (reusável)
+    // =============================
+    const raycaster = new THREE.Raycaster();
+    const mouseNdc = new THREE.Vector2();
+
+    function setMouseFromClientToNdc(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const x = (clientX - rect.left) / rect.width;
+      const y = (clientY - rect.top) / rect.height;
+
+      mouseNdc.x = x * 2 - 1;
+      mouseNdc.y = -(y * 2 - 1);
+    }
+
+    function emitClickMove(clientX, clientY, moveDir) {
+      // (opcional UX) se WASD está ativo localmente, evita enviar click.
+      // A regra REAL é server-side, isso aqui só reduz ruído.
+      if (!(moveDir.x === 0 && moveDir.z === 0)) return;
+
+      const socket = getSocket();
+      if (!socket) return;
+
+      setMouseFromClientToNdc(clientX, clientY);
+      raycaster.setFromCamera(mouseNdc, camera);
+
+      const hits = raycaster.intersectObject(groundMesh, false);
+      if (!hits || hits.length === 0) return;
+
+      const p = hits[0].point;
+      const x = Number(p?.x);
+      const z = Number(p?.z);
+
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+
+      socket.emit("move:click", { x, z });
+    }
+
+    // =============================
+    // INPUT (bus + bind + listener)
+    // =============================
+    const bus = createInputBus();
+    const unbindInputs = bindInputs(renderer.domElement, bus);
+
+    let moveDir = { x: 0, z: 0 };
+
+    const off = bus.on((intent) => {
+      if (intent.type === IntentType.CAMERA_ZOOM) {
+        applyZoom(intent.delta);
+        return;
+      }
+      if (intent.type === IntentType.CAMERA_ORBIT) {
+        applyOrbit(intent.dx, intent.dy);
+        return;
+      }
+      if (intent.type === IntentType.MOVE_DIRECTION) {
+        const raw = intent?.dir ?? { x: 0, z: 0 };
+        moveDir = normalize2D(raw.x || 0, raw.z || 0);
+        return;
+      }
+
+      // (NOVO) LMB click via InputBus -> raycast -> move:click
+      if (intent.type === IntentType.CLICK_PRIMARY) {
+        emitClickMove(intent.clientX, intent.clientY, moveDir);
+        return;
+      }
+    });
+
+    // =============================
     // LIMITES (mundo 0..size)
     // =============================
     const yLine = 0.2;
@@ -244,9 +289,9 @@ export function GameCanvas({ snapshot, worldStoreRef }) {
 
     const pts = [
       new THREE.Vector3(-halfX, yLine, -halfZ),
-      new THREE.Vector3( halfX, yLine, -halfZ),
-      new THREE.Vector3( halfX, yLine,  halfZ),
-      new THREE.Vector3(-halfX, yLine,  halfZ),
+      new THREE.Vector3(halfX, yLine, -halfZ),
+      new THREE.Vector3(halfX, yLine, halfZ),
+      new THREE.Vector3(-halfX, yLine, halfZ),
     ];
 
     const boundsGeometry = new THREE.BufferGeometry().setFromPoints(pts);

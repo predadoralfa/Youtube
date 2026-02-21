@@ -1,6 +1,12 @@
 // input/inputs.js
 
-import { intentCameraZoom, intentCameraOrbit, intentMoveDirection } from "./intents";
+import {
+  intentCameraZoom,
+  intentCameraOrbit,
+  intentMoveDirection,
+  // (NOVO)
+  intentClickPrimary,
+} from "./intents";
 
 export function bindInputs(target, bus) {
   if (!target) throw new Error("bindInputs: target é obrigatório");
@@ -14,7 +20,14 @@ export function bindInputs(target, bus) {
   const onContextMenu = (e) => e.preventDefault();
 
   const onMouseDown = (e) => {
-    if (e.button !== 2) return; // RMB
+    // (NOVO) LMB -> click intent (não interfere no RMB orbit)
+    if (e.button === 0) {
+      bus.emit(intentClickPrimary(e.clientX, e.clientY));
+      return;
+    }
+
+    // RMB (orbit)
+    if (e.button !== 2) return;
     dragging = true;
     lastX = e.clientX;
     lastY = e.clientY;
@@ -40,19 +53,18 @@ export function bindInputs(target, bus) {
     bus.emit(intentCameraZoom(Math.sign(e.deltaY)));
   };
 
-function computeDir() {
-  let x = 0;
-  let z = 0;
+  function computeDir() {
+    let x = 0;
+    let z = 0;
 
-  // forward em Three costuma ser -Z
-  if (keys.w) z -= 1;
-  if (keys.s) z += 1;
-  if (keys.d) x -= 1;
-  if (keys.a) x += 1;
+    // forward em Three costuma ser -Z
+    if (keys.w) z -= 1;
+    if (keys.s) z += 1;
+    if (keys.d) x -= 1;
+    if (keys.a) x += 1;
 
-  return { x, z };
-}
-
+    return { x, z };
+  }
 
   function emitMove() {
     const { x, z } = computeDir();

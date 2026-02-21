@@ -17,8 +17,15 @@ const { addUserToInstance } = require("../state/presenceIndex");
 const { registerMoveHandler } = require("./handlers/moveHandler");
 const { registerWorldHandler } = require("./handlers/worldHandler");
 
-// userId -> socket.id (sessão autoritativa única)
-const activeSocketByUserId = new Map();
+// (NOVO) índice de sessão separado (userId -> socket)
+const {
+  setActiveSocket,
+  clearActiveSocket,
+  getActiveSocket,
+} = require("./sessionIndex");
+
+// (NOVO) click-to-move handler (só seta alvo)
+const { registerClickMoveHandler } = require("./handlers/clickMoveHandler");
 
 let _despawnHookInstalled = false;
 
@@ -101,26 +108,23 @@ function registerSocket(io) {
       // =========================
       // (A) Sessão única por userId
       // =========================
-      const prevSocketId = activeSocketByUserId.get(String(userId));
-      if (prevSocketId && prevSocketId !== socket.id) {
-        const prev = io.sockets.sockets.get(prevSocketId);
-        if (prev) {
-          // marca para não disparar DISCONNECTED_PENDING no socket antigo
-          prev.data._skipDisconnectPending = true;
+      const prev = getActiveSocket(userId);
+      if (prev && prev.id !== socket.id) {
+        // marca para não disparar DISCONNECTED_PENDING no socket antigo
+        prev.data._skipDisconnectPending = true;
 
-          // avisa cliente antigo (se quiser mostrar UI)
-          prev.emit("session:replaced", {
-            by: socket.id,
-            userId,
-          });
+        // avisa cliente antigo (se quiser mostrar UI)
+        prev.emit("session:replaced", {
+          by: socket.id,
+          userId,
+        });
 
-          // derruba sessão antiga
-          prev.disconnect(true);
-        }
+        // derruba sessão antiga
+        prev.disconnect(true);
       }
 
       // define este como a sessão atual
-      activeSocketByUserId.set(String(userId), socket.id);
+      setActiveSocket(userId, socket);
 
       // =========================
       // (B) Runtime + state CONNECTED
@@ -141,9 +145,10 @@ function registerSocket(io) {
       await flushUserRuntimeImmediate(userId);
 
       // =========================
-      // (C) Handlers existentes
+      // (C) Handlers existentes + novos
       // =========================
       registerMoveHandler(socket);
+      registerClickMoveHandler(socket);
 
       registerWorldHandler(io, socket);
 
@@ -156,11 +161,11 @@ function registerSocket(io) {
           if (socket.data._skipDisconnectPending) return;
 
           // se não for a sessão atual, ignora (evita race/overlap)
-          const currentId = activeSocketByUserId.get(String(userId));
-          if (currentId !== socket.id) return;
+          const current = getActiveSocket(userId);
+          if (!current || current.id !== socket.id) return;
 
           // limpa sessão atual
-          activeSocketByUserId.delete(String(userId));
+          clearActiveSocket(userId, socket.id);
 
           const t = nowMs();
           const offlineAt = t + 10_000;

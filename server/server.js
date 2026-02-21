@@ -5,6 +5,7 @@ const cors = require("cors");
 const { createServer } = require("http");
 const { Server } = require("socket.io");
 const { startPersistenceLoop, stopPersistenceLoop } = require("./state/persistenceManager"); // 👈 add stop
+const { startMovementTick, stopMovementTick } = require("./state/movementTick"); // ✅ NOVO
 
 const db = require("./models");
 
@@ -56,6 +57,9 @@ async function bootstrap() {
 
     startPersistenceLoop();
 
+    // ✅ inicia tick autoritativo de movimento (click-to-move)
+    startMovementTick(io);
+
     httpServer.listen(5100, () => {
       console.log("[SERVER] Servidor rodando na porta 5100");
       console.log("[SOCKET] Rodando");
@@ -65,6 +69,7 @@ async function bootstrap() {
     const shutdown = async (signal) => {
       console.log(`[SERVER] shutdown signal=${signal}`);
       try {
+        stopMovementTick();   // ✅ NOVO
         stopPersistenceLoop();
         if (httpServer) {
           await new Promise((resolve) => httpServer.close(() => resolve()));
