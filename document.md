@@ -1524,210 +1524,92 @@ Não decide persistência.
 
 
 ## Arquivo
-`server/state/presenceIndex.js`
+# server/state/presenceIndex.js
+
+## Objetivo
+
+Facade público do sistema de **Presence + Interest Management** baseado em chunks.
+
+Este módulo:
+
+- Reúne e reexporta a API de presença (mutação + leitura).
+- Expõe config (CHUNK_SIZE, CHUNK_RADIUS).
+- Mantém o sistema desacoplado de Socket.IO e do banco.
+- Define a superfície oficial que outras camadas usam (socket handlers, persistence, world).
 
 ---
 
-## O que faz
-
-Implementa **Presence + Interest Management baseado em chunks**, totalmente em memória.
-
-Responsável por:
-
-- Indexar jogadores por instância.
-- Indexar jogadores por chunk espacial.
-- Calcular área de interesse (ex: 3x3 chunks).
-- Permitir queries eficientes O(k), onde k = nº de chunks no interesse.
-
-Não depende de Socket.IO.  
-Não acessa banco.  
-Não conhece runtimeStore.
-
----
-
-## Objetivo Arquitetural
+## Regras Estruturais
 
 - Identidade é `userId` (não `socket.id`).
-- Cliente nunca decide chunk.
-- Servidor controla visibilidade.
-- Estrutura preparada para escalar multiplayer real.
+- Cliente não decide chunk nem visibilidade.
+- Operações devem escalar:
+  - custo O(k), onde k = número de chunks no interest (ex: 9 em 3x3).
 
 ---
 
-## Configuração
+## Config Exportada
 
-- `CHUNK_SIZE` → default `256`
-- `CHUNK_RADIUS` → default `1` (3x3 chunks)
+- `CHUNK_SIZE`
+- `CHUNK_RADIUS`
 
-Podem ser configurados via `process.env`.
-
----
-
-## Estruturas Internas
-
-### 1) presenceByInstance
-
-Map:
-- `instanceId -> Set<userId>`
-
-Controla quem está presente em cada instância.
+Vêm de `./presence/config`.
 
 ---
 
-### 2) usersByChunk
+## API Obrigatória (Mutação)
 
-Map:
-- `"chunk:<instanceId>:<cx>:<cz>" -> Set<userId>`
-
-Index espacial principal.
-
----
-
-### 3) userIndex
-
-Map:
-- `userId -> { instanceId, cx, cz, interestRooms:Set }`
-
-Estado indexado do jogador.
-
-Nenhuma dessas estruturas é exportada diretamente.
-
----
-
-## Cálculo Espacial
-
-### computeChunkFromPos(pos)
-
-Converte `{ x, z }` em:
-
-- `{ cx, cz }` usando `Math.floor(pos / CHUNK_SIZE)`
-
----
-
-### roomKey(instanceId, cx, cz)
-
-Gera chave:
-
----
-
-### computeInterestRooms(instanceId, cx, cz, radius)
-
-Gera conjunto de rooms dentro do raio.
-
-Com `radius = 1`:
-
-- 3x3 chunks (9 rooms)
-
----
-
-## API Principal
-
----
+Reexporta de `./presence/mutate`:
 
 ### addUserToInstance(userId, instanceId, pos)
-
-- Remove usuário anterior (se existir).
-- Calcula chunk atual.
-- Indexa em:
-  - presenceByInstance
-  - usersByChunk
-  - userIndex
-- Calcula interestRooms.
-
-Retorna snapshot:
-{
-instanceId,
-cx,
-cz,
-chunkRoom,
-interestRooms:Set
-}
----
+Indexa presença inicial do usuário e calcula interest.
 
 ### removeUserFromInstance(userId)
-
-- Remove de presenceByInstance.
-- Remove do chunk atual.
-- Remove do userIndex.
-
-Retorna último estado conhecido ou `null`.
-
----
+Remove usuário de todos os índices.
 
 ### moveUserChunk(userId, nextCx, nextCz, radius?)
+Atualiza chunk e interest, retornando diff `entered/left`.
 
-Se chunk não mudou:
-
-- `changed: false`
-
-Se mudou:
-
-- Atualiza usersByChunk.
-- Recalcula interestRooms.
-- Calcula diff:
-  - `entered`
-  - `left`
-- Atualiza userIndex.
-
-Retorna:
-{
-changed,
-instanceId,
-prev,
-next,
-diff
-}
-Não envia eventos.  
-Apenas calcula estado.
+### getUsersInChunks(instanceId, cx, cz, radius?)
+Agrega usuários visíveis nos chunks do interesse.
 
 ---
 
-### getUsersInChunks(instanceId, cx, cz, radius?)
+## Helpers de Chunk/Interest
 
-Agrega usuários em todos os chunks do interesse.
+Reexporta cálculo puro:
 
-Retorna `Set<userId>` novo (cópia).
+- `computeChunkFromPos(pos)`
+- `computeInterestRooms(instanceId, cx, cz, radius?)`
+- `roomKey(instanceId, cx, cz)`
+
+Útil para world handler, move handler e debug.
 
 ---
 
 ## Leitura Segura
 
-Nenhuma função retorna referência interna real.
-
-Disponíveis:
+Reexporta de `./presence/read`:
 
 - `getUsersInRoom(roomKey)`
 - `getUsersInRooms(rooms)`
 - `getInterestRoomsForUser(userId)`
 - `getUserPresenceState(userId)`
 
-Todas retornam cópias.
+Garantia: retornam cópias (não vazam referência interna).
 
 ---
 
-## Complexidade
+## Papel Arquitetural
 
-- Atualização de chunk: O(k) onde k = nº de chunks no interesse.
-- Consulta de visibilidade: O(k + n_chunk).
+Este arquivo:
 
-Sem varrer todos jogadores da instância.
+- É o “contrato público” do Presence.
+- Evita que outras camadas importem diretamente `store.js`.
+- Força encapsulamento: leitura e mutação passam por APIs controladas.
+- Mantém interest management consistente e escalável.
 
----
-
-## Papel no Sistema
-
-- Base do multiplayer visível.
-- Permite broadcast seletivo.
-- Prepara sistema para:
-  - Spawn dinâmico
-  - Despawn por distância
-  - Servidores distribuídos por instância
-  - Escala horizontal futura
-
-Não executa gameplay.  
-Não controla socket.  
-Não persiste dados.  
-É apenas índice espacial de presença.
+É a porta oficial para qualquer lógica que precise de visibilidade espacial.
 
 
 ## Arquivo
@@ -1971,6 +1853,593 @@ Payload esperado:
   "x": number,
   "z": number
 }
+
+
+# server/state/runtime/dirty.js
+
+## Objetivo
+
+Gerenciar flags de “dirty” do runtime em memória.
+
+Este módulo:
+
+- Marca runtime como sujo para persistência.
+- Marca stats como sujo para persistência.
+- Atualiza estado de conexão apenas em memória.
+- Não escreve no banco.
+- Não conhece socket.
+- Não executa flush.
+
+A persistência é responsabilidade do `persistenceManager`.
+
+---
+
+## Funções
+
+### markRuntimeDirty(userId, nowMs)
+
+Marca `dirtyRuntime = true` se:
+
+- Runtime existir.
+- Não estiver `OFFLINE`.
+
+Atualiza `lastRuntimeDirtyAtMs`.
+
+Usado por gameplay (ex: movimento).
+
+---
+
+### markStatsDirty(userId, nowMs)
+
+Marca `dirtyStats = true` se:
+
+- Runtime existir.
+- Não estiver `OFFLINE`.
+
+Atualiza `lastStatsDirtyAtMs`.
+
+---
+
+### setConnectionState(userId, patch, nowMs)
+
+Atualiza apenas em memória:
+
+- `connectionState`
+- `disconnectedAtMs`
+- `offlineAllowedAtMs`
+
+Sempre marca `dirtyRuntime = true`.
+
+Persistência ocorre depois via flush.
+
+---
+
+## Regra Importante
+
+Runtime `OFFLINE` não deve ficar sendo marcado como dirty por gameplay ou stats.
+
+Transições de conexão devem ser persistidas.
+Gameplay não.
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- Controla sujeira de persistência.
+- Protege runtime OFFLINE.
+- Mantém separação entre simulação e banco.
+
+É um utilitário de mutação controlada do estado vivo.
+
+
+# server/state/runtime/inputPolicy.js
+
+## Objetivo
+
+Definir a regra autoritativa que determina se o input WASD está ativo.
+
+Este módulo:
+
+- Não depende do cliente enviar `dir = 0`.
+- Centraliza a política de prioridade entre WASD e click-to-move.
+- Opera apenas sobre o runtime em memória.
+
+---
+
+## Regra Implementada
+
+WASD é considerado ativo quando:
+
+1. `rt.inputDir` existe.
+2. Pelo menos um eixo (`x` ou `z`) é diferente de zero.
+3. `rt.inputDirAtMs` é válido.
+4. O tempo desde o último input é menor ou igual a `INPUT_DIR_ACTIVE_MS`.
+
+Se qualquer condição falhar → WASD não está ativo.
+
+---
+
+## Prioridade de Controle
+
+Política estrutural:
+
+- Click **não cancela** WASD.
+- WASD **cancela** click.
+- A validade é temporal, não depende de evento explícito de "key up".
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- Centraliza a política de input.
+- Evita ambiguidade entre sistemas de movimento.
+- Mantém decisão autoritativa no servidor.
+- Impede dependência de comportamento do cliente.
+
+É uma regra pura de validação temporal de intenção.
+
+
+# server/state/runtime/loader.js
+
+## Objetivo
+
+Carregar e inicializar o runtime autoritativo do jogador a partir do banco.
+
+Este módulo:
+
+- Lê ga_user_runtime.
+- Carrega stats (move_speed).
+- Carrega bounds da instância (GaLocalGeometry).
+- Constrói objeto runtime completo em memória.
+- Calcula chunk inicial.
+- Registra no runtimeStore.
+- Não executa flush.
+- Não acessa socket.
+
+É o ponto de entrada do estado vivo.
+
+---
+
+## ensureRuntimeLoaded(userId)
+
+Responsável por:
+
+1. Evitar reload se runtime já existir.
+2. Buscar ga_user_runtime no banco.
+3. Carregar bounds da instância.
+4. Carregar speed a partir de GaUserStats.
+5. Montar objeto runtime padrão.
+6. Calcular chunk inicial.
+7. Armazenar no store.
+
+Se runtime não existir no banco → lança erro.
+
+---
+
+## Estrutura do Runtime Inicial
+
+Inclui:
+
+- Identidade (userId, instanceId)
+- Transform (pos, yaw)
+- Estado replicável (hp, action, rev)
+- Chunk atual
+- Speed cacheado
+- Estado de conexão
+- Flags de persistência (dirtyRuntime, dirtyStats)
+- Anti-flood
+- Bounds da instância
+- Estado de movimento:
+  - moveMode (STOP | WASD | CLICK)
+  - moveTarget
+  - moveStopRadius
+  - inputDir
+  - inputDirAtMs
+  - lastClickAtMs
+
+Runtime nasce completo e consistente.
+
+---
+
+## refreshRuntimeStats(userId)
+
+Atualiza stats cacheados no runtime:
+
+- Recarrega move_speed do banco.
+- Atualiza runtime.speed.
+- Marca dirtyStats.
+
+Não deve ser chamado no moveHandler.
+É para eventos estruturais (level up, equip, buff, etc).
+
+---
+
+## Helpers Internos
+
+### sanitizeSpeed(value)
+Valida número positivo.
+
+### loadSpeedFromStats(userId)
+Busca move_speed no banco.
+
+### loadBoundsForInstance(instanceId)
+Busca tamanho do local (size_x, size_z).
+Calcula limites min/max X/Z.
+Lança erro se bounds inválido.
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- Conecta persistência ao runtime.
+- Garante que runtime sempre nasce consistente.
+- Centraliza carregamento de stats e bounds.
+- Evita múltiplas queries repetidas para geometry.
+- Separa claramente:
+  - Leitura inicial do banco
+  - Execução do gameplay
+  - Persistência posterior
+
+É o construtor do estado vivo do jogador.
+
+
+# server/state/runtime/store.js
+
+## Objetivo
+
+Armazenar runtimes autoritativos em memória.
+
+Este módulo:
+
+- Mantém um Map interno: userId → runtime.
+- Não acessa banco.
+- Não conhece socket.
+- Não executa persistência.
+- Não aplica regras de gameplay.
+
+É apenas o repositório quente do estado vivo.
+
+---
+
+## Estrutura Interna
+
+runtimeStore: Map<String(userId), runtime>
+
+Chave sempre normalizada como string.
+
+---
+
+## API
+
+### getRuntime(userId)
+
+Retorna runtime ou null.
+
+---
+
+### setRuntime(userId, runtime)
+
+Registra ou sobrescreve runtime em memória.
+
+---
+
+### hasRuntime(userId)
+
+Indica se runtime já está carregado.
+
+Útil para evitar reload do banco.
+
+---
+
+### deleteRuntime(userId)
+
+Remove runtime da memória.
+
+Retorna:
+- true → removido
+- false → não existia
+
+Usado em eviction controlado.
+
+---
+
+### getAllRuntimes()
+
+Retorna iterator dos runtimes.
+
+Usado pelo persistenceManager para varredura.
+Não expõe o Map diretamente.
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- Centraliza o armazenamento quente do runtime.
+- Permite separação entre:
+  - Gameplay (move, input, world)
+  - Persistência (flush)
+  - Infraestrutura (socket)
+- Evita dependência direta do Map fora do módulo.
+
+É o container do estado vivo do jogador.
+
+
+
+# server/state/presence/store.js
+
+## Objetivo
+
+Armazenar estruturas internas de Presence e Interest em memória.
+
+Este módulo:
+
+- Não depende de Socket.IO.
+- Não acessa banco.
+- Não contém lógica de gameplay.
+- Não executa cálculos de chunk.
+- Apenas mantém índices estruturais.
+
+É o armazenamento base do sistema de presença.
+
+---
+
+## Estruturas Internas
+
+### presenceByInstance
+
+Map:
+instanceId → Set<userId>
+
+Controla quais usuários estão presentes em cada instância.
+
+---
+
+### usersByChunk
+
+Map:
+"chunk:<instanceId>:<cx>:<cz>" → Set<userId>
+
+Index espacial principal.
+
+Permite lookup eficiente por área.
+
+---
+
+### userIndex
+
+Map:
+userId → {
+  instanceId,
+  cx,
+  cz,
+  interestRooms: Set<roomKey>
+}
+
+Estado indexado individual do usuário.
+
+---
+
+## Utils
+
+### ensureSet(map, key)
+
+Garante que exista um Set para a chave.
+Cria se necessário.
+Retorna o Set.
+
+---
+
+### deleteFromSetMap(map, key, value)
+
+Remove value do Set associado à chave.
+Se o Set ficar vazio, remove a chave do Map.
+
+Evita lixo estrutural.
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- É o armazenamento cru da presença.
+- Suporta interest management por chunk.
+- Permite operações O(1) em inserção e remoção.
+- Mantém isolamento entre:
+  - Índice de presença
+  - Gameplay
+  - Socket
+  - Persistência
+
+É a base estrutural do sistema de visibilidade multiplayer.
+
+
+# server/state/presence/read.js
+
+## Objetivo
+
+Fornecer API de leitura segura do sistema de Presence.
+
+Este módulo:
+
+- Não modifica estado.
+- Não expõe referências internas.
+- Não depende de socket.
+- Não acessa banco.
+- Apenas consulta estruturas do presence/store.
+
+Todas as funções retornam cópias.
+
+---
+
+## Funções
+
+### getUsersInRoom(roomKey)
+
+Retorna:
+
+Set<userId> novo com usuários daquele room.
+
+Nunca retorna o Set interno.
+
+---
+
+### getUsersInRooms(rooms)
+
+Recebe:
+
+- Set<string> ou Array<string>
+
+Retorna:
+
+Set<userId> agregando todos usuários dos rooms.
+
+Ignora rooms inexistentes.
+
+---
+
+### getUsersInChunks(instanceId, cx, cz, radius?)
+
+Calcula interest rooms usando:
+
+computeInterestRooms(...)
+
+Retorna:
+
+Set<userId> agregando usuários dos chunks no raio.
+
+Default:
+radius = CHUNK_RADIUS
+
+---
+
+### getInterestRoomsForUser(userId)
+
+Retorna:
+
+Array<string> (cópia) das rooms de interesse do usuário.
+
+Se não existir → []
+
+---
+
+### getUserPresenceState(userId)
+
+Retorna cópia do estado indexado:
+
+{
+  instanceId,
+  cx,
+  cz,
+  interestRooms: Set<string>
+}
+
+Se não existir → null
+
+---
+
+## Papel Arquitetural
+
+Este arquivo:
+
+- É a camada de leitura do sistema de Presence.
+- Garante encapsulamento das estruturas internas.
+- Evita vazamento de referência.
+- Permite que outras camadas (socket, world, persistence)
+  consultem visibilidade sem risco de mutação externa.
+
+É a interface de consulta do interest management.
+
+
+# server/state/presence/mutate.js
+
+## Objetivo
+
+Implementar as operações de **mutação** do sistema de Presence/Interest (baseado em chunks).
+
+Este módulo:
+
+- Atualiza os índices em memória (`presenceByInstance`, `usersByChunk`, `userIndex`).
+- Calcula chunk e interest rooms no servidor.
+- Não depende de Socket.IO.
+- Não acessa banco.
+
+Ele é o “write-side” do presence.
+
+---
+
+## Funções
+
+### addUserToInstance(userId, instanceId, pos)
+
+Registra presença inicial do usuário:
+
+- Se o usuário já estiver indexado, remove antes (evita duplicação/vazamento).
+- Calcula chunk atual via `computeChunkFromPos(pos)`.
+- Cria `chunkRoom` e `interestRooms` (3x3 por default).
+
+Atualiza:
+
+- `presenceByInstance[instanceId] += userId`
+- `usersByChunk[chunkRoom] += userId`
+- `userIndex[userId] = { instanceId, cx, cz, interestRooms }`
+
+Retorna snapshot:
+
+```js
+{
+  instanceId,
+  cx,
+  cz,
+  chunkRoom,
+  interestRooms
+}
+
+
+# server/state/presence/math.js
+
+## Objetivo
+
+Fornecer funções puras de cálculo espacial para o sistema de Presence.
+
+Este módulo:
+
+- Não acessa banco.
+- Não depende de socket.
+- Não modifica estado.
+- Apenas calcula chunk e área de interesse.
+
+É a camada matemática do interest management.
+
+---
+
+## computeChunkFromPos(pos)
+
+Converte posição do mundo em coordenadas de chunk.
+
+Entrada:
+- pos.x
+- pos.z
+
+Regra:
+- cx = floor(x / CHUNK_SIZE)
+- cz = floor(z / CHUNK_SIZE)
+
+Retorna:
+
+{
+  cx,
+  cz
+}
+
 
 
 
