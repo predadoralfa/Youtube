@@ -119,7 +119,9 @@ function applySelfColor(mesh, isSelf) {
   }
 }
 
-export function GameCanvas({ snapshot, worldStoreRef }) {
+// (NOVO) GameCanvas agora aceita onInputIntent para repassar intents de UI ao runtime.
+// Não decide UI aqui.
+export function GameCanvas({ snapshot, worldStoreRef, onInputIntent }) {
   const containerRef = useRef(null);
 
   // ✅ mantém sempre o runtime mais recente sem recriar o Three
@@ -258,6 +260,12 @@ export function GameCanvas({ snapshot, worldStoreRef }) {
     let moveDir = { x: 0, z: 0 };
 
     const off = bus.on((intent) => {
+      // (NOVO) UI intents são consumidas no runtime, não aqui.
+      if (intent?.type === IntentType.UI_TOGGLE_INVENTORY) {
+        onInputIntent?.(intent);
+        return;
+      }
+
       if (intent.type === IntentType.CAMERA_ZOOM) {
         applyZoom(intent.delta);
         return;

@@ -6,6 +6,8 @@ import {
   intentMoveDirection,
   // (NOVO)
   intentClickPrimary,
+  // (NOVO) UI
+  intentUiToggleInventory,
 } from "./intents";
 
 export function bindInputs(target, bus) {
@@ -73,6 +75,16 @@ export function bindInputs(target, bus) {
 
   const onKeyDown = (e) => {
     const k = e.key?.toLowerCase();
+
+    // (NOVO) UI: inventário no "I"
+    // - não depende de foco no canvas (listener é no window)
+    // - evita spam com auto-repeat
+    if (k === "i") {
+      if (e.repeat) return;
+      bus.emit(intentUiToggleInventory());
+      return;
+    }
+
     if (!(k in keys)) return;
 
     // evita spam do auto-repeat

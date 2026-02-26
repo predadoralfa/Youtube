@@ -39,33 +39,89 @@
  *
  * =====================================================================
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { GameCanvas } from "./scene/GameCanvas";
 import { bootstrapWorld } from "@/services/World";
 import { LoadingOverlay } from "@/components/overlays/LoadingOverlay";
 import { connectSocket, disconnectSocket } from "@/services/Socket";
 import { createEntitiesStore } from "./state/entitiesStore";
+import { logInventory } from "@/inventory/inventoryProbe";
+import { IntentType } from "./input/intents";
+import { InventoryModal } from "@/components/models/inventory/InventoryModal";
 
 // FIX: normaliza IDs para string no recebimento
 const DEBUG_IDS = false;
 const toId = (raw) => (raw == null ? null : String(raw));
 function debugIds(...args) {
   if (!DEBUG_IDS) return;
-  console.log("[GAMESHELL][IDS]", ...args);
 }
 
 export function GameShell() {
   const [loading, setLoading] = useState(true);
   const [snapshot, setSnapshot] = useState(null);
-  const [sessionReplaced, setSessionReplaced] = useState(null); // { userId, by } ou string
+  const [sessionReplaced, setSessionReplaced] = useState(null);
+
+  // UI state do runtime (inventário)
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+
+  // snapshot autoritativo do inventário (vem do servidor)
+  const [inventorySnapshot, setInventorySnapshot] = useState(null);
 
   const socketRef = useRef(null);
+
+  // (NOVO) gate: inventário via socket só depois do join confirmado
+  const joinedRef = useRef(false);
+
+  // evita “perder” request se inventário abrir antes do join
+  const pendingInvRequestRef = useRef(false);
 
   // Store autoritativo para entidades replicadas (baseline/delta/spawn/despawn)
   const worldStoreRef = useRef(null);
   if (!worldStoreRef.current) {
     worldStoreRef.current = createEntitiesStore();
   }
+
+  const requestInventoryFull = useCallback(() => {
+    const s = socketRef.current;
+
+    if (!s) {
+      return false;
+    }
+
+    if (!joinedRef.current) {
+      return false;
+    }
+
+    s.emit("inv:request_full", { reason: "ui_open" });
+    return true;
+  }, []);
+
+  const handleInputIntent = useCallback(
+    (intent) => {
+      if (!intent || typeof intent !== "object") return;
+
+      if (intent.type === IntentType.UI_TOGGLE_INVENTORY) {
+        setInventoryOpen((prev) => {
+          const next = !prev;
+
+          if (next) {
+            pendingInvRequestRef.current = true;
+            const ok = requestInventoryFull();
+            if (ok) pendingInvRequestRef.current = false;
+          } else {
+            // fechou (MVP: nada a fazer)
+          }
+
+          return next;
+        });
+      }
+    },
+    [requestInventoryFull]
+  );
+
+  const closeInventory = useCallback(() => {
+    setInventoryOpen(false);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -76,13 +132,16 @@ export function GameShell() {
     }
 
     (async () => {
-      console.log("[GAMESHELL] bootstrap start");
       try {
         const data = await bootstrapWorld(token);
-        console.log("[GAMESHELL] bootstrap done", data);
+
+        // ✅ seed: inventário autoritativo já vem no bootstrap
+        logInventory("BOOTSTRAP_HTTP", data?.inventory);
+        if (data?.inventory?.ok === true) {
+          setInventorySnapshot(data.inventory);
+        }
 
         if (!data || data?.error) {
-          console.error("[GAMESHELL] bootstrap error:", data);
 
           if (data?.status === 401) {
             localStorage.removeItem("token");
@@ -95,25 +154,53 @@ export function GameShell() {
 
         // 1) snapshot inicial (canônico)
         setSnapshot(data.snapshot);
-        console.log("[GAMESHELL] snapshot set", data.snapshot);
 
         // 2) socket entra DEPOIS do snapshot existir
         const socket = connectSocket(token);
         socketRef.current = socket;
 
+        // reset gates (novo socket)
+        joinedRef.current = false;
+        pendingInvRequestRef.current = false;
+
         const store = worldStoreRef.current;
 
-        // ---- handlers (mantidos como funções para off correto) ----
-        const onSocketReady = (payload) => {
-          if (payload?.ok !== true) return;
-          socket.emit("world:join");
+        const onInvFull = (payload) => {
+          const inv = payload?.ok === true ? payload : payload ?? { ok: false };
+          logInventory("SOCKET_INV_FULL", inv);
+
+          // ✅ não sobrescreve snapshot bom com erro
+          if (inv?.ok === true) {
+            setInventorySnapshot(inv);
+          } else {
+            console.warn("[INV] inv:full not ok (ignored)", inv?.error);
+          }
         };
 
+        const onSocketReady = (payload) => {
+          if (payload?.ok !== true) return;
+
+          // ✅ join COM ack (igual seu testInventory)
+          socket.emit("world:join", {}, (ack) => {
+
+            // algumas impls respondem {ok:true}, outras só truthy
+            if (ack?.ok === false) return;
+
+            joinedRef.current = true;
+
+            // flush pendência se inventário já estiver aberto
+            if (inventoryOpen) {
+              pendingInvRequestRef.current = true;
+              const ok = requestInventoryFull();
+              if (ok) pendingInvRequestRef.current = false;
+            }
+          });
+        };
+
+        // restante (igual ao seu atual)
         const onWorldBaseline = (payload) => {
-          // baseline é a verdade completa do interesse atual
           store.applyBaseline(payload);
 
-          // compat: se baseline vier com "you" e já tiver entidade, mantém runtime do snapshot coerente
           const selfId = toId(store.selfId);
           debugIds("baseline: selfId", selfId);
           if (!selfId) return;
@@ -139,18 +226,15 @@ export function GameShell() {
         };
 
         const onEntitySpawn = (payload) => {
-          // payload pode ser { entity } ou a entidade direta
           let entity = payload?.entity ?? payload;
           const entityId = toId(entity?.entityId ?? entity?.id ?? entity?.entity_id ?? null);
 
-          // FIX: evita tratar self como "other" em spawn
           if (entityId && String(entityId) === String(store.selfId)) {
             debugIds("spawn: skip self", entityId);
             return;
           }
 
           if (entity && typeof entity === "object" && entityId) {
-            // FIX: normaliza entityId antes de enviar ao store
             entity = { ...entity, entityId };
           }
 
@@ -160,7 +244,6 @@ export function GameShell() {
         const onEntityDespawn = (payload) => {
           const entityId = toId(payload?.entityId ?? payload?.id ?? payload);
 
-          // FIX: evita tratar self como "other" em despawn
           if (entityId && String(entityId) === String(store.selfId)) {
             debugIds("despawn: skip self", entityId);
             return;
@@ -172,7 +255,6 @@ export function GameShell() {
         const onEntityDelta = (payload) => {
           store.applyDelta(payload);
 
-          // compat: mantém snapshot.runtime do self alinhado com a verdade (para legado)
           const selfId = toId(store.selfId);
           if (!selfId) return;
 
@@ -201,9 +283,7 @@ export function GameShell() {
           });
         };
 
-        // 3) legado: estado confirmado do servidor -> também alimenta o store (transição suave)
         const onMoveState = (payload) => {
-          // Mantém o comportamento atual (snapshot.runtime)…
           setSnapshot((prev) => {
             if (!prev || !prev.runtime) return prev;
 
@@ -225,12 +305,11 @@ export function GameShell() {
             };
           });
 
-          // …e espelha no store como delta do self (se já souber selfId).
           const selfId = toId(payload?.entityId ?? store.selfId);
           if (!selfId) return;
 
           const rev = payload?.rev;
-          if (rev == null) return; // sem rev, não arrisca aplicar
+          if (rev == null) return;
 
           store.applyDelta({
             entityId: String(selfId),
@@ -246,16 +325,10 @@ export function GameShell() {
           setSessionReplaced(payload ?? { reason: "session_replaced" });
           try {
             const s = socketRef.current;
-            if (s) {
-              s.removeAllListeners();
-            }
+            if (s) s.removeAllListeners();
           } catch {}
           disconnectSocket();
           socketRef.current = null;
-
-          // opcional (hard logout)
-          // localStorage.removeItem("token");
-
           store.clear();
         };
 
@@ -263,7 +336,6 @@ export function GameShell() {
           console.error("[SOCKET] connect_error:", err?.message || err);
         };
 
-        // ---- listeners ----
         socket.on("socket:ready", onSocketReady);
 
         socket.on("world:baseline", onWorldBaseline);
@@ -275,7 +347,8 @@ export function GameShell() {
         socket.on("session:replaced", onSessionReplaced);
         socket.on("connect_error", onConnectError);
 
-        // ---- cleanup ----
+        socket.on("inv:full", onInvFull);
+
         return () => {
           const s = socketRef.current;
           if (s) {
@@ -289,15 +362,19 @@ export function GameShell() {
             s.off("move:state", onMoveState);
             s.off("session:replaced", onSessionReplaced);
             s.off("connect_error", onConnectError);
+
+            s.off("inv:full", onInvFull);
           }
           disconnectSocket();
           socketRef.current = null;
+
+          joinedRef.current = false;
+          pendingInvRequestRef.current = false;
         };
       } catch (err) {
         console.error("[GAMESHELL] exception:", err);
       } finally {
         setLoading(false);
-        console.log("[GAMESHELL] loading=false");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -313,10 +390,19 @@ export function GameShell() {
   if (!snapshot) return <LoadingOverlay message="Falha ao carregar mundo" />;
 
   return (
-    <GameCanvas
-      snapshot={snapshot}
-      socket={socketRef.current}
-      worldStoreRef={worldStoreRef}
-    />
+    <>
+      <GameCanvas
+        snapshot={snapshot}
+        socket={socketRef.current}
+        worldStoreRef={worldStoreRef}
+        onInputIntent={handleInputIntent}
+      />
+
+      <InventoryModal
+        open={inventoryOpen}
+        snapshot={inventorySnapshot}
+        onClose={closeInventory}
+      />
+    </>
   );
 }

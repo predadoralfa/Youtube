@@ -5,6 +5,8 @@ export const IntentType = {
   MOVE_DIRECTION: "MOVE_DIRECTION",
   // (NOVO)
   CLICK_PRIMARY: "CLICK_PRIMARY",
+  // (NOVO) UI
+  UI_TOGGLE_INVENTORY: "UI_TOGGLE_INVENTORY",
 };
 
 export function intentCameraZoom(delta) {
@@ -32,4 +34,10 @@ export function intentClickPrimary(clientX, clientY) {
     clientY,
     ts: performance.now(),
   };
+}
+
+// (NOVO) UI: toggle inventário
+// Só carrega timestamp. Abrir/fechar modal é decisão do runtime (WorldRoot/GameShell).
+export function intentUiToggleInventory() {
+  return { type: IntentType.UI_TOGGLE_INVENTORY, ts: performance.now() };
 }

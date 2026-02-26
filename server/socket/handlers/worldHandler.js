@@ -1,20 +1,8 @@
-// server/socket/handlers/worldHandler.js
-//
-// Responsável por:
-// - world:join
-// - world:resync
-// - baseline autoritativo
-// - cálculo de interest (chunk rooms)
-// - join/leave de rooms
-//
-// Regras:
-// - Cliente não escolhe chunk nem entidade
-// - Sempre existe baseline
-// - Não tocar DB no hot path para terceiros (apenas self pode ensureRuntimeLoaded)
-// - NÃO deve reintroduzir OFFLINE no mundo
-
 const { handleWorldJoin } = require("./world/join");
 const { handleWorldResync } = require("./world/resync");
+
+// ✅ INVENTORY
+const { buildInventoryFull } = require("../../state/inventory/fullPayload");
 
 function emitBaseline(socket, baseline) {
   socket.emit("world:baseline", {
@@ -40,11 +28,22 @@ function ackErr(ack, err) {
   ack({ ok: false, error: String(err?.message || err) });
 }
 
+async function emitInventoryFull(socket) {
+  const userId = socket.data.userId;
+  if (!userId) return;
+  const inv = await buildInventoryFull(userId);
+  socket.emit("inv:full", inv);
+}
+
 function registerWorldHandler(io, socket) {
   socket.on("world:join", async (_payload, ack) => {
     try {
       const { rt, baseline } = await handleWorldJoin({ socket });
       emitBaseline(socket, baseline);
+
+      // ✅ inv privado do self (resync "grátis")
+      await emitInventoryFull(socket);
+
       ackOk(ack, rt, baseline);
     } catch (err) {
       ackErr(ack, err);
@@ -55,6 +54,10 @@ function registerWorldHandler(io, socket) {
     try {
       const { rt, baseline } = await handleWorldResync({ socket });
       emitBaseline(socket, baseline);
+
+      // ✅ inv privado do self (resync "grátis")
+      await emitInventoryFull(socket);
+
       ackOk(ack, rt, baseline);
     } catch (err) {
       ackErr(ack, err);

@@ -59,6 +59,7 @@ async function bootstrap() {
 
     // ✅ inicia tick autoritativo de movimento (click-to-move)
     startMovementTick(io);
+    //db.sequelize.sync();
 
     httpServer.listen(5100, () => {
       console.log("[SERVER] Servidor rodando na porta 5100");

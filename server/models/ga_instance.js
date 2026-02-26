@@ -26,6 +26,14 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: "LOCAL"
       },
 
+      current_era_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: "ga_era_def", key: "id" },
+        onUpdate: "CASCADE",
+        onDelete: "RESTRICT",
+      },
+
       status: {
         type: DataTypes.STRING(16),
         allowNull: false,
@@ -53,6 +61,14 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "instance_id",
       as: "players"
     });
+
+    GaInstance.belongsTo(models.GaEraDef, {
+      foreignKey: "current_era_id",
+      as: "currentEra",
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
+    });
+    
   };
 
   return GaInstance;

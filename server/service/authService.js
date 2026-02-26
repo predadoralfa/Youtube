@@ -1,14 +1,27 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 
-const { sequelize, GaUser, GaUserProfile } = require("../models"); // ajuste o caminho
-const { Op } = require("sequelize");
+// MODELS
+const {
+  sequelize,
+  GaUser,
+  GaUserProfile,
+  GaUserStats,
+  GaUserRuntime,
+} = require("../models"); // ajuste o caminho se necessário
+
+// INVENTORY PROVISIONING (interno, transacional)
+const { ensureStarterInventory } = require("./inventoryProvisioning");
+
+
+// Mantido aqui para o arquivo não quebrar por "instanceIdInicial is not defined".
+const instanceIdInicial = 1;
 
 const register = async (req, res) => {
   const t = await sequelize.transaction();
 
   try {
-    const { email, senha, nome } = req.body; // "nome" agora vira display_name
+    const { email, senha, nome } = req.body; // "nome" vira display_name
 
     // 1) validação mínima
     if (!email || !senha || !nome) {
@@ -28,7 +41,10 @@ const register = async (req, res) => {
     // 3) checa email (GaUser) e display_name (Profile)
     const [emailExiste, nomeExiste] = await Promise.all([
       GaUser.findOne({ where: { email: emailNorm }, transaction: t }),
-      GaUserProfile.findOne({ where: { display_name: displayName }, transaction: t }),
+      GaUserProfile.findOne({
+        where: { display_name: displayName },
+        transaction: t,
+      }),
     ]);
 
     if (emailExiste) {
@@ -54,16 +70,16 @@ const register = async (req, res) => {
     );
 
     // 6) cria status separado
-    const novoStats = await GaUserStats.create(
-      { user_id: novoUser.id },
-      { transaction: t }
-    );
+    await GaUserStats.create({ user_id: novoUser.id }, { transaction: t });
 
     // 7) cria localização separado
-    const novoRuntime = await GaUserRuntime.create(
+    await GaUserRuntime.create(
       { user_id: novoUser.id, instance_id: instanceIdInicial },
       { transaction: t }
     );
+
+    // 8) provisiona inventário inicial (HAND_L/HAND_R + slots vazios)
+    await ensureStarterInventory(novoUser.id, t);
 
     await t.commit();
 
@@ -91,7 +107,6 @@ const register = async (req, res) => {
   }
 };
 
-
 const login = async (req, res) => {
   try {
     const { email, senha } = req.body;
@@ -106,7 +121,9 @@ const login = async (req, res) => {
     // pega usuário + profile
     const user = await GaUser.findOne({
       where: { email: emailNorm },
-      include: [{ model: GaUserProfile, as: "profile", attributes: ["display_name"] }],
+      include: [
+        { model: GaUserProfile, as: "profile", attributes: ["display_name"] },
+      ],
     });
 
     if (!user) {

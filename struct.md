@@ -12,12 +12,18 @@
                     LoginModal.jsx
                     RegisterModal.jsx
 
+                inventory/
+                    InventoryModal.jsx
+
             overlays/
                 index.js
                 LoadingOverlay.jsx
 
         imag/
             auth.png
+
+        inventory/
+            inventoryProbe.js
 
         pages/
             AuthPage.jsx
@@ -30,6 +36,7 @@
 
         style/
             auth.css
+            Inventory.Modal.css
 
         World/
             WolrdRoot.jsx
@@ -71,7 +78,28 @@
         ....
 
     models/
-        muitos
+        database.js
+        ga_container_def.js
+        ga_container_slot.js
+        ga_era_def.js
+        ga_instace.js
+        ga_item_def.js
+        ga_item_def_component.js
+        ga_item_instance.js
+        ga_local_instance.js
+        ga_local_geometry.js
+        ga_local_visual.js
+        ga_local.js
+        ga_material.js
+        ga_mesh_template.js
+        ga_render_material.js
+        ga_user_container.js
+        ga_userprofile.js
+        ga_user_runtime.js
+        ga_user_stats.js
+        ga_user.js
+        index.js       
+
 
     router/
         authRouter.js
@@ -79,6 +107,7 @@
 
     services/
         authService.js
+        inventoryProvisioning.js
         worldService.js
 
     socket/
@@ -90,6 +119,7 @@
             moveHandler.js
             worldHandler.js
             clickMoveHandler.js
+            inventoryHandler.js
             move/
                 applyWASD.js
                 broadcast.js
@@ -117,6 +147,22 @@
         persistenceManager.js
         persistenceIndex.js
         movementTick.js
+        inventory/
+            fullPayload.js
+            loader.js
+            store.js
+            ops/
+                merge.js
+                move.js
+                split.js
+
+            persist/
+                flush.js
+
+            validate/
+                errors.js
+                rules.js
+
         runtime/
             chunk.js
             constants.js

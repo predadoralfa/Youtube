@@ -15,27 +15,12 @@ export function WorldRoot() {
     localStorage.setItem("token", token);
     setHasToken(true);
   };
-
-  // =============================
-  // RESYNC DEV (F9)
-  // =============================
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.key === "F9") {
-        const socket = getSocket();
-        if (socket) {
-          console.log("[WORLD] manual resync requested (F9)");
-          socket.emit("world:resync");
-        }
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, []);
-
+  
+  const socket = getSocket();
+  if (socket) {
+    socket.emit("world:resync");
+  }
+  
   if (!hasToken) {
     return <AuthPage onLoggedIn={handleLogin} />;
   }

@@ -6,6 +6,7 @@ const sequelize = require("./database");
 // =====================================
 
 // CORE
+const defineGaEraDef = require("./ga_era_def");
 const defineGaUser = require("./ga_user");
 const defineGaUserProfile = require("./ga_user_profile");
 const defineGaUserStats = require("./ga_user_stats");
@@ -22,11 +23,22 @@ const defineGaInstance = require("./ga_instance");
 const defineGaRenderMaterial = require("./ga_render_material");
 const defineGaMeshTemplate = require("./ga_mesh_template");
 
+// NOVOS (ITEM)
+const defineGaItemDef = require("./ga_item_def");
+const defineGaItemDefComponent = require("./ga_item_def_component");
+const defineGaItemInstance = require("./ga_item_instance");
+
+// NOVOS (INVENTORY)
+const defineGaContainerDef = require("./ga_container_def");
+const defineGaUserContainer = require("./ga_user_container");
+const defineGaContainerSlot = require("./ga_container_slot");
+
 // =====================================
 // 2. Definições de modelos
 // =====================================
 
 // CORE MODELS
+const GaEraDef = defineGaEraDef(sequelize, DataTypes);
 const GaUser = defineGaUser(sequelize, DataTypes);
 const GaUserProfile = defineGaUserProfile(sequelize, DataTypes);
 const GaUserStats = defineGaUserStats(sequelize, DataTypes);
@@ -45,11 +57,21 @@ const GaInstance = defineGaInstance(sequelize, DataTypes);
 const GaRenderMaterial = defineGaRenderMaterial(sequelize, DataTypes);
 const GaMeshTemplate = defineGaMeshTemplate(sequelize, DataTypes);
 
+const GaItemDef = defineGaItemDef(sequelize, DataTypes);
+const GaItemDefComponent = defineGaItemDefComponent(sequelize, DataTypes);
+const GaItemInstance = defineGaItemInstance(sequelize, DataTypes);
+
+const GaContainerDef = defineGaContainerDef(sequelize, DataTypes);
+const GaUserContainer = defineGaUserContainer(sequelize, DataTypes);
+const GaContainerSlot = defineGaContainerSlot(sequelize, DataTypes);
+
 // =====================================
 // 3. Registry
 // =====================================
 
 const models = {
+  GaEraDef,
+  
   GaUser,
   GaUserProfile,
   GaUserStats,
@@ -64,7 +86,15 @@ const models = {
 
   // RENDER (NOVO)
   GaRenderMaterial,
-  GaMeshTemplate
+  GaMeshTemplate,
+
+  GaItemDef,
+  GaItemDefComponent,
+  GaItemInstance,
+
+  GaContainerDef,
+  GaUserContainer,
+  GaContainerSlot,
 };
 
 // =====================================

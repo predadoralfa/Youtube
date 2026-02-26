@@ -11,6 +11,10 @@ const {
   GaRenderMaterial,
 } = require("../models");
 
+// INVENTORY (privado, autoritativo)
+const { ensureInventoryLoaded } = require("../state/inventory/loader");
+const { buildInventoryFull } = require("../state/inventory/fullPayload");
+
 const bootstrap = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -27,7 +31,7 @@ const bootstrap = async (req, res) => {
         "yaw",
         "connection_state",
         "disconnected_at",
-        "offline_allowed_at"
+        "offline_allowed_at",
       ],
     });
 
@@ -127,12 +131,15 @@ const bootstrap = async (req, res) => {
     const groundRenderMaterial = local.visual?.groundRenderMaterial ?? null;
 
     // Fallback de cor (ordem de prioridade)
-    const groundColor =
-      groundRenderMaterial?.base_color ??
-      "#711010";
+    const groundColor = groundRenderMaterial?.base_color ?? "#711010";
 
-    console.log("[WORLD] USER ID = ",runtime.user_id, "INSTANCE = ",runtime.instance_id);
-    console.log("[WORLD] Altura = ",runtime.pos_y);
+    // =====================================
+    // INVENTORY (baseline privado no HTTP bootstrap)
+    // =====================================
+    // carrega runtime de inventário (cache em memória)
+    const invRt = await ensureInventoryLoaded(userId);
+    const inventory = buildInventoryFull(invRt);
+    
 
     return res.json({
       ok: true,
@@ -226,6 +233,9 @@ const bootstrap = async (req, res) => {
           },
         },
       },
+
+      // ✅ Inventário privado do jogador (baseline autoritativo)
+      inventory,
     });
   } catch (error) {
     console.error("Erro no bootstrap:", error);
@@ -234,5 +244,3 @@ const bootstrap = async (req, res) => {
 };
 
 module.exports = { bootstrap };
-
-
