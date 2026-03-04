@@ -54,6 +54,7 @@ const DEBUG_IDS = false;
 const toId = (raw) => (raw == null ? null : String(raw));
 function debugIds(...args) {
   if (!DEBUG_IDS) return;
+  // console.log(...args);
 }
 
 export function GameShell() {
@@ -75,6 +76,10 @@ export function GameShell() {
   // evita “perder” request se inventário abrir antes do join
   const pendingInvRequestRef = useRef(false);
 
+  // (NOVO) seleção atual (alvo clicado) - não autoritativo; é "hint" pro servidor
+  // { kind: "ACTOR"|"PLAYER", id: "123" } | null
+  const selectedTargetRef = useRef(null);
+
   // Store autoritativo para entidades replicadas (baseline/delta/spawn/despawn)
   const worldStoreRef = useRef(null);
   if (!worldStoreRef.current) {
@@ -84,15 +89,36 @@ export function GameShell() {
   const requestInventoryFull = useCallback(() => {
     const s = socketRef.current;
 
-    if (!s) {
-      return false;
-    }
-
-    if (!joinedRef.current) {
-      return false;
-    }
+    if (!s) return false;
+    if (!joinedRef.current) return false;
 
     s.emit("inv:request_full", { reason: "ui_open" });
+    return true;
+  }, []);
+
+  const emitInteractStart = useCallback(() => {
+    const s = socketRef.current;
+    if (!s) return false;
+    if (!joinedRef.current) return false;
+
+    // Se houver target selecionado, envia como sugestão.
+    // O servidor pode ignorar (fora de range/visibilidade/invalid).
+    const t = selectedTargetRef.current;
+    if (t?.kind && t?.id) {
+      s.emit("interact:start", { target: { kind: String(t.kind), id: String(t.id) } });
+    } else {
+      // Sem alvo: servidor escolhe nearest (fallback)
+      s.emit("interact:start", {});
+    }
+    return true;
+  }, []);
+
+  const emitInteractStop = useCallback(() => {
+    const s = socketRef.current;
+    if (!s) return false;
+    if (!joinedRef.current) return false;
+
+    s.emit("interact:stop", {});
     return true;
   }, []);
 
@@ -100,6 +126,7 @@ export function GameShell() {
     (intent) => {
       if (!intent || typeof intent !== "object") return;
 
+      // UI inventory
       if (intent.type === IntentType.UI_TOGGLE_INVENTORY) {
         setInventoryOpen((prev) => {
           const next = !prev;
@@ -108,19 +135,55 @@ export function GameShell() {
             pendingInvRequestRef.current = true;
             const ok = requestInventoryFull();
             if (ok) pendingInvRequestRef.current = false;
-          } else {
-            // fechou (MVP: nada a fazer)
           }
 
           return next;
         });
+        return;
+      }
+
+      // (NOVO) SPACE hold: start/stop interação (aproximar e agir)
+      if (intent.type === IntentType.INTERACT_PRIMARY_DOWN) {
+        emitInteractStart();
+        return;
+      }
+
+      if (intent.type === IntentType.INTERACT_PRIMARY_UP) {
+        emitInteractStop();
+        return;
+      }
+
+      // (NOVO) seleção de alvo via canvas
+      if (intent.type === IntentType.TARGET_SELECT) {
+        const kind = intent?.target?.kind;
+        const id = intent?.target?.id;
+        if (kind && id != null) {
+          selectedTargetRef.current = { kind: String(kind), id: String(id) };
+        }
+        return;
+      }
+
+      if (intent.type === IntentType.TARGET_CLEAR) {
+        selectedTargetRef.current = null;
+        return;
       }
     },
-    [requestInventoryFull]
+    [requestInventoryFull, emitInteractStart, emitInteractStop]
   );
 
   const closeInventory = useCallback(() => {
     setInventoryOpen(false);
+  }, []);
+
+  // (NOVO) handlers de seleção vindos do GameCanvas
+  const onTargetSelect = useCallback((target) => {
+    // target: { kind: "ACTOR"|"PLAYER", id: string }
+    if (!target?.kind || target?.id == null) return;
+    selectedTargetRef.current = { kind: String(target.kind), id: String(target.id) };
+  }, []);
+
+  const onTargetClear = useCallback(() => {
+    selectedTargetRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -142,13 +205,11 @@ export function GameShell() {
         }
 
         if (!data || data?.error) {
-
           if (data?.status === 401) {
             localStorage.removeItem("token");
             window.location.reload();
             return;
           }
-
           return;
         }
 
@@ -180,10 +241,8 @@ export function GameShell() {
         const onSocketReady = (payload) => {
           if (payload?.ok !== true) return;
 
-          // ✅ join COM ack (igual seu testInventory)
+          // ✅ join COM ack
           socket.emit("world:join", {}, (ack) => {
-
-            // algumas impls respondem {ok:true}, outras só truthy
             if (ack?.ok === false) return;
 
             joinedRef.current = true;
@@ -197,7 +256,6 @@ export function GameShell() {
           });
         };
 
-        // restante (igual ao seu atual)
         const onWorldBaseline = (payload) => {
           store.applyBaseline(payload);
 
@@ -370,6 +428,8 @@ export function GameShell() {
 
           joinedRef.current = false;
           pendingInvRequestRef.current = false;
+
+          selectedTargetRef.current = null;
         };
       } catch (err) {
         console.error("[GAMESHELL] exception:", err);
@@ -396,6 +456,9 @@ export function GameShell() {
         socket={socketRef.current}
         worldStoreRef={worldStoreRef}
         onInputIntent={handleInputIntent}
+        // (NOVO) seleção de alvo (GameCanvas resolve raycast e chama isso)
+        onTargetSelect={onTargetSelect}
+        onTargetClear={onTargetClear}
       />
 
       <InventoryModal

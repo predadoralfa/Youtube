@@ -1,130 +1,203 @@
-// entities/input/inputs.js
+// cliente/src/world/input/inputs.js
 
 import {
-  intentCameraZoom,
   intentCameraOrbit,
+  intentCameraZoom,
   intentMoveDirection,
-  // (NOVO)
   intentClickPrimary,
-  // (NOVO) UI
   intentUiToggleInventory,
+  intentInteractPress,
+  intentInteractRelease,
 } from "./intents";
 
-export function bindInputs(target, bus) {
-  if (!target) throw new Error("bindInputs: target é obrigatório");
+/**
+ * bindInputs(domElement, bus)
+ *
+ * Responsável apenas por traduzir eventos do browser -> intents no bus.
+ * Não faz gameplay, não toca socket, não decide UI.
+ */
+export function bindInputs(domElement, bus) {
+  if (!domElement) throw new Error("bindInputs: domElement required");
+  if (!bus) throw new Error("bindInputs: bus required");
 
-  let dragging = false;
+  // =========================
+  // Estado de teclado (WASD)
+  // =========================
+  const keys = {
+    w: false,
+    a: false,
+    s: false,
+    d: false,
+  };
+
+  function emitMove() {
+    const x = (keys.d ? 1 : 0) + (keys.a ? -1 : 0);
+    const z = (keys.s ? 1 : 0) + (keys.w ? -1 : 0);
+    bus.emit(intentMoveDirection(x, z));
+  }
+
+  // =========================
+  // Mouse (click + wheel + orbit)
+  // =========================
+  let orbiting = false;
   let lastX = 0;
   let lastY = 0;
 
-  const keys = { w: false, a: false, s: false, d: false };
-
-  const onContextMenu = (e) => e.preventDefault();
-
-  const onMouseDown = (e) => {
-    // (NOVO) LMB -> click intent (não interfere no RMB orbit)
-    if (e.button === 0) {
-      bus.emit(intentClickPrimary(e.clientX, e.clientY));
+  function onMouseDown(e) {
+    // RMB = orbit
+    if (e.button === 2) {
+      orbiting = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      e.preventDefault();
       return;
     }
 
-    // RMB (orbit)
-    if (e.button !== 2) return;
-    dragging = true;
-    lastX = e.clientX;
-    lastY = e.clientY;
-  };
+    // LMB = click primary
+    if (e.button === 0) {
+      bus.emit(intentClickPrimary(e.clientX, e.clientY));
+      e.preventDefault();
+    }
+  }
 
-  const onMouseUp = (e) => {
-    if (e.button !== 2) return;
-    dragging = false;
-  };
-
-  const onMouseMove = (e) => {
-    if (!dragging) return;
+  function onMouseMove(e) {
+    if (!orbiting) return;
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
     lastX = e.clientX;
     lastY = e.clientY;
 
     bus.emit(intentCameraOrbit(dx, dy));
-  };
-
-  const onWheel = (e) => {
     e.preventDefault();
-    bus.emit(intentCameraZoom(Math.sign(e.deltaY)));
-  };
-
-  function computeDir() {
-    let x = 0;
-    let z = 0;
-
-    // forward em Three costuma ser -Z
-    if (keys.w) z -= 1;
-    if (keys.s) z += 1;
-    if (keys.d) x -= 1;
-    if (keys.a) x += 1;
-
-    return { x, z };
   }
 
-  function emitMove() {
-    const { x, z } = computeDir();
-    bus.emit(intentMoveDirection(x, z));
+  function onMouseUp(e) {
+    if (e.button === 2) {
+      orbiting = false;
+      e.preventDefault();
+    }
   }
 
-  const onKeyDown = (e) => {
-    const k = e.key?.toLowerCase();
+  function onWheel(e) {
+    // deltaY positivo = zoom out; negativo = zoom in
+    const delta = e.deltaY;
+    bus.emit(intentCameraZoom(delta));
+    e.preventDefault();
+  }
 
-    // (NOVO) UI: inventário no "I"
-    // - não depende de foco no canvas (listener é no window)
-    // - evita spam com auto-repeat
-    if (k === "i") {
-      if (e.repeat) return;
-      bus.emit(intentUiToggleInventory());
+  // =========================
+  // Teclado
+  // =========================
+  function onKeyDown(e) {
+    // evita repetir spam (segurar tecla)
+    if (e.repeat) return;
+
+    const k = e.key?.toLowerCase?.();
+
+    // WASD
+    if (k === "w") {
+      keys.w = true;
+      emitMove();
+      e.preventDefault();
+      return;
+    }
+    if (k === "a") {
+      keys.a = true;
+      emitMove();
+      e.preventDefault();
+      return;
+    }
+    if (k === "s") {
+      keys.s = true;
+      emitMove();
+      e.preventDefault();
+      return;
+    }
+    if (k === "d") {
+      keys.d = true;
+      emitMove();
+      e.preventDefault();
       return;
     }
 
-    if (!(k in keys)) return;
+    // I = inventário (mantém seu padrão)
+    if (k === "i") {
+      bus.emit(intentUiToggleInventory());
+      e.preventDefault();
+      return;
+    }
 
-    // evita spam do auto-repeat
-    if (keys[k] === true) return;
+    // SPACE = interact start
+    if (e.code === "Space" || k === " ") {
+      bus.emit(intentInteractPress());
+      e.preventDefault();
+      return;
+    }
+  }
 
-    keys[k] = true;
-    emitMove();
-  };
+  function onKeyUp(e) {
+    const k = e.key?.toLowerCase?.();
 
-  const onKeyUp = (e) => {
-    const k = e.key?.toLowerCase();
-    if (!(k in keys)) return;
+    // WASD
+    if (k === "w") {
+      keys.w = false;
+      emitMove();
+      e.preventDefault();
+      return;
+    }
+    if (k === "a") {
+      keys.a = false;
+      emitMove();
+      e.preventDefault();
+      return;
+    }
+    if (k === "s") {
+      keys.s = false;
+      emitMove();
+      e.preventDefault();
+      return;
+    }
+    if (k === "d") {
+      keys.d = false;
+      emitMove();
+      e.preventDefault();
+      return;
+    }
 
-    keys[k] = false;
-    emitMove();
-  };
+    // SPACE = interact stop
+    if (e.code === "Space" || k === " ") {
+      bus.emit(intentInteractRelease());
+      e.preventDefault();
+      return;
+    }
+  }
 
-  target.addEventListener("contextmenu", onContextMenu);
-  target.addEventListener("mousedown", onMouseDown);
-  window.addEventListener("mouseup", onMouseUp);
+  // =========================
+  // Bind
+  // =========================
+  // context menu off (pra RMB orbit não abrir menu)
+  function onContextMenu(e) {
+    e.preventDefault();
+  }
+
+  domElement.addEventListener("mousedown", onMouseDown);
   window.addEventListener("mousemove", onMouseMove);
-  target.addEventListener("wheel", onWheel, { passive: false });
+  window.addEventListener("mouseup", onMouseUp);
+  domElement.addEventListener("wheel", onWheel, { passive: false });
+  domElement.addEventListener("contextmenu", onContextMenu);
 
-  // ✅ teclado no window (não depende de foco no canvas)
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
 
-  // ✅ estado inicial (parado)
-  bus.emit(intentMoveDirection(0, 0));
-
-  return () => {
-    target.removeEventListener("contextmenu", onContextMenu);
-    target.removeEventListener("mousedown", onMouseDown);
-    window.removeEventListener("mouseup", onMouseUp);
+  // unbind
+  return function unbindInputs() {
+    domElement.removeEventListener("mousedown", onMouseDown);
     window.removeEventListener("mousemove", onMouseMove);
-    target.removeEventListener("wheel", onWheel);
+    window.removeEventListener("mouseup", onMouseUp);
+    domElement.removeEventListener("wheel", onWheel);
+    domElement.removeEventListener("contextmenu", onContextMenu);
 
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
-
-    bus.emit(intentMoveDirection(0, 0));
   };
 }

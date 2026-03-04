@@ -1,12 +1,19 @@
 // input/intents.js
+
 export const IntentType = {
   CAMERA_ZOOM: "CAMERA_ZOOM",
   CAMERA_ORBIT: "CAMERA_ORBIT",
   MOVE_DIRECTION: "MOVE_DIRECTION",
-  // (NOVO)
+
+  // Mouse
   CLICK_PRIMARY: "CLICK_PRIMARY",
-  // (NOVO) UI
+
+  // UI
   UI_TOGGLE_INVENTORY: "UI_TOGGLE_INVENTORY",
+
+  // (NOVO) Gameplay: interação (segurar barra de espaço)
+  INTERACT_PRESS: "INTERACT_PRESS",
+  INTERACT_RELEASE: "INTERACT_RELEASE",
 };
 
 export function intentCameraZoom(delta) {
@@ -25,8 +32,7 @@ export function intentMoveDirection(x, z) {
   };
 }
 
-// (NOVO) clique primário (LMB)
-// Só carrega coords de tela. Raycast e decisão de {x,z} é no GameCanvas.
+// LMB (só coords; raycast/decisão é no GameCanvas)
 export function intentClickPrimary(clientX, clientY) {
   return {
     type: IntentType.CLICK_PRIMARY,
@@ -36,8 +42,16 @@ export function intentClickPrimary(clientX, clientY) {
   };
 }
 
-// (NOVO) UI: toggle inventário
-// Só carrega timestamp. Abrir/fechar modal é decisão do runtime (WorldRoot/GameShell).
+// UI: toggle inventário (decisão de abrir/fechar é fora do GameCanvas)
 export function intentUiToggleInventory() {
   return { type: IntentType.UI_TOGGLE_INVENTORY, ts: performance.now() };
+}
+
+// (NOVO) Interação: spacebar
+export function intentInteractPress() {
+  return { type: IntentType.INTERACT_PRESS, ts: performance.now() };
+}
+
+export function intentInteractRelease() {
+  return { type: IntentType.INTERACT_RELEASE, ts: performance.now() };
 }

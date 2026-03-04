@@ -18,6 +18,9 @@ const { buildInventoryFull } = require("../state/inventory/fullPayload");
 // ACTORS (spawn list)
 const { loadActorsForInstance } = require("./actorLoader");
 
+// ✅ NOVO: runtime store autoritativo de actors (cache em memória)
+const { addActor, clearInstance } = require("../state/actorsRuntimeStore");
+
 const bootstrap = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -120,32 +123,42 @@ const bootstrap = async (req, res) => {
       return res.status(500).json({ message: "Local inexistente (inconsistência)" });
     }
 
-    // 3) Payload mínimo para Fase 1 (chão + limites)
     const sizeX = local.geometry?.size_x ?? 200;
     const sizeZ = local.geometry?.size_z ?? 200;
 
-    // version real do template visual (base do cache)
     const v = local.visual?.version ?? 1;
     const localTemplateVersion = `local:${local.id}:v${v}`;
 
-    // Helpers para não explodir nulls
     const groundMaterial = local.visual?.groundMaterial ?? null;
     const groundMesh = local.visual?.groundMesh ?? null;
     const groundRenderMaterial = local.visual?.groundRenderMaterial ?? null;
-
-    // Fallback de cor (ordem de prioridade)
     const groundColor = groundRenderMaterial?.base_color ?? "#711010";
 
     // =====================================
-    // INVENTORY (baseline privado no HTTP bootstrap)
+    // INVENTORY
     // =====================================
     const invRt = await ensureInventoryLoaded(userId);
     const inventory = buildInventoryFull(invRt);
 
     // =====================================
-    // ACTORS (spawn list por instância)
+    // ACTORS
     // =====================================
     const actors = await loadActorsForInstance(runtime.instance_id);
+
+    // ✅ Popula runtime store de actors para uso em interact/start etc.
+    clearInstance(runtime.instance_id);
+    for (const a of actors) {
+      addActor({
+        id: a.id,
+        instanceId: runtime.instance_id,
+        pos: {
+          x: a.pos?.x ?? a.pos_x ?? 0,
+          y: a.pos?.y ?? a.pos_y ?? 0,
+          z: a.pos?.z ?? a.pos_z ?? 0,
+        },
+        status: a.status ?? "ACTIVE",
+      });
+    }
 
     return res.json({
       ok: true,
@@ -159,8 +172,6 @@ const bootstrap = async (req, res) => {
             z: runtime.pos_z,
           },
           yaw: runtime.yaw,
-
-          // ✅ observabilidade / debug do anti-combat-log
           connection_state: runtime.connection_state,
           disconnected_at: runtime.disconnected_at,
           offline_allowed_at: runtime.offline_allowed_at,
@@ -183,14 +194,11 @@ const bootstrap = async (req, res) => {
             local_type: local.local_type,
             parent_id: local.parent_id,
           },
-
           geometry: {
             size_x: sizeX,
             size_z: sizeZ,
           },
-
           visual: {
-            // Material físico (gameplay/colisão)
             ground_material: {
               id: groundMaterial?.id ?? null,
               code: groundMaterial?.code ?? "DEFAULT",
@@ -198,8 +206,6 @@ const bootstrap = async (req, res) => {
               friction: groundMaterial?.friction ?? null,
               restitution: groundMaterial?.restitution ?? null,
             },
-
-            // Mesh declarativa do chão (render)
             ground_mesh: groundMesh
               ? {
                   id: groundMesh.id,
@@ -214,8 +220,6 @@ const bootstrap = async (req, res) => {
                   },
                 }
               : null,
-
-            // Material visual declarativo do chão (render)
             ground_render_material: groundRenderMaterial
               ? {
                   id: groundRenderMaterial.id,
@@ -227,24 +231,17 @@ const bootstrap = async (req, res) => {
                   metalness: groundRenderMaterial.metalness,
                 }
               : null,
-
-            // Fallback (por enquanto o front pode usar isso direto)
             ground_color: groundColor,
-
-            // versão do template visual (útil pro front/cache)
             version: v,
           },
-
           debug: {
             bounds: { size_x: sizeX, size_z: sizeZ },
           },
         },
 
-        // ✅ spawn list (sem itens ainda)
         actors,
       },
 
-      // ✅ Inventário privado do jogador (baseline autoritativo)
       inventory,
     });
   } catch (error) {
