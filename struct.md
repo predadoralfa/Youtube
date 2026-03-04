@@ -38,28 +38,42 @@
             auth.css
             Inventory.Modal.css
 
-        World/
-            WolrdRoot.jsx
-            GameShell.jsx
-
-            entites/
-                character/
-                    Player.jsx
-                    CharacterFactor.jsx
-            
-            input/
-            i   inputBus.js          // barramento (pub/sub) simples
-                inputs.js            // mapeia DOM events -> intents
-                intents.js           // tipos: CAMERA_ZOOM, MOVE, INTERACT...
-
-            scene/
-                GameCanvas.jsx
-
-                camera/
-                    camera.js
-
-                light/
-                    light.js
+        cliente/src/World/
+                    ├── scene/
+                    │   ├── GameCanvas.jsx          ⭐ NOVO - Orquestrador limpo
+                    │   ├── environment/
+                    │   │   └── Ground.jsx          ✨ NOVO - Chão + grid + limites
+                    │   ├── camera/
+                    │   │   └── camera.js
+                    │   └── light/
+                    │       └── light.js
+                    │
+                    ├── entities/
+                    │   ├── character/
+                    │   │   ├── PlayersLayer.jsx    ✨ NOVO - Entidades replicadas
+                    │   │   ├── Player.jsx
+                    │   │   └── player.js
+                    │   │
+                    │   └── actors/                 ✅ EXISTENTE - Modular
+                    │       ├── ActorsLayer.jsx
+                    │       ├── ActorMappings.js
+                    │       ├── ChestActor.jsx
+                    │       ├── TreeActor.jsx
+                    │       ├── NPCActor.jsx
+                    │       └── DefaultActor.jsx
+                    │
+                    ├── input/
+                    │   ├── InputBus.js
+                    │   ├── inputs.js
+                    │   ├── intents.js
+                    │   └── ...
+                    │
+                    ├── state/
+                    │   ├── entitiesStore.js
+                    │   └── ...
+                    │
+                    ├── GameShell.jsx
+                    └── WorldRoot.jsx
 
 ### ============================================================
 

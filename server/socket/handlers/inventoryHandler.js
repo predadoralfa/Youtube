@@ -1,6 +1,6 @@
 // server/socket/handlers/inventoryHandler.js
 const db = require("../../models");
-const { withInventoryLock } = require("../../state/inventory/store");
+const { withInventoryLock, clearInventory } = require("../../state/inventory/store");
 const { ensureInventoryLoaded } = require("../../state/inventory/loader");
 const { buildInventoryFull } = require("../../state/inventory/fullPayload");
 const { flush } = require("../../state/inventory/persist/flush");
@@ -14,31 +14,22 @@ function safeAck(ack, payload) {
 }
 
 function registerInventoryHandler(io, socket) {
-
   function requireUser() {
     const userId = socket.data.userId;
     if (!userId) throw new Error("Socket not authenticated");
     return userId;
   }
 
-  /**
-   * READ-ONLY (MVP):
-   * UI abre inventário -> pede snapshot autoritativo
-   */
   socket.on("inv:request_full", (intent = {}, ack) => {
     withInventoryLock(requireUser(), async () => {
-      const tx = await db.sequelize.transaction();
       try {
         const userId = requireUser();
 
-        // garante runtime carregado (mesmo sem mutação)
-        const invRt = await ensureInventoryLoaded(userId, tx);
+        // ✅ força recarregar do DB (evita runtime velho após migrações/refactors)
+        clearInventory(userId);
 
-        // ✅ buildInventoryFull recebe invRt (não userId)
+        const invRt = await ensureInventoryLoaded(userId);
         const full = buildInventoryFull(invRt);
-
-        // leitura não precisa flush; apenas commit da tx de leitura
-        await tx.commit();
 
         socket.emit("inv:full", full);
         safeAck(ack, { ok: true });
@@ -47,24 +38,17 @@ function registerInventoryHandler(io, socket) {
           "[INV] intent=inv:request_full user=",
           userId,
           "containers=",
-          full?.containers?.length
+          full?.containers?.length,
+          "items=",
+          full?.itemInstances?.length
         );
       } catch (e) {
-        await tx.rollback().catch(() => {});
         safeAck(ack, {
           ok: false,
           code: e.code || "INV_ERR",
           message: e.message,
           meta: e.meta,
         });
-        console.log(
-          "[INV] error intent=inv:request_full user=",
-          socket.data.userId,
-          "code=",
-          e.code,
-          "msg=",
-          e.message
-        );
       }
     });
   });
@@ -74,23 +58,19 @@ function registerInventoryHandler(io, socket) {
       const tx = await db.sequelize.transaction();
       try {
         const userId = requireUser();
-        const invRt = await ensureInventoryLoaded(userId, tx);
+        const invRt = await ensureInventoryLoaded(userId);
 
         const result = move(invRt, intent);
         await flush(invRt, result, tx);
 
         await tx.commit();
 
-        // ✅ buildInventoryFull(invRt)
         const full = buildInventoryFull(invRt);
         socket.emit("inv:full", full);
         safeAck(ack, { ok: true });
-
-        
       } catch (e) {
         await tx.rollback().catch(() => {});
         safeAck(ack, { ok: false, code: e.code || "INV_ERR", message: e.message, meta: e.meta });
-        
       }
     });
   });
@@ -100,18 +80,16 @@ function registerInventoryHandler(io, socket) {
       const tx = await db.sequelize.transaction();
       try {
         const userId = requireUser();
-        const invRt = await ensureInventoryLoaded(userId, tx);
+        const invRt = await ensureInventoryLoaded(userId);
 
         const result = split(invRt, intent);
         await flush(invRt, result, tx);
 
         await tx.commit();
 
-        // ✅ buildInventoryFull(invRt)
         const full = buildInventoryFull(invRt);
         socket.emit("inv:full", full);
         safeAck(ack, { ok: true });
-        
       } catch (e) {
         await tx.rollback().catch(() => {});
         safeAck(ack, { ok: false, code: e.code || "INV_ERR", message: e.message, meta: e.meta });
@@ -124,18 +102,16 @@ function registerInventoryHandler(io, socket) {
       const tx = await db.sequelize.transaction();
       try {
         const userId = requireUser();
-        const invRt = await ensureInventoryLoaded(userId, tx);
+        const invRt = await ensureInventoryLoaded(userId);
 
         const result = merge(invRt, intent);
         await flush(invRt, result, tx);
 
         await tx.commit();
 
-        // ✅ buildInventoryFull(invRt)
         const full = buildInventoryFull(invRt);
         socket.emit("inv:full", full);
         safeAck(ack, { ok: true });
-        
       } catch (e) {
         await tx.rollback().catch(() => {});
         safeAck(ack, { ok: false, code: e.code || "INV_ERR", message: e.message, meta: e.meta });

@@ -26,15 +26,11 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 1,
       },
 
-      // Limite de peso por container (ex: pouch pequena).
-      // Se null, significa "sem limite próprio" (entra no limite global do jogador).
       max_weight: {
         type: DataTypes.FLOAT,
         allowNull: true,
       },
 
-      // Máscara simples para filtrar categorias (opcional no MVP).
-      // Você pode manter null por enquanto e validar por regra no servidor.
       allowed_categories_mask: {
         type: DataTypes.BIGINT,
         allowNull: true,
@@ -55,9 +51,10 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   GaContainerDef.associate = (models) => {
-    GaContainerDef.hasMany(models.GaUserContainer, {
+    // Alias consistente e previsível
+    GaContainerDef.hasMany(models.GaContainer, {
       foreignKey: "container_def_id",
-      as: "userContainers",
+      as: "containers",
       onUpdate: "CASCADE",
       onDelete: "RESTRICT",
     });

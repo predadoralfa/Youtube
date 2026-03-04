@@ -16,37 +16,69 @@ function asInt(n, fallback = 0) {
   return Number.isFinite(x) ? x : fallback;
 }
 
-// =======================
-// queries (sem depender de include profundo)
-// =======================
-async function loadUserContainers(userId) {
-  const GaUserContainer = db.GaUserContainer;
-  const GaContainerDef = db.GaContainerDef;
+function makeEmptySlots(slotCount) {
+  const n = Math.max(0, asInt(slotCount, 0));
+  return Array.from({ length: n }, (_, i) => ({
+    slotIndex: i,
+    itemInstanceId: null,
+    qty: 0,
+  }));
+}
 
-  // Se seu alias não for "def", ajuste aqui.
-  // Se quebrar por associação, dá pra remover include e buscar defs por query separada.
-  return GaUserContainer.findAll({
-    where: { user_id: userId },
-    include: [
-      {
-        model: GaContainerDef,
-        as: "def",
-        required: false,
-      },
+function ensureSlotCapacity(container, slotIndex) {
+  if (slotIndex < 0) return;
+  while (container.slots.length <= slotIndex) {
+    container.slots.push({
+      slotIndex: container.slots.length,
+      itemInstanceId: null,
+      qty: 0,
+    });
+  }
+}
+
+// =======================
+// queries
+// =======================
+async function loadOwnersForPlayer(userId) {
+  const GaContainerOwner = db.GaContainerOwner;
+  return GaContainerOwner.findAll({
+    where: { owner_kind: "PLAYER", owner_id: userId },
+    order: [
+      ["container_id", "ASC"],
+      ["slot_role", "ASC"],
     ],
+  });
+}
+
+async function loadContainersByIds(containerIds) {
+  if (!containerIds.length) return [];
+  const GaContainer = db.GaContainer;
+
+  // ⚠️ Sem include. Defs serão carregadas separadamente.
+  return GaContainer.findAll({
+    where: { id: containerIds },
     order: [["id", "ASC"]],
   });
 }
 
-async function loadContainerSlots(userContainerIds) {
-  if (!userContainerIds.length) return [];
+async function loadContainerDefsByIds(defIds) {
+  if (!defIds.length) return [];
+  const GaContainerDef = db.GaContainerDef;
 
+  return GaContainerDef.findAll({
+    where: { id: defIds },
+    order: [["id", "ASC"]],
+  });
+}
+
+async function loadSlotsByContainerIds(containerIds) {
+  if (!containerIds.length) return [];
   const GaContainerSlot = db.GaContainerSlot;
 
   return GaContainerSlot.findAll({
-    where: { user_container_id: userContainerIds },
+    where: { container_id: containerIds },
     order: [
-      ["user_container_id", "ASC"],
+      ["container_id", "ASC"],
       ["slot_index", "ASC"],
     ],
   });
@@ -54,7 +86,6 @@ async function loadContainerSlots(userContainerIds) {
 
 async function loadItemInstances(itemInstanceIds) {
   if (!itemInstanceIds.length) return [];
-
   const GaItemInstance = db.GaItemInstance;
 
   return GaItemInstance.findAll({
@@ -65,7 +96,6 @@ async function loadItemInstances(itemInstanceIds) {
 
 async function loadItemDefs(itemDefIds) {
   if (!itemDefIds.length) return [];
-
   const GaItemDef = db.GaItemDef;
 
   return GaItemDef.findAll({
@@ -77,56 +107,75 @@ async function loadItemDefs(itemDefIds) {
 // =======================
 // normalize
 // =======================
+function normalizeOwnerRow(row) {
+  const plain = row.get ? row.get({ plain: true }) : row;
+  return {
+    containerId: String(plain.container_id),
+    slotRole: plain.slot_role ?? null,
+  };
+}
+
 function normalizeContainerRow(row) {
   const plain = row.get ? row.get({ plain: true }) : row;
 
   return {
-    id: asInt(plain.id),
-    slotRole: plain.slot_role ?? null,
+    id: String(plain.id),
+    containerDefId: plain.container_def_id == null ? null : String(plain.container_def_id),
+
+    // slotRole vem do owner
+    slotRole: null,
+
     state: plain.state ?? "ACTIVE",
     rev: asInt(plain.rev, 0),
-    def: plain.def
-      ? {
-          id: asInt(plain.def.id),
-          code: plain.def.code ?? null,
-          name: plain.def.name ?? null,
-          slotCount: asInt(plain.def.slot_count, 0),
-          maxWeight: plain.def.max_weight == null ? null : Number(plain.def.max_weight),
-          allowedCategoriesMask:
-            plain.def.allowed_categories_mask == null
-              ? null
-              : asInt(plain.def.allowed_categories_mask, 0),
-        }
-      : null,
+
+    // preenchidos depois
+    def: null,
+    slotCount: 0,
     slots: [],
+  };
+}
+
+function normalizeContainerDefRow(row) {
+  const plain = row.get ? row.get({ plain: true }) : row;
+
+  return {
+    id: String(plain.id),
+    code: plain.code ?? null,
+    name: plain.name ?? null,
+    slotCount: asInt(plain.slot_count, 0),
+    maxWeight: plain.max_weight == null ? null : Number(plain.max_weight),
+    allowedCategoriesMask:
+      plain.allowed_categories_mask == null ? null : asInt(plain.allowed_categories_mask, 0),
   };
 }
 
 function normalizeSlotRow(row) {
   const plain = row.get ? row.get({ plain: true }) : row;
 
+  const containerId = String(plain.container_id);
   const slotIndex = asInt(plain.slot_index, 0);
 
-  // IMPORTANT: se seu model não mapear field corretamente, aqui vira null/undefined
   const rawId = plain.item_instance_id;
-  const itemInstanceId = rawId == null ? null : asInt(rawId, null);
+  const itemInstanceId = rawId == null ? null : String(rawId);
   const qty = asInt(plain.qty, 0);
 
-  if (itemInstanceId == null || qty <= 0) {
-    return { slotIndex, itemInstanceId: null, qty: 0 };
+  if (!itemInstanceId || qty <= 0) {
+    return { containerId, slotIndex, itemInstanceId: null, qty: 0 };
   }
-
-  return { slotIndex, itemInstanceId, qty };
+  return { containerId, slotIndex, itemInstanceId, qty };
 }
 
-function normalizeItemInstanceRow(row) {
+function normalizeItemInstanceRow(row, userId) {
   const plain = row.get ? row.get({ plain: true }) : row;
 
+  const props = plain.props_json ?? plain.meta ?? null;
+
   return {
-    id: asInt(plain.id),
-    itemDefId: asInt(plain.item_def_id, 0),
+    id: String(plain.id),
+    userId: String(userId),
+    itemDefId: String(plain.item_def_id),
+    props,
     durability: plain.durability == null ? null : asInt(plain.durability, null),
-    meta: plain.meta ?? null,
   };
 }
 
@@ -134,7 +183,7 @@ function normalizeItemDefRow(row) {
   const plain = row.get ? row.get({ plain: true }) : row;
 
   return {
-    id: asInt(plain.id),
+    id: String(plain.id),
     code: plain.code ?? null,
     name: plain.name ?? null,
     category: plain.categoria ?? plain.category ?? null,
@@ -149,68 +198,122 @@ function normalizeItemDefRow(row) {
 async function loadInventoryRuntime(userIdRaw) {
   const userId = String(userIdRaw);
 
-  const containerRows = await loadUserContainers(userId);
-  const containers = containerRows.map(normalizeContainerRow);
+  // 1) owners -> containerIds + slotRoles
+  const ownerRows = await loadOwnersForPlayer(userId);
+  const owners = ownerRows.map(normalizeOwnerRow);
 
-  const userContainerIds = containers.map((c) => c.id).filter((id) => id > 0);
+  const containerIds = uniq(owners.map((o) => o.containerId));
+  const containerRows = await loadContainersByIds(containerIds);
 
-  const slotRows = await loadContainerSlots(userContainerIds);
-
-  // agrupa slots por container
-  const slotsByContainer = new Map(); // user_container_id -> slots[]
-  for (const s of slotRows) {
-    const plain = s.get ? s.get({ plain: true }) : s;
-    const ucId = asInt(plain.user_container_id, 0);
-    if (!slotsByContainer.has(ucId)) slotsByContainer.set(ucId, []);
-    slotsByContainer.get(ucId).push(normalizeSlotRow(s));
+  // 2) containers base
+  const containersById = new Map();
+  for (const row of containerRows) {
+    const c = normalizeContainerRow(row);
+    containersById.set(c.id, c);
   }
 
+  // 3) injeta slotRole no container a partir do owner
+  for (const o of owners) {
+    const c = containersById.get(o.containerId);
+    if (!c) continue;
+    if (c.slotRole == null) c.slotRole = o.slotRole;
+  }
+
+  // 4) carrega defs separadamente
+  const defIds = uniq(
+    Array.from(containersById.values())
+      .map((c) => c.containerDefId)
+      .filter(Boolean)
+  );
+
+  const defRows = await loadContainerDefsByIds(defIds);
+  const defsById = new Map();
+  for (const row of defRows) {
+    const d = normalizeContainerDefRow(row);
+    defsById.set(d.id, d);
+  }
+
+  // 5) injeta def + slotCount + cria slots vazios
+  for (const c of containersById.values()) {
+    const d = c.containerDefId ? defsById.get(c.containerDefId) : null;
+    c.def = d;
+    c.slotCount = d?.slotCount ?? 0;
+    c.slots = makeEmptySlots(c.slotCount);
+  }
+
+  // 6) aplica slots do DB (NUNCA descarta dado autoritativo)
+  const slotRows = await loadSlotsByContainerIds(containerIds);
+  for (const row of slotRows) {
+    const s = normalizeSlotRow(row);
+    const c = containersById.get(s.containerId);
+    if (!c) continue;
+
+    if (s.slotIndex < 0) continue;
+
+    // ✅ expande slots até caber o slotIndex encontrado no DB
+    ensureSlotCapacity(c, s.slotIndex);
+
+    c.slots[s.slotIndex].itemInstanceId = s.itemInstanceId;
+    c.slots[s.slotIndex].qty = s.qty;
+  }
+
+  // 6.1) garante consistência mínima (slotCount reflete o que existe)
+  for (const c of containersById.values()) {
+    c.slotCount = c.slots.length;
+    if (c.def) c.def.slotCount = c.slotCount;
+  }
+
+  const containers = Array.from(containersById.values()).sort((a, b) => Number(a.id) - Number(b.id));
+
+  // 7) containersByRole (contrato das ops)
+  const containersByRole = new Map();
   for (const c of containers) {
-    c.slots = slotsByContainer.get(c.id) ?? [];
+    if (c.slotRole) containersByRole.set(c.slotRole, c);
   }
 
-  // coleta itemInstanceIds referenciados por slots
+  // 8) item instances referenciadas
   const itemInstanceIds = uniq(
     containers
-      .flatMap((c) => c.slots)
+      .flatMap((c) => c.slots ?? [])
       .map((s) => s.itemInstanceId)
       .filter((x) => x != null)
   );
 
   const itemInstanceRows = await loadItemInstances(itemInstanceIds);
-  const itemInstances = itemInstanceRows.map(normalizeItemInstanceRow);
+  const itemInstanceById = new Map();
+  for (const row of itemInstanceRows) {
+    const it = normalizeItemInstanceRow(row, userId);
+    itemInstanceById.set(String(it.id), it);
+  }
 
-  const itemInstancesById = new Map();
-  for (const it of itemInstances) itemInstancesById.set(it.id, it);
-
+  // 9) item defs
   const itemDefIds = uniq(
-    itemInstances.map((it) => it.itemDefId).filter((id) => Number.isFinite(id) && id > 0)
+    Array.from(itemInstanceById.values())
+      .map((it) => it.itemDefId)
+      .filter(Boolean)
   );
 
   const itemDefRows = await loadItemDefs(itemDefIds);
-  const itemDefs = itemDefRows.map(normalizeItemDefRow);
-
   const itemDefsById = new Map();
-  for (const d of itemDefs) itemDefsById.set(d.id, d);
+  for (const row of itemDefRows) {
+    const d = normalizeItemDefRow(row);
+    itemDefsById.set(String(d.id), d);
+  }
 
   return {
     userId,
+    containersByRole,
+    itemInstanceById,
+
+    // usado pelo fullPayload
     containers,
-    itemInstancesById,
     itemDefsById,
 
-    // usado pelo persist/flush e markDirty
     dirtyContainers: new Set(),
-
     loadedAtMs: Date.now(),
   };
 }
 
-/**
- * ensureInventoryLoaded(userId)
- * - usa cache quente do store
- * - carrega do banco só quando necessário
- */
 async function ensureInventoryLoaded(userId) {
   const key = String(userId);
 

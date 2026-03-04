@@ -1,4 +1,4 @@
-// input/inputs.js
+// entities/input/inputs.js
 
 import {
   intentCameraZoom,

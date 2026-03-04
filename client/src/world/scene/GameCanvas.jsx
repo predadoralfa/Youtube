@@ -13,6 +13,7 @@
  * - Montar renderer/scene/camera/luz e desenhar o snapshot recebido.
  * - Instanciar e manter entidades visuais locais (ex: Player placeholder),
  *   sincronizando-as exclusivamente a partir do snapshot.
+ * - Renderizar ACTORS (chests, trees, NPCs) usando ActorFactory
  * - Converter inputs (via InputBus) em INTENÇÕES que são enviadas ao backend
  *   via Socket.IO, sem simular estado do mundo localmente.
  *
@@ -29,11 +30,13 @@
  * FAZ:
  * - Cria renderer, scene, camera e luz
  * - Renderiza chão/plataforma e limites usando o template do snapshot
+ * - Renderiza ACTORS (chests, trees, NPCs) do snapshot.actors[]
  * - Cria um Player placeholder (cilindro) e mantém ele na cena
  * - Sincroniza Player (posição/rotação) usando runtime confirmado
  * - Lê intents do InputBus:
  *   - CAMERA_ZOOM / CAMERA_ORBIT: afetam apenas a câmera local
  *   - MOVE_DIRECTION: envia "move:intent" para o backend com { dir, dt }
+ *   - CLICK_PRIMARY: raycast -> move:click
  *
  * 🤖 IAs:
  * - NÃO remover este comentário
@@ -54,6 +57,7 @@ import { IntentType } from "../input/intents";
 
 import { getSocket } from "@/services/Socket";
 import { createPlayerMesh } from "../entities/character/player";
+import { createActorMesh } from "../entities/actors/ActorFactory";
 
 // FIX: cores devem bater com player.jsx (self/other)
 const COLOR_SELF = "#ff2d55";
@@ -85,7 +89,7 @@ function readPosYawFromEntity(e) {
 }
 
 function toWorldDir(inputDir, camYaw) {
-  // forward da câmera no plano XZ (para onde ela “olha”)
+  // forward da câmera no plano XZ (para onde ela "olha")
   const fx = -Math.sin(camYaw);
   const fz = -Math.cos(camYaw);
 
@@ -131,8 +135,14 @@ export function GameCanvas({ snapshot, worldStoreRef, onInputIntent }) {
   const templateRef = useRef(snapshot?.localTemplate ?? null);
   const versionRef = useRef(snapshot?.localTemplateVersion ?? null);
 
+  // ✅ atores (snapshot.actors[])
+  const actorsRef = useRef(snapshot?.actors ?? []);
+
   // ✅ meshes replicados por entidade (multiplayer)
   const meshByEntityIdRef = useRef(new Map());
+
+  // ✅ meshes de actors por ID
+  const meshByActorIdRef = useRef(new Map());
 
   // FIX: track de selfId para recolorir meshes existentes
   const lastSelfIdRef = useRef(null);
@@ -142,6 +152,7 @@ export function GameCanvas({ snapshot, worldStoreRef, onInputIntent }) {
     runtimeRef.current = snapshot?.runtime ?? null;
     templateRef.current = snapshot?.localTemplate ?? null;
     versionRef.current = snapshot?.localTemplateVersion ?? null;
+    actorsRef.current = snapshot?.actors ?? [];
   }, [snapshot]);
 
   useEffect(() => {
@@ -228,6 +239,35 @@ export function GameCanvas({ snapshot, worldStoreRef, onInputIntent }) {
       mouseNdc.y = -(y * 2 - 1);
     }
 
+    function checkActorClick(clientX, clientY) {
+      setMouseFromClientToNdc(clientX, clientY);
+      raycaster.setFromCamera(mouseNdc, camera);
+
+      // Raycast contra todos os actors
+      const actorMeshes = Array.from(meshByActorIdRef.current.values());
+      if (actorMeshes.length === 0) return null;
+
+      const hits = raycaster.intersectObjects(actorMeshes, true);
+      if (!hits || hits.length === 0) return null;
+
+      // Encontra o actor do primeiro hit
+      const hitObj = hits[0].object;
+      
+      // Procura pelo userData.actorId (pode estar em parent)
+      let current = hitObj;
+      while (current) {
+        if (current.userData?.actorId != null) {
+          return {
+            actorId: current.userData.actorId,
+            actorType: current.userData.actorType,
+          };
+        }
+        current = current.parent;
+      }
+
+      return null;
+    }
+
     function emitClickMove(clientX, clientY, moveDir) {
       // (opcional UX) se WASD está ativo localmente, evita enviar click.
       // A regra REAL é server-side, isso aqui só reduz ruído.
@@ -236,6 +276,18 @@ export function GameCanvas({ snapshot, worldStoreRef, onInputIntent }) {
       const socket = getSocket();
       if (!socket) return;
 
+      // Primeiro tenta raycast contra actors
+      const actorHit = checkActorClick(clientX, clientY);
+      if (actorHit) {
+        console.log("[GAME] Actor clicked:", actorHit);
+        socket.emit("actor:interact", {
+          actorId: actorHit.actorId,
+          type: actorHit.actorType,
+        });
+        return;
+      }
+
+      // Se não acertou actor, tenta raycast contra chão (move click)
       setMouseFromClientToNdc(clientX, clientY);
       raycaster.setFromCamera(mouseNdc, camera);
 
@@ -280,7 +332,7 @@ export function GameCanvas({ snapshot, worldStoreRef, onInputIntent }) {
         return;
       }
 
-      // (NOVO) LMB click via InputBus -> raycast -> move:click
+      // (NOVO) LMB click via InputBus -> raycast -> move:click ou actor:interact
       if (intent.type === IntentType.CLICK_PRIMARY) {
         emitClickMove(intent.clientX, intent.clientY, moveDir);
         return;
@@ -309,7 +361,7 @@ export function GameCanvas({ snapshot, worldStoreRef, onInputIntent }) {
     scene.add(bounds);
 
     // =============================
-    // OVERLAY DEBUG (coords + entities)
+    // OVERLAY DEBUG (coords + entities + actors)
     // =============================
     const overlay = document.createElement("div");
     overlay.style.position = "absolute";
@@ -353,7 +405,53 @@ export function GameCanvas({ snapshot, worldStoreRef, onInputIntent }) {
         });
       }
 
-      // 2) aplica estado confirmado (multiplayer via store)
+      // =============================
+      // 2a) RENDERIZA ACTORS (novo!)
+      // =============================
+      const actors = actorsRef.current ?? [];
+      const nextActorIds = new Set();
+
+      for (const actor of actors) {
+        const actorId = String(actor.id);
+        nextActorIds.add(actorId);
+
+        let mesh = meshByActorIdRef.current.get(actorId);
+        if (!mesh) {
+          // Cria novo actor mesh
+          mesh = createActorMesh(actor);
+          meshByActorIdRef.current.set(actorId, mesh);
+          scene.add(mesh);
+        }
+
+        // Sincroniza posição/rotação
+        const { x, y, z, yaw } = readPosYawFromEntity(actor);
+        mesh.position.set(x, y ?? 0, z);
+        mesh.rotation.y = yaw ?? 0;
+      }
+
+      // Remove actors ausentes
+      for (const [actorId, mesh] of meshByActorIdRef.current.entries()) {
+        if (nextActorIds.has(actorId)) continue;
+
+        scene.remove(mesh);
+        try {
+          mesh.traverse((child) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m) => m.dispose());
+              } else {
+                child.material.dispose();
+              }
+            }
+          });
+        } catch {}
+        meshByActorIdRef.current.delete(actorId);
+      }
+
+      // =============================
+      // 2b) aplica estado confirmado (multiplayer via store)
+      // =============================
       const store = worldStoreRef?.current ?? null;
       const entities = store?.getSnapshot?.() ?? null;
       const selfId = store?.selfId ?? null;
@@ -424,17 +522,17 @@ export function GameCanvas({ snapshot, worldStoreRef, onInputIntent }) {
         // overlay
         if (heroMesh) {
           overlay.textContent =
-            `entities: ${entities.length}  ` +
+            `entities: ${entities.length}  actors: ${actors.length}  ` +
             `self: ${selfKey ?? "?"}  ` +
             `pos: (${heroMesh.position.x.toFixed(2)}, ${heroMesh.position.y.toFixed(
               2
             )}, ${heroMesh.position.z.toFixed(2)})  ` +
             `yaw: ${heroMesh.rotation.y.toFixed(2)}`;
         } else {
-          overlay.textContent = `entities: ${entities.length}  self: ${selfKey ?? "?"}`;
+          overlay.textContent = `entities: ${entities.length}  actors: ${actors.length}  self: ${selfKey ?? "?"}`;
         }
       } else {
-        // 2b) fallback legado: usa runtime do snapshot (single-player placeholder)
+        // 2c) fallback legado: usa runtime do snapshot (single-player placeholder)
         const rt = runtimeRef.current;
         const { x, y, z, yaw } = readPosYawFromRuntime(rt);
 
@@ -450,7 +548,7 @@ export function GameCanvas({ snapshot, worldStoreRef, onInputIntent }) {
         mesh.rotation.y = yaw;
 
         overlay.textContent =
-          `entities: 0 (legacy)  ` +
+          `entities: 0 (legacy)  actors: ${actors.length}  ` +
           `pos: (${x.toFixed(2)}, ${(y ?? 0).toFixed(2)}, ${z.toFixed(
             2
           )})  ` +
@@ -495,6 +593,24 @@ export function GameCanvas({ snapshot, worldStoreRef, onInputIntent }) {
         } catch {}
       }
       meshByEntityIdRef.current.clear();
+
+      // dispose actors
+      for (const [, mesh] of meshByActorIdRef.current.entries()) {
+        scene.remove(mesh);
+        try {
+          mesh.traverse((child) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m) => m.dispose());
+              } else {
+                child.material.dispose();
+              }
+            }
+          });
+        } catch {}
+      }
+      meshByActorIdRef.current.clear();
 
       scene.remove(grid);
       scene.remove(axes);

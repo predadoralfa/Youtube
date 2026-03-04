@@ -15,6 +15,9 @@ const {
 const { ensureInventoryLoaded } = require("../state/inventory/loader");
 const { buildInventoryFull } = require("../state/inventory/fullPayload");
 
+// ACTORS (spawn list)
+const { loadActorsForInstance } = require("./actorLoader");
+
 const bootstrap = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -136,10 +139,13 @@ const bootstrap = async (req, res) => {
     // =====================================
     // INVENTORY (baseline privado no HTTP bootstrap)
     // =====================================
-    // carrega runtime de inventário (cache em memória)
     const invRt = await ensureInventoryLoaded(userId);
     const inventory = buildInventoryFull(invRt);
-    
+
+    // =====================================
+    // ACTORS (spawn list por instância)
+    // =====================================
+    const actors = await loadActorsForInstance(runtime.instance_id);
 
     return res.json({
       ok: true,
@@ -159,6 +165,7 @@ const bootstrap = async (req, res) => {
           disconnected_at: runtime.disconnected_at,
           offline_allowed_at: runtime.offline_allowed_at,
         },
+
         instance: {
           id: instance.id,
           local_id: instance.local_id,
@@ -232,6 +239,9 @@ const bootstrap = async (req, res) => {
             bounds: { size_x: sizeX, size_z: sizeZ },
           },
         },
+
+        // ✅ spawn list (sem itens ainda)
+        actors,
       },
 
       // ✅ Inventário privado do jogador (baseline autoritativo)

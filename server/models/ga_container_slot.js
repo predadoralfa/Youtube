@@ -3,19 +3,19 @@ module.exports = (sequelize, DataTypes) => {
   const GaContainerSlot = sequelize.define(
     "GaContainerSlot",
     {
-      user_container_id: {
+      container_id: {
         type: DataTypes.BIGINT,
-        primaryKey: true,
         allowNull: false,
-        references: { model: "ga_user_container", key: "id" },
+        primaryKey: true,
+        references: { model: "ga_container", key: "id" },
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
 
       slot_index: {
         type: DataTypes.INTEGER,
-        primaryKey: true,
         allowNull: false,
+        primaryKey: true,
       },
 
       item_instance_id: {
@@ -33,19 +33,19 @@ module.exports = (sequelize, DataTypes) => {
       },
     },
     {
-      tableName: "ga_container_slot",      
+      tableName: "ga_container_slot",
       timestamps: false,
       underscored: true,
       indexes: [
-        { fields: ["user_container_id"] },
-        { fields: ["item_instance_id"], unique: true }, // anti-dupe estrutural
+        { fields: ["container_id"] },
+        { unique: true, fields: ["item_instance_id"] },
       ],
     }
   );
 
   GaContainerSlot.associate = (models) => {
-    GaContainerSlot.belongsTo(models.GaUserContainer, {
-      foreignKey: "user_container_id",
+    GaContainerSlot.belongsTo(models.GaContainer, {
+      foreignKey: "container_id",
       as: "container",
       onUpdate: "CASCADE",
       onDelete: "CASCADE",
@@ -53,7 +53,7 @@ module.exports = (sequelize, DataTypes) => {
 
     GaContainerSlot.belongsTo(models.GaItemInstance, {
       foreignKey: "item_instance_id",
-      as: "item",
+      as: "itemInstance",
       onUpdate: "CASCADE",
       onDelete: "SET NULL",
     });

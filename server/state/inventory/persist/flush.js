@@ -1,21 +1,46 @@
 // server/state/inventory/persist/flush.js
+"use strict";
+
 const db = require("../../../models");
 const { INV_ERR, invError } = require("../validate/errors");
 
 async function lockContainersAndSlots(userId, containerIds, slotKeys, tx) {
-  // trava containers
-  await db.GaUserContainer.findAll({
-    where: { id: containerIds, user_id: userId },
+  const ids = Array.from(new Set(containerIds.map(String)));
+  if (!ids.length) return;
+
+  // 1) Trava ownership e valida que o PLAYER é dono dos containers tocados
+  // (sem gambiarra de owner em slot; ownership é a verdade)
+  const owners = await db.GaContainerOwner.findAll({
+    where: {
+      owner_kind: "PLAYER",
+      owner_id: userId,
+      container_id: ids,
+    },
     transaction: tx,
     lock: tx.LOCK.UPDATE,
   });
 
-  // trava slots
+  const owned = new Set(owners.map((o) => String(o.container_id)));
+  for (const id of ids) {
+    if (!owned.has(String(id))) {
+      throw invError(INV_ERR.NOT_OWNER, `container not owned: ${id}`);
+    }
+  }
+
+  // 2) Trava containers (rev/state)
+  await db.GaContainer.findAll({
+    where: { id: ids },
+    transaction: tx,
+    lock: tx.LOCK.UPDATE,
+  });
+
+  // 3) Trava slots tocados
   if (slotKeys.length) {
     const or = slotKeys.map((k) => ({
-      user_container_id: k.containerId,
-      slot_index: k.slotIndex,
+      container_id: String(k.containerId),
+      slot_index: Number(k.slotIndex),
     }));
+
     await db.GaContainerSlot.findAll({
       where: { [db.Sequelize.Op.or]: or },
       transaction: tx,
@@ -35,7 +60,7 @@ async function ensureNewInstance(invRt, needsNewInstance, tx) {
   const created = await db.GaItemInstance.create(
     {
       user_id: invRt.userId,
-      item_def_id: fromII.itemDefId,
+      item_def_id: Number(fromII.itemDefId),
       props_json: fromII.props || null,
     },
     { transaction: tx }
@@ -55,9 +80,9 @@ async function ensureNewInstance(invRt, needsNewInstance, tx) {
 }
 
 async function flush(invRt, result, tx) {
-  const containerIds = Array.from(new Set(result.touchedContainers.map(String)));
+  const containerIds = Array.from(new Set((result.touchedContainers || []).map(String)));
 
-  const slotKeys = result.touchedSlots.map((s) => ({
+  const slotKeys = (result.touchedSlots || []).map((s) => ({
     containerId: String(s.containerId),
     slotIndex: Number(s.slotIndex),
   }));
@@ -71,7 +96,7 @@ async function flush(invRt, result, tx) {
   }
 
   // persiste slots tocados
-  for (const touched of result.touchedSlots) {
+  for (const touched of result.touchedSlots || []) {
     const cid = String(touched.containerId);
     const idx = Number(touched.slotIndex);
     const slot = touched.slot;
@@ -81,7 +106,7 @@ async function flush(invRt, result, tx) {
 
     await db.GaContainerSlot.upsert(
       {
-        user_container_id: cid,
+        container_id: cid,
         slot_index: idx,
         item_instance_id: itemInstanceId ? Number(itemInstanceId) : null,
         qty: itemInstanceId ? Number(slot.qty) : 0,
@@ -95,10 +120,12 @@ async function flush(invRt, result, tx) {
   }
 
   // bump rev no DB (mantenha rev em sync)
-  await db.GaUserContainer.update(
-    { rev: db.Sequelize.literal("rev + 1") },
-    { where: { id: containerIds, user_id: invRt.userId }, transaction: tx }
-  );
+  if (containerIds.length) {
+    await db.GaContainer.update(
+      { rev: db.Sequelize.literal("rev + 1") },
+      { where: { id: containerIds }, transaction: tx }
+    );
+  }
 
   return true;
 }

@@ -80,6 +80,7 @@ const register = async (req, res) => {
 
     // 8) provisiona inventário inicial (HAND_L/HAND_R + slots vazios)
     await ensureStarterInventory(novoUser.id, t);
+    
 
     await t.commit();
 

@@ -60,30 +60,40 @@ function buildInventoryFull(invRt) {
       .flatMap((c) => c.slots ?? [])
       .map((s) => s.itemInstanceId)
       .filter((id) => id != null)
+      .map((id) => String(id))
   );
 
+  // Fonte primária: novo runtime (singular)
+  // Fallback: legado (plural)
+  const instanceMap = invRt.itemInstanceById || invRt.itemInstancesById;
+
   const itemInstances = referencedInstanceIds
-    .map((id) => invRt.itemInstancesById?.get(id))
+    .map((id) => instanceMap?.get(id) || instanceMap?.get(Number(id)))
     .filter(Boolean);
 
-  const itemInstancesPayload = stableSortBy(itemInstances, (it) => it.id).map((it) => ({
-    id: it.id,
-    itemDefId: it.itemDefId,
+  const itemInstancesPayload = stableSortBy(itemInstances, (it) => String(it.id)).map((it) => ({
+    id: String(it.id),
+    itemDefId: String(it.itemDefId),
     durability: it.durability ?? null,
-    meta: it.meta ?? null,
+
+    // compat: alguns pontos chamam "meta", outros "props"/"props_json"
+    meta: it.meta ?? it.props ?? it.props_json ?? null,
   }));
 
   // 3) itemDefs referenciadas pelas instâncias
   const referencedDefIds = uniq(
-    itemInstances.map((it) => it.itemDefId).filter((id) => Number.isFinite(id) && id > 0)
+    itemInstances
+      .map((it) => it.itemDefId)
+      .filter((id) => id != null)
+      .map((id) => String(id))
   );
 
   const itemDefs = referencedDefIds
-    .map((id) => invRt.itemDefsById?.get(id))
+    .map((id) => invRt.itemDefsById?.get(id) || invRt.itemDefsById?.get(Number(id)))
     .filter(Boolean);
 
-  const itemDefsPayload = stableSortBy(itemDefs, (d) => d.id).map((d) => ({
-    id: d.id,
+  const itemDefsPayload = stableSortBy(itemDefs, (d) => String(d.id)).map((d) => ({
+    id: String(d.id),
     code: d.code,
     name: d.name,
     category: d.category ?? null,

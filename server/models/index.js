@@ -30,8 +30,12 @@ const defineGaItemInstance = require("./ga_item_instance");
 
 // NOVOS (INVENTORY)
 const defineGaContainerDef = require("./ga_container_def");
-const defineGaUserContainer = require("./ga_user_container");
+const defineGaContainer = require("./ga_container");
 const defineGaContainerSlot = require("./ga_container_slot");
+const defineGaContainerOwner = require("./ga_container_owner");
+
+// ACTORS
+const defineGaActor = require("./ga_actor");
 
 // =====================================
 // 2. Definições de modelos
@@ -57,13 +61,20 @@ const GaInstance = defineGaInstance(sequelize, DataTypes);
 const GaRenderMaterial = defineGaRenderMaterial(sequelize, DataTypes);
 const GaMeshTemplate = defineGaMeshTemplate(sequelize, DataTypes);
 
+// ITENS
 const GaItemDef = defineGaItemDef(sequelize, DataTypes);
 const GaItemDefComponent = defineGaItemDefComponent(sequelize, DataTypes);
 const GaItemInstance = defineGaItemInstance(sequelize, DataTypes);
 
+//CONTEINERS
 const GaContainerDef = defineGaContainerDef(sequelize, DataTypes);
-const GaUserContainer = defineGaUserContainer(sequelize, DataTypes);
+const GaContainer = defineGaContainer(sequelize, DataTypes);
 const GaContainerSlot = defineGaContainerSlot(sequelize, DataTypes);
+const GaContainerOwner = defineGaContainerOwner(sequelize, DataTypes);
+
+// ACTORS
+const GaActor = defineGaActor(sequelize, DataTypes);
+
 
 // =====================================
 // 3. Registry
@@ -76,6 +87,8 @@ const models = {
   GaUserProfile,
   GaUserStats,
   GaUserRuntime,
+
+  GaActor,
 
   GaLocal,
   GaLocalGeometry,
@@ -93,8 +106,11 @@ const models = {
   GaItemInstance,
 
   GaContainerDef,
-  GaUserContainer,
+  GaContainer,
   GaContainerSlot,
+  GaContainerOwner,
+
+  
 };
 
 // =====================================
