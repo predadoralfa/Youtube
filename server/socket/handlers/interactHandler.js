@@ -1,5 +1,7 @@
 // server/socket/handlers/interactHandler.js
 
+const db = require("../../models");
+
 const {
     ensureRuntimeLoaded,
     getRuntime,
@@ -98,6 +100,12 @@ const {
         await ensureRuntimeLoaded(userId);
         const rt = getRuntime(userId);
         if (!rt) return;
+
+        // ✅ NOVO: carregar cooldown dinâmico de ga_user_stats
+        const stats = await db.GaUserStats.findByPk(userId, {
+          attributes: ["collect_cooldown_ms"],
+        });
+        rt.collectCooldownMs = stats?.collect_cooldown_ms ?? 1000;
   
         // blindagem: se caiu / está pendente / offline, ignora
         if (

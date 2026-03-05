@@ -36,7 +36,7 @@
  * - Lê intents do InputBus:
  *   - CAMERA_ZOOM / CAMERA_ORBIT: afetam apenas a câmera local
  *   - MOVE_DIRECTION: envia "move:intent" para o backend com { dir, dt }
- *   - CLICK_PRIMARY: raycast -> move:click / select target
+ *   - CLICK_PRIMARY: raycast -> select target / move:click (se WASD não ativo)
  *   - INTERACT_PRESS / INTERACT_RELEASE: envia interact:start/stop com target selecionado
  *
  * 🤖 IAs:
@@ -203,7 +203,6 @@ export function GameCanvas({
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
 
-    // debug helpers (se quiser tirar depois, ok)
     const grid = new THREE.GridHelper(Math.max(sizeX, sizeZ), 20);
     grid.position.set(0, 0.001, 0);
     scene.add(grid);
@@ -265,7 +264,7 @@ export function GameCanvas({
       const t = pickTargetFromHitObject(hitObj);
       if (!t) return null;
 
-      // não selecionar self (se store tiver selfId)
+      // não selecionar self
       if (t.kind === "PLAYER") {
         const store = worldStoreRef?.current ?? null;
         const selfId = store?.selfId ?? null;
@@ -292,20 +291,25 @@ export function GameCanvas({
       onTargetSelect?.({ kind: t.kind, id: String(t.id) });
     }
 
+    // ✅ MUDANÇA AQUI: selecionar sempre, mesmo com WASD; mover no chão só se WASD não ativo
     function emitClick(clientX, clientY, moveDir) {
-      if (!(moveDir.x === 0 && moveDir.z === 0)) return;
-
       const socket = getSocket();
       if (!socket) return;
 
+      // 1) SEMPRE tenta selecionar alvo (independente do WASD)
       const picked = tryPickTarget(clientX, clientY);
       if (picked?.target) {
         setSelection(picked.target, picked.hitObject);
         return;
       }
 
+      // 2) Se não acertou alvo, limpar seleção
       clearSelection();
 
+      // 3) Se WASD está ativo, NÃO envia move:click no chão (evita briga de controle)
+      if (!(moveDir.x === 0 && moveDir.z === 0)) return;
+
+      // 4) Caso contrário, raycast no chão e envia move:click
       setMouseFromClientToNdc(clientX, clientY);
       raycaster.setFromCamera(mouseNdc, camera);
 
@@ -329,7 +333,6 @@ export function GameCanvas({
 
       socket.emit("interact:start", {
         target: { kind: t.kind, id: String(t.id) },
-        // MVP: raio fixo (equip/atributos depois)
         stopRadius: 1.25,
       });
     }
@@ -370,7 +373,6 @@ export function GameCanvas({
         return;
       }
 
-      // ✅ NOVO: SPACE hold (interact)
       if (intent.type === IntentType.INTERACT_PRESS) {
         emitInteractStart();
         return;
@@ -380,7 +382,6 @@ export function GameCanvas({
         return;
       }
 
-      // fallback: repassa outros intents para o runtime
       onInputIntent?.(intent);
     });
 

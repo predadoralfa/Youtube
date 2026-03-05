@@ -19,6 +19,13 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.FLOAT,
         allowNull: false,
         defaultValue: 5
+      },
+
+      collect_cooldown_ms: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        defaultValue: 1000,
+        comment: "Cooldown em milissegundos entre coletas de actors (ex: BAU)"
       }
     },
     {

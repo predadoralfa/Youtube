@@ -9,6 +9,21 @@
  * - NÃO depende de socket.
  * - Apenas cache em memória para consulta rápida (ex: interact).
  *
+ * Shape do actor:
+ * {
+ *   id: string,
+ *   instanceId: string,
+ *   pos: { x, y, z },
+ *   status: "ACTIVE" | "DISABLED",
+ *   containers: [{
+ *     slotRole: string,
+ *     containerId: number,
+ *     containerDefId: number,
+ *     state: string,
+ *     rev: number
+ *   }]
+ * }
+ *
  * Fonte da verdade de carga:
  * - worldService.bootstrap (carrega via service/actorLoader e chama addActor)
  *
@@ -16,7 +31,7 @@
  * - Quando houver spawn/despawn/move de actor, atualize aqui via API.
  */
 
-const actorsById = new Map(); // actorId(string) -> { id, instanceId, pos:{x,y,z}, status }
+const actorsById = new Map(); // actorId(string) -> { id, instanceId, pos:{x,y,z}, status, containers:[] }
 const actorsByInstance = new Map(); // instanceId(string) -> Set(actorId)
 
 function toKey(v) {
@@ -34,6 +49,15 @@ function addActor(actor) {
   const id = toKey(actor.id);
   const instanceId = toKey(actor.instanceId);
 
+  // Normaliza containers (vem de actorLoader.js já populado)
+  const containers = (actor.containers ?? []).map((c) => ({
+    slotRole: String(c.slotRole ?? ""),
+    containerId: toNum(c.containerId, 0),
+    containerDefId: c.containerDefId == null ? null : toNum(c.containerDefId, 0),
+    state: String(c.state ?? "ACTIVE"),
+    rev: toNum(c.rev, 0),
+  }));
+
   const record = {
     id,
     instanceId,
@@ -43,6 +67,7 @@ function addActor(actor) {
       z: toNum(actor.pos?.z, 0),
     },
     status: actor.status ?? "ACTIVE",
+    containers, // ✅ NOVO
   };
 
   actorsById.set(id, record);
@@ -88,6 +113,11 @@ function getActor(actorId) {
   return actorsById.get(toKey(actorId)) || null;
 }
 
+function getActorContainers(actorId) {
+  const actor = actorsById.get(toKey(actorId));
+  return actor?.containers ?? [];
+}
+
 function getActorsForInstance(instanceId) {
   const set = actorsByInstance.get(toKey(instanceId));
   if (!set) return [];
@@ -114,6 +144,7 @@ module.exports = {
   updateActorPos,
   removeActor,
   getActor,
+  getActorContainers,
   getActorsForInstance,
   clearInstance,
 };

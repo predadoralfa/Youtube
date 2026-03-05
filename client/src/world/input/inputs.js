@@ -31,7 +31,7 @@ export function bindInputs(domElement, bus) {
   };
 
   function emitMove() {
-    const x = (keys.d ? 1 : 0) + (keys.a ? -1 : 0);
+    const x = (keys.d ? -1 : 0) + (keys.a ? 1 : 0);
     const z = (keys.s ? 1 : 0) + (keys.w ? -1 : 0);
     bus.emit(intentMoveDirection(x, z));
   }

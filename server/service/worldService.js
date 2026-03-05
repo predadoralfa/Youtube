@@ -157,6 +157,7 @@ const bootstrap = async (req, res) => {
           z: a.pos?.z ?? a.pos_z ?? 0,
         },
         status: a.status ?? "ACTIVE",
+        containers: a.containers ?? [], // ✅ NOVO: passar containers do actor
       });
     }
 

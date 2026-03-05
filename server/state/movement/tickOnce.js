@@ -10,6 +10,9 @@ const { bumpRev, toDelta } = require("./entity");
 const { emitDeltaToInterest } = require("./emit");
 const { handleChunkTransition } = require("./chunkTransition");
 
+// ✅ NOVO: coleta de actors
+const { attemptCollectFromActor } = require("../../service/actorCollectService");
+
 /**
  * Um tick de movimento (processa CLICK-to-move).
  * Mantém exatamente o comportamento do arquivo original.
@@ -61,9 +64,63 @@ function tickOnce(io, nowMsValue) {
 
     // chegou (server-side)
     if (dist <= stopR) {
-      rt.moveTarget = null;
-      rt.moveMode = "STOP";
-      if (rt.action !== "idle") rt.action = "idle";
+      // ================================================================
+      // ✅ SE INTERACT ATIVO (HOLD-TO-COLLECT):
+      // ✅ NÃO PARA O MOVIMENTO, CONTINUA PARA COLETAR EM LOOP
+      // ================================================================
+      if (rt.interact?.active && rt.interact?.kind === "ACTOR") {
+        const lastCollect = rt.lastActorCollectAtMs ?? 0;
+        const collectCooldown = rt.collectCooldownMs ?? 1000;
+
+        // Respeita cooldown de 1seg entre coletas
+        if (t >= lastCollect + collectCooldown) {
+          rt.lastActorCollectAtMs = t;
+
+          console.log("[COLLECT] Coletando (hold-to-collect)", {
+            userId: rt.userId,
+            actorId: rt.interact.id,
+            dist,
+          });
+
+          // Fire-and-forget: não bloqueia o tick loop
+          attemptCollectFromActor(rt.userId, rt.interact.id)
+            .then((result) => {
+              if (!result?.ok) {
+                console.warn(
+                  `[COLLECT] Erro ao coletar: userId=${rt.userId} actorId=${rt.interact.id} error=${result?.error}`
+                );
+                return;
+              }
+
+              // ✅ Coleta bem-sucedida: emitir eventos para client
+              const activeSocket = getActiveSocket(rt.userId);
+              if (activeSocket) {
+                activeSocket.emit("actor:collected", {
+                  actorId: String(rt.interact.id),
+                  actorDisabled: result.actorDisabled,
+                  inventory: result.inventoryFull,
+                });
+              }
+            })
+            .catch((err) => {
+              console.error(
+                `[COLLECT] Erro ao coletar: userId=${rt.userId} actorId=${rt.interact.id}`,
+                err
+              );
+            });
+        }
+
+        // ✅ MANTÉM moveTarget e chunk para continuar coletando
+        // Não faz o continue abaixo que pararia o loop
+        // Continua para fazer emit de move:state (feedback ao client)
+      } else {
+        // ================================================================
+        // SE NÃO ESTÁ EM INTERACT LOOP: PARA NORMALMENTE
+        // ================================================================
+        rt.moveTarget = null;
+        rt.moveMode = "STOP";
+        if (rt.action !== "idle") rt.action = "idle";
+      }
 
       bumpRev(rt);
       markRuntimeDirty(rt.userId, t);
@@ -82,6 +139,12 @@ function tickOnce(io, nowMsValue) {
         });
       }
 
+      // ✅ SÓ FAZ CONTINUE SE NÃO ESTÁ EM INTERACT LOOP
+      if (!rt.interact?.active || rt.interact?.kind !== "ACTOR") {
+        continue;
+      }
+      // Se está em loop de coleta, continua para voltar ao início do for
+      // e fazer movimento novamente no próximo tick (caso afaste)
       continue;
     }
 
