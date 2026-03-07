@@ -1,4 +1,6 @@
 // server/state/movement/tickOnce.js
+// ✨ ATUALIZADO: Adiciona movimento aleatório de inimigos (ETAPA 2)
+// TODO resto do código permanece IDÊNTICO
 
 const { getAllRuntimes, markRuntimeDirty } = require("../runtimeStore");
 const { moveUserChunk, computeChunkFromPos } = require("../presenceIndex");
@@ -13,17 +15,28 @@ const { handleChunkTransition } = require("./chunkTransition");
 // ✅ NOVO: coleta de actors
 const { attemptCollectFromActor } = require("../../service/actorCollectService");
 
+// ✨ NOVO: movimento de inimigos (ETAPA 2)
+const { tickEnemyMovement } = require("../enemies/enemyMovement");
+const { emitEnemyDelta } = require("../enemies/enemyEmit");
+
 /**
- * Um tick de movimento (processa CLICK-to-move).
- * Mantém exatamente o comportamento do arquivo original.
+ * Um tick de movimento (processa CLICK-to-move + movimento aleatório de inimigos).
+ * 
+ * ETAPA 1: Movimento de players (código original, intacto)
+ * ETAPA 2: Movimento de inimigos (novo, adiciona ao final)
  */
 function tickOnce(io, nowMsValue) {
   const t = nowMsValue;
 
+  // ========================================
+  // ETAPA 1: Movimento de PLAYERS
+  // (código original abaixo, SEM MUDANÇAS)
+  // ========================================
+
   for (const rt of getAllRuntimes()) {
     if (!rt) continue;
 
-    // ignora grace/offline: não “anda durante o pending”
+    // ignora grace/offline: não "anda durante o pending"
     if (rt.connectionState === "DISCONNECTED_PENDING" || rt.connectionState === "OFFLINE") {
       continue;
     }
@@ -213,6 +226,33 @@ function tickOnce(io, nowMsValue) {
         rev: rt.rev ?? 0,
         chunk: rt.chunk ?? { cx, cz },
       });
+    }
+  }
+
+  // ========================================
+  // ETAPA 2: Movimento de INIMIGOS (NOVO)
+  // ========================================
+  // Processa movimento aleatório de inimigos
+  // de todas as instâncias ativas
+  
+  const allRuntimes = getAllRuntimes();
+  const uniqueInstanceIds = new Set();
+
+  // Coletar IDs únicos de instâncias
+  for (const rt of allRuntimes) {
+    if (rt?.instanceId) {
+      uniqueInstanceIds.add(rt.instanceId);
+    }
+  }
+
+  // Processar inimigos de cada instância
+  for (const instanceId of uniqueInstanceIds) {
+    const dt = 0.05; // 50ms em segundos (DT_MAX)
+    const changedEnemies = tickEnemyMovement(instanceId, t, dt);
+
+    // Emitir deltas dos inimigos que mudaram
+    for (const enemy of changedEnemies) {
+      emitEnemyDelta(io, enemy);
     }
   }
 }

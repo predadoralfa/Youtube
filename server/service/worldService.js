@@ -15,11 +15,19 @@ const {
 const { ensureInventoryLoaded } = require("../state/inventory/loader");
 const { buildInventoryFull } = require("../state/inventory/fullPayload");
 
-// ACTORS (spawn list)
+// ACTORS
 const { loadActorsForInstance } = require("./actorLoader");
+const {
+  addActor,
+  clearInstance: clearActorsInstance,
+} = require("../state/actorsRuntimeStore");
 
-// ✅ NOVO: runtime store autoritativo de actors (cache em memória)
-const { addActor, clearInstance } = require("../state/actorsRuntimeStore");
+// ENEMIES
+const { loadEnemiesForInstance } = require("./enemyLoader");
+const {
+  addEnemy,
+  clearInstance: clearEnemiesInstance,
+} = require("../state/enemies/enemiesRuntimeStore");
 
 const bootstrap = async (req, res) => {
   try {
@@ -145,8 +153,7 @@ const bootstrap = async (req, res) => {
     // =====================================
     const actors = await loadActorsForInstance(runtime.instance_id);
 
-    // ✅ Popula runtime store de actors para uso em interact/start etc.
-    clearInstance(runtime.instance_id);
+    clearActorsInstance(runtime.instance_id);
     for (const a of actors) {
       addActor({
         id: a.id,
@@ -157,8 +164,18 @@ const bootstrap = async (req, res) => {
           z: a.pos?.z ?? a.pos_z ?? 0,
         },
         status: a.status ?? "ACTIVE",
-        containers: a.containers ?? [], // ✅ NOVO: passar containers do actor
+        containers: a.containers ?? [],
       });
+    }
+
+    // =====================================
+    // ENEMIES
+    // =====================================
+    const enemies = await loadEnemiesForInstance(runtime.instance_id);
+
+    clearEnemiesInstance(runtime.instance_id);
+    for (const enemy of enemies) {
+      addEnemy(enemy);
     }
 
     return res.json({

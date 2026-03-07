@@ -83,10 +83,7 @@ cliente/
         │
         ├── hooks/
         │   └── useActorCollection.js         ✨ NOVO - escuta evento de coleta
-        │
-        └── components/
-            └── CooldownBar.jsx               ✨ NOVO (opcional - removido se não quer)
-            └── CooldownBar.css               ✨ NOVO (opcional)
+
 ```
 
 ---

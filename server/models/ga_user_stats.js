@@ -15,6 +15,48 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "CASCADE"
       },
 
+      hp_current: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        defaultValue: 100
+      },
+
+      hp_max: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        defaultValue: 100
+      },
+
+      stamina_current: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        defaultValue: 100
+      },
+
+      stamina_max: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        defaultValue: 100
+      },
+
+      attack_power: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        defaultValue: 10
+      },
+
+      defense: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        defaultValue: 0
+      },
+
+      attack_speed: {
+        type: DataTypes.FLOAT,
+        allowNull: false,
+        defaultValue: 1
+      },
+
       move_speed: {
         type: DataTypes.FLOAT,
         allowNull: false,

@@ -29,6 +29,7 @@ app.use((req, res, next) => {
 app.use("/auth", authRouter);
 app.use("/world", worldRouter);
 
+
 // =====================================
 // BOOTSTRAP
 // =====================================

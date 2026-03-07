@@ -14,6 +14,7 @@
  * - Instanciar e manter entidades visuais locais (ex: Player placeholder),
  *   sincronizando-as exclusivamente a partir do snapshot.
  * - Renderizar ACTORS (chests, trees, NPCs) usando ActorFactory
+ * - Renderizar INIMIGOS como esferas coloridas (NOVO - Fase 2)
  * - Converter inputs (via InputBus) em INTENÇÕES que são enviadas ao backend
  *   via Socket.IO, sem simular estado do mundo localmente.
  *
@@ -31,6 +32,7 @@
  * - Cria renderer, scene, camera e luz
  * - Renderiza chão/plataforma e limites usando o template do snapshot
  * - Renderiza ACTORS (chests, trees, NPCs) do snapshot.actors[]
+ * - Renderiza INIMIGOS como esferas coloridas da store (NOVO)
  * - Cria um Player placeholder (cilindro) e mantém ele na cena
  * - Sincroniza Player (posição/rotação) usando runtime confirmado
  * - Lê intents do InputBus:
@@ -61,9 +63,26 @@ import { createPlayerMesh } from "../entities/character/player";
 import { createActorMesh } from "../entities/actors/ActorFactory";
 import { TargetMarker } from "./TargetMarker";
 
-// FIX: cores devem bater com player.jsx (self/other)
 const COLOR_SELF = "#ff2d55";
 const COLOR_OTHER = "#2d7dff";
+
+const ENEMY_COLORS = {
+  WILD_RABBIT: 0xff6b35,
+  GOBLIN: 0x4ade80,
+  WOLF: 0xef4444,
+  DEFAULT: 0x94a3b8,
+};
+
+function getEnemyColor(displayName) {
+  if (!displayName) return ENEMY_COLORS.DEFAULT;
+
+  const name = String(displayName).toUpperCase();
+  if (name.includes("RABBIT")) return ENEMY_COLORS.WILD_RABBIT;
+  if (name.includes("GOBLIN")) return ENEMY_COLORS.GOBLIN;
+  if (name.includes("WOLF")) return ENEMY_COLORS.WOLF;
+
+  return ENEMY_COLORS.DEFAULT;
+}
 
 function normalize2D(x, z) {
   const len = Math.hypot(x, z);
@@ -134,8 +153,26 @@ function pickTargetFromHitObject(obj) {
       };
     }
 
-    if (ud.playerId != null) return { kind: "PLAYER", id: String(ud.playerId) };
-    if (ud.entityId != null) return { kind: "PLAYER", id: String(ud.entityId) };
+    if (ud.kind === "ENEMY" && ud.entityId != null) {
+      return {
+        kind: "ENEMY",
+        id: String(ud.entityId),
+      };
+    }
+
+    if (ud.playerId != null) {
+      return {
+        kind: "PLAYER",
+        id: String(ud.playerId),
+      };
+    }
+
+    if (ud.kind === "PLAYER" && ud.entityId != null) {
+      return {
+        kind: "PLAYER",
+        id: String(ud.entityId),
+      };
+    }
 
     cur = cur.parent;
   }
@@ -170,11 +207,12 @@ export function GameCanvas({
 
   const meshByEntityIdRef = useRef(new Map());
   const meshByActorIdRef = useRef(new Map());
+  const meshByEnemyIdRef = useRef(new Map());
 
   const lastSelfIdRef = useRef(null);
 
-  const selectedTargetRef = useRef(null); // { kind, id, actorType? }
-  const selectedObjectRef = useRef(null); // THREE.Object3D
+  const selectedTargetRef = useRef(null);
+  const selectedObjectRef = useRef(null);
 
   const [marker, setMarker] = useState({ visible: false, x: 0, y: 0 });
 
@@ -250,9 +288,11 @@ export function GameCanvas({
 
       const actorMeshes = Array.from(meshByActorIdRef.current.values());
       const entityMeshes = Array.from(meshByEntityIdRef.current.values());
+      const enemyMeshes = Array.from(meshByEnemyIdRef.current.values());
 
       const candidates = [];
       for (const m of actorMeshes) candidates.push(m);
+      for (const m of enemyMeshes) candidates.push(m);
       for (const m of entityMeshes) candidates.push(m);
 
       if (candidates.length === 0) return null;
@@ -264,7 +304,6 @@ export function GameCanvas({
       const t = pickTargetFromHitObject(hitObj);
       if (!t) return null;
 
-      // não selecionar self
       if (t.kind === "PLAYER") {
         const store = worldStoreRef?.current ?? null;
         const selfId = store?.selfId ?? null;
@@ -291,25 +330,20 @@ export function GameCanvas({
       onTargetSelect?.({ kind: t.kind, id: String(t.id) });
     }
 
-    // ✅ MUDANÇA AQUI: selecionar sempre, mesmo com WASD; mover no chão só se WASD não ativo
     function emitClick(clientX, clientY, moveDir) {
       const socket = getSocket();
       if (!socket) return;
 
-      // 1) SEMPRE tenta selecionar alvo (independente do WASD)
       const picked = tryPickTarget(clientX, clientY);
       if (picked?.target) {
         setSelection(picked.target, picked.hitObject);
         return;
       }
 
-      // 2) Se não acertou alvo, limpar seleção
       clearSelection();
 
-      // 3) Se WASD está ativo, NÃO envia move:click no chão (evita briga de controle)
       if (!(moveDir.x === 0 && moveDir.z === 0)) return;
 
-      // 4) Caso contrário, raycast no chão e envia move:click
       setMouseFromClientToNdc(clientX, clientY);
       raycaster.setFromCamera(mouseNdc, camera);
 
@@ -385,7 +419,6 @@ export function GameCanvas({
       onInputIntent?.(intent);
     });
 
-    // bounds wireframe
     const yLine = 0.2;
     const halfX = sizeX / 2;
     const halfZ = sizeZ / 2;
@@ -403,7 +436,6 @@ export function GameCanvas({
     bounds.frustumCulled = false;
     scene.add(bounds);
 
-    // loop
     let alive = true;
     const clock = new THREE.Clock();
 
@@ -431,7 +463,6 @@ export function GameCanvas({
         });
       }
 
-      // ACTORS
       const actors = actorsRef.current ?? [];
       const nextActorIds = new Set();
 
@@ -478,13 +509,68 @@ export function GameCanvas({
         meshByActorIdRef.current.delete(actorId);
       }
 
-      // entities store
       const store = worldStoreRef?.current ?? null;
       const entities = store?.getSnapshot?.() ?? null;
       const selfId = store?.selfId ?? null;
 
       if (Array.isArray(entities) && entities.length > 0) {
         const selfKey = selfId == null ? null : String(selfId);
+        const nextEnemyIds = new Set();
+
+        const allEntities = entities;
+        const enemies = allEntities.filter((e) => {
+          const eid = String(e?.entityId ?? "");
+          return eid !== selfKey && !isNaN(Number(eid));
+        });
+
+        for (const enemy of enemies) {
+          const enemyId = String(enemy.entityId);
+          nextEnemyIds.add(enemyId);
+
+          let mesh = meshByEnemyIdRef.current.get(enemyId);
+          if (!mesh) {
+            const color = getEnemyColor(enemy.displayName);
+            const geometry = new THREE.SphereGeometry(0.5, 16, 16);
+            const material = new THREE.MeshStandardMaterial({
+              color,
+              metalness: 0.3,
+              roughness: 0.6,
+            });
+
+            mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = false;
+
+            mesh.userData.kind = "ENEMY";
+            mesh.userData.entityId = enemyId;
+            mesh.userData.displayName = enemy.displayName;
+
+            meshByEnemyIdRef.current.set(enemyId, mesh);
+            scene.add(mesh);
+          }
+
+          const { x, z, yaw } = readPosYawFromEntity(enemy);
+          mesh.position.set(x, 0.5, z);
+          mesh.rotation.y = yaw;
+        }
+
+        for (const [enemyId, mesh] of meshByEnemyIdRef.current.entries()) {
+          if (nextEnemyIds.has(enemyId)) continue;
+
+          const sel = selectedTargetRef.current;
+          if (sel?.kind === "ENEMY" && String(sel.id) === String(enemyId)) {
+            clearSelection();
+          }
+
+          scene.remove(mesh);
+          try {
+            mesh.geometry?.dispose?.();
+          } catch {}
+          try {
+            mesh.material?.dispose?.();
+          } catch {}
+          meshByEnemyIdRef.current.delete(enemyId);
+        }
 
         if (lastSelfIdRef.current !== selfKey) {
           for (const [id, mesh] of meshByEntityIdRef.current.entries()) {
@@ -500,6 +586,8 @@ export function GameCanvas({
           const entityIdRaw = e?.entityId;
           if (entityIdRaw == null) continue;
           const entityId = String(entityIdRaw);
+
+          if (!isNaN(Number(entityId)) && entityId !== selfKey) continue;
 
           nextIds.add(entityId);
 
@@ -571,7 +659,6 @@ export function GameCanvas({
         update(mesh, dt);
       }
 
-      // marker update (throttle)
       if (markerAccum >= 0.05) {
         markerAccum = 0;
 
@@ -622,6 +709,17 @@ export function GameCanvas({
       }
       meshByEntityIdRef.current.clear();
 
+      for (const [, mesh] of meshByEnemyIdRef.current.entries()) {
+        scene.remove(mesh);
+        try {
+          mesh.geometry?.dispose?.();
+        } catch {}
+        try {
+          mesh.material?.dispose?.();
+        } catch {}
+      }
+      meshByEnemyIdRef.current.clear();
+
       for (const [, mesh] of meshByActorIdRef.current.entries()) {
         scene.remove(mesh);
         try {
@@ -651,7 +749,7 @@ export function GameCanvas({
       selectedObjectRef.current = null;
       setMarker({ visible: false, x: 0, y: 0 });
     };
-  }, []); // monta uma vez
+  }, []);
 
   return (
     <div

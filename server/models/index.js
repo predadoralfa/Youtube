@@ -12,6 +12,17 @@ const defineGaUserProfile = require("./ga_user_profile");
 const defineGaUserStats = require("./ga_user_stats");
 const defineGaUserRuntime = require("./ga_user_runtime");
 
+// SPAWN
+const defineGaSpawnEntry = require("./ga_spawn_entry");
+const defineGaSpawnPoint = require("./ga_spawn_point");
+
+// ENEMY
+const defineGaEnemyDef = require("./ga_enemy_def");
+const defineGaEnemyDefStats = require("./ga_enemy_def_stats");
+const defineGaEnemyInstance = require("./ga_enemy_instance");
+const defineGaEnemyInstanceStats = require("./ga_enemy_instance_stats");
+
+
 // WORLD
 const defineGaLocal = require("./ga_local");
 const defineGaLocalGeometry = require("./ga_local_geometry");
@@ -48,6 +59,16 @@ const GaUserProfile = defineGaUserProfile(sequelize, DataTypes);
 const GaUserStats = defineGaUserStats(sequelize, DataTypes);
 const GaUserRuntime = defineGaUserRuntime(sequelize, DataTypes);
 
+// SPAWN MODELS
+const GaSpawnEntry = defineGaSpawnEntry(sequelize, DataTypes);
+const GaSpawnPoint = defineGaSpawnPoint(sequelize, DataTypes);
+
+// ENEMY MODELS
+const GaEnemyDef = defineGaEnemyDef(sequelize, DataTypes);
+const GaEnemyDefStats = defineGaEnemyDefStats(sequelize, DataTypes);
+const GaEnemyInstance = defineGaEnemyInstance(sequelize, DataTypes);
+const GaEnemyInstanceStats = defineGaEnemyInstanceStats(sequelize, DataTypes);
+
 // WORLD MODELS
 const GaLocal = defineGaLocal(sequelize, DataTypes);
 const GaLocalGeometry = defineGaLocalGeometry(sequelize, DataTypes);
@@ -81,35 +102,51 @@ const GaActor = defineGaActor(sequelize, DataTypes);
 // =====================================
 
 const models = {
+  // CORE
   GaEraDef,
-  
+
+  // SPAWN
+  GaSpawnEntry,
+  GaSpawnPoint,
+
+  // ENEMY
+  GaEnemyDef,
+  GaEnemyDefStats,
+  GaEnemyInstance,
+  GaEnemyInstanceStats,
+
+  // USER
   GaUser,
   GaUserProfile,
   GaUserStats,
   GaUserRuntime,
 
+  // ACTOR
   GaActor,
 
+  // WORLD
   GaLocal,
   GaLocalGeometry,
   GaLocalVisual,
   GaMaterial,
 
+  // INSTANCE
   GaInstance,
 
   // RENDER (NOVO)
   GaRenderMaterial,
   GaMeshTemplate,
 
+  // ITEM
   GaItemDef,
   GaItemDefComponent,
   GaItemInstance,
 
+  // CONTAINER
   GaContainerDef,
   GaContainer,
   GaContainerSlot,
   GaContainerOwner,
-
   
 };
 
