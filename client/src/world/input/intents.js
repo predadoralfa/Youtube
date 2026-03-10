@@ -11,17 +11,34 @@ export const IntentType = {
   // UI
   UI_TOGGLE_INVENTORY: "UI_TOGGLE_INVENTORY",
 
-  // (NOVO) Gameplay: interação (segurar barra de espaço)
+  // Gameplay: interação canônica
   INTERACT_PRESS: "INTERACT_PRESS",
   INTERACT_RELEASE: "INTERACT_RELEASE",
+
+  // Compatibilidade transitória
+  INTERACT_PRIMARY_DOWN: "INTERACT_PRIMARY_DOWN",
+  INTERACT_PRIMARY_UP: "INTERACT_PRIMARY_UP",
+
+  // Seleção
+  TARGET_SELECT: "TARGET_SELECT",
+  TARGET_CLEAR: "TARGET_CLEAR",
 };
 
 export function intentCameraZoom(delta) {
-  return { type: IntentType.CAMERA_ZOOM, delta, ts: performance.now() };
+  return {
+    type: IntentType.CAMERA_ZOOM,
+    delta,
+    ts: performance.now(),
+  };
 }
 
 export function intentCameraOrbit(dx, dy) {
-  return { type: IntentType.CAMERA_ORBIT, dx, dy, ts: performance.now() };
+  return {
+    type: IntentType.CAMERA_ORBIT,
+    dx,
+    dy,
+    ts: performance.now(),
+  };
 }
 
 export function intentMoveDirection(x, z) {
@@ -32,7 +49,7 @@ export function intentMoveDirection(x, z) {
   };
 }
 
-// LMB (só coords; raycast/decisão é no GameCanvas)
+// LMB: só coords; raycast/decisão ocorre fora do input system
 export function intentClickPrimary(clientX, clientY) {
   return {
     type: IntentType.CLICK_PRIMARY,
@@ -42,16 +59,61 @@ export function intentClickPrimary(clientX, clientY) {
   };
 }
 
-// UI: toggle inventário (decisão de abrir/fechar é fora do GameCanvas)
+// UI
 export function intentUiToggleInventory() {
-  return { type: IntentType.UI_TOGGLE_INVENTORY, ts: performance.now() };
+  return {
+    type: IntentType.UI_TOGGLE_INVENTORY,
+    ts: performance.now(),
+  };
 }
 
-// (NOVO) Interação: spacebar
+// Interação canônica
 export function intentInteractPress() {
-  return { type: IntentType.INTERACT_PRESS, ts: performance.now() };
+  return {
+    type: IntentType.INTERACT_PRESS,
+    ts: performance.now(),
+  };
 }
 
 export function intentInteractRelease() {
-  return { type: IntentType.INTERACT_RELEASE, ts: performance.now() };
+  return {
+    type: IntentType.INTERACT_RELEASE,
+    ts: performance.now(),
+  };
+}
+
+// Compatibilidade transitória
+export function intentInteractPrimaryDown() {
+  return {
+    type: IntentType.INTERACT_PRIMARY_DOWN,
+    ts: performance.now(),
+  };
+}
+
+export function intentInteractPrimaryUp() {
+  return {
+    type: IntentType.INTERACT_PRIMARY_UP,
+    ts: performance.now(),
+  };
+}
+
+// Seleção
+export function intentTargetSelect(target) {
+  return {
+    type: IntentType.TARGET_SELECT,
+    target: target
+      ? {
+          kind: target.kind != null ? String(target.kind) : null,
+          id: target.id != null ? String(target.id) : null,
+        }
+      : null,
+    ts: performance.now(),
+  };
+}
+
+export function intentTargetClear() {
+  return {
+    type: IntentType.TARGET_CLEAR,
+    ts: performance.now(),
+  };
 }

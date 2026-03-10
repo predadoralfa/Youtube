@@ -2,6 +2,7 @@
 
 const db = require("../../models");
 const { getAliveEnemiesForSpawnPoint, getAliveEnemiesForSpawnEntry, addEnemy } = require("../enemies/enemiesRuntimeStore");
+const { emitEnemySpawn } = require("../enemies/enemyEmit");
 
 /**
  * Utilities de posição
@@ -55,7 +56,7 @@ function determineSpawnQuantity(entry, remainingCapacity) {
  * Um tick de spawn: processa todos os spawners ATIVOS
  * e cria inimigos conforme regras
  */
-async function spawnTick(nowMs) {
+async function spawnTick(nowMs, io = null) {
   try {
     console.log("[SPAWN_TICK] iniciando...");
     
@@ -89,7 +90,7 @@ async function spawnTick(nowMs) {
     for (const spawner of spawners) {
       try {
         console.log(`[SPAWN_TICK] processando spawner=${spawner.id} entries=${spawner.entries?.length ?? 0}`);
-        await processSpawner(spawner, nowMs);
+        await processSpawner(spawner, nowMs, io);
       } catch (err) {
         console.error(`[SPAWN] Error processing spawner=${spawner.id}:`, err);
       }
@@ -104,12 +105,17 @@ async function spawnTick(nowMs) {
 /**
  * Processa um spawner específico
  */
-async function processSpawner(spawner, nowMs) {
+async function processSpawner(spawner, nowMs, io = null) {
   const spawnPointId = spawner.id;
   
-  // Note: instance_id é derivado através de spawn_point_id
-  // Não inserimos instance_id diretamente em ga_enemy_instance
-  // O relacionamento é: enemy → spawn_point → instance
+  // ✨ CORRIGIDO: Obter instanceId do spawner
+  // O spawner foi carregado com instance (via include)
+  const instanceId = spawner.instance?.id ?? spawner.instance_id;
+  
+  if (!instanceId) {
+    console.warn(`[SPAWN] ERROR: spawner=${spawnPointId} SEM INSTANCE_ID! Pulando.`);
+    return; // Não pode spawnar sem saber em qual instância
+  }
 
   const maxAlive = Number(spawner.max_alive) || 1;
 
@@ -117,7 +123,7 @@ async function processSpawner(spawner, nowMs) {
   const aliveEnemies = getAliveEnemiesForSpawnPoint(spawnPointId);
   const aliveCount = aliveEnemies.length;
 
-  console.log(`[SPAWN] spawner=${spawnPointId} vivos=${aliveCount} max=${maxAlive}`);
+  console.log(`[SPAWN] spawner=${spawnPointId} instanceId=${instanceId} vivos=${aliveCount} max=${maxAlive}`);
 
   // Se já atingiu limite, não spawna
   if (aliveCount >= maxAlive) {
@@ -242,14 +248,15 @@ async function processSpawner(spawner, nowMs) {
         attack_speed: Number(baseStats.attack_speed),
       });
 
-      // Adiciona ao runtime store
-      // instanceId é obtido do spawner
-      addEnemy({
+      // ✨ CORRIGIDO: Usar instanceId correto do spawner
+      const enemyRuntimeData = {
         id: enemyInstance.id,
-        instanceId: spawner.instance_id,
+        instanceId: String(instanceId),  // ✨ CORRIGIDO: Usar instanceId obtido do spawner
         spawnPointId: spawnPointId,
         spawnEntryId: selectedEntry.id,
         enemyDefId: enemyDef.id,
+        enemyDefCode: enemyDef.code,
+        displayName: enemyDef.name || enemyDef.code,
         pos: {
           x: Number(enemyInstance.pos_x),
           z: Number(enemyInstance.pos_z),
@@ -268,9 +275,17 @@ async function processSpawner(spawner, nowMs) {
         },
         rev: 0,
         dirty: false,
-      });
+      };
 
-      console.log(`[SPAWN] ✅ created enemy=${enemyInstance.id} spawner=${spawnPointId} type=${enemyDef.code} pos=(${spawnPos.x.toFixed(2)},${spawnPos.z.toFixed(2)})`);
+      // Adiciona ao runtime store
+      addEnemy(enemyRuntimeData);
+
+      // ✨ NOVO: Emite spawn para todos na instância
+      if (io) {
+        emitEnemySpawn(io, enemyRuntimeData);
+      }
+
+      console.log(`[SPAWN] ✅ created enemy=${enemyInstance.id} spawner=${spawnPointId} type=${enemyDef.code} pos=(${spawnPos.x.toFixed(2)},${spawnPos.z.toFixed(2)}) instanceId=${instanceId} [EMITTED]`);
     } catch (err) {
       console.error(
         `[SPAWN] Error creating enemy for spawner=${spawnPointId} entry=${selectedEntry.id}:`,

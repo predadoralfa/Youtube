@@ -5,11 +5,17 @@ const { DEFAULT_SPEED, CONNECTION } = require("./constants");
 const { computeChunk } = require("./chunk");
 const { getRuntime, setRuntime, hasRuntime } = require("./store");
 const { markStatsDirty } = require("./dirty");
+const { loadPlayerCombatStats } = require("./combatLoader");
 
 function sanitizeSpeed(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return null;
   return n;
+}
+
+function toNum(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 async function loadSpeedFromStats(userId) {
@@ -21,6 +27,56 @@ async function loadSpeedFromStats(userId) {
 
   const speed = sanitizeSpeed(stats?.move_speed);
   return speed; // null se inválido/ausente
+}
+
+function applyCombatStatsToRuntime(runtime, combatStats) {
+  const hpCurrent = toNum(combatStats?.hpCurrent, 100);
+  const hpMax = toNum(combatStats?.hpMax, 100);
+  const staminaCurrent = toNum(combatStats?.staminaCurrent, 100);
+  const staminaMax = toNum(combatStats?.staminaMax, 100);
+  const attackPower = toNum(combatStats?.attackPower, 10);
+  const defense = toNum(combatStats?.defense, 0);
+  const attackSpeed = toNum(combatStats?.attackSpeed, 1);
+
+  runtime.combat = {
+    hpCurrent,
+    hpMax,
+    staminaCurrent,
+    staminaMax,
+    attackPower,
+    defense,
+    attackSpeed,
+
+    // runtime-only
+    lastAttackAtMs: Number(runtime?.combat?.lastAttackAtMs ?? 0),
+    targetId: runtime?.combat?.targetId ?? null,
+    targetKind: runtime?.combat?.targetKind ?? null,
+    state: runtime?.combat?.state ?? "IDLE",
+  };
+
+  // compatibilidade + serializer simplificado
+  runtime.hp = hpCurrent;
+  runtime.hpCurrent = hpCurrent;
+  runtime.hpMax = hpMax;
+  runtime.staminaCurrent = staminaCurrent;
+  runtime.staminaMax = staminaMax;
+  runtime.attackPower = attackPower;
+  runtime.defense = defense;
+  runtime.attackSpeed = attackSpeed;
+
+  // shape espelhado para leitores que esperem stats agregados
+  runtime.stats = {
+    ...(runtime.stats ?? {}),
+    hpCurrent,
+    hpMax,
+    staminaCurrent,
+    staminaMax,
+    attackPower,
+    defense,
+    attackSpeed,
+  };
+
+  return runtime;
 }
 
 async function loadBoundsForInstance(instanceId) {
@@ -87,6 +143,7 @@ async function ensureRuntimeLoaded(userId) {
 
   const bounds = await loadBoundsForInstance(row.instance_id);
   const speedFromStats = await loadSpeedFromStats(userId);
+  const combatStats = await loadPlayerCombatStats(userId);
 
   const runtime = {
     // identidade
@@ -101,8 +158,12 @@ async function ensureRuntimeLoaded(userId) {
     },
     yaw: Number(row.yaw ?? 0),
 
-    // estado replicável mínimo (preparação multiplayer)
-    hp: 100,
+    // estado replicável mínimo
+    hp: toNum(combatStats?.hpCurrent, 100), // compat temporária
+    hpCurrent: toNum(combatStats?.hpCurrent, 100),
+    hpMax: toNum(combatStats?.hpMax, 100),
+    staminaCurrent: toNum(combatStats?.staminaCurrent, 100),
+    staminaMax: toNum(combatStats?.staminaMax, 100),
     action: "idle",
     rev: 0,
     chunk: null, // { cx, cz } preenchido abaixo
@@ -147,7 +208,37 @@ async function ensureRuntimeLoaded(userId) {
 
     // Anti-spam simples de click
     lastClickAtMs: 0,
+
+    // ==============================
+    // Combate
+    // ==============================
+    combat: {
+      hpCurrent: 100,
+      hpMax: 100,
+      staminaCurrent: 100,
+      staminaMax: 100,
+      attackPower: 10,
+      defense: 0,
+      attackSpeed: 1,
+      lastAttackAtMs: 0,
+      targetId: null,
+      targetKind: null,
+      state: "IDLE",
+    },
+
+    // espelho agregado para serializers tolerantes
+    stats: {
+      hpCurrent: toNum(combatStats?.hpCurrent, 100),
+      hpMax: toNum(combatStats?.hpMax, 100),
+      staminaCurrent: toNum(combatStats?.staminaCurrent, 100),
+      staminaMax: toNum(combatStats?.staminaMax, 100),
+      attackPower: toNum(combatStats?.attackPower, 10),
+      defense: toNum(combatStats?.defense, 0),
+      attackSpeed: toNum(combatStats?.attackSpeed, 1),
+    },
   };
+
+  applyCombatStatsToRuntime(runtime, combatStats);
 
   runtime.chunk = computeChunk(runtime.pos);
 
@@ -156,7 +247,7 @@ async function ensureRuntimeLoaded(userId) {
 }
 
 /**
- * Atualiza stats acoplados no runtime.
+ * Atualiza stats NÃO-combate acoplados no runtime.
  * Chame isso depois de level up / equip / buff / debuff / mount etc.
  * (não é para ser chamado no moveHandler)
  */
@@ -170,21 +261,35 @@ async function refreshRuntimeStats(userId) {
   runtime.speed = speedFromStats;
   runtime._speedFallback = false;
 
-  // stats mudou (cache em memória), marca dirtyStats
   markStatsDirty(userId);
+  return runtime;
+}
 
+/**
+ * Atualiza apenas o container de combate no runtime.
+ * Não mexe em move_speed.
+ */
+async function refreshRuntimeCombatStats(userId) {
+  const runtime = getRuntime(userId);
+  if (!runtime) return null;
+
+  const combatStats = await loadPlayerCombatStats(userId);
+  applyCombatStatsToRuntime(runtime, combatStats);
+
+  markStatsDirty(userId);
   return runtime;
 }
 
 module.exports = {
   ensureRuntimeLoaded,
   refreshRuntimeStats,
+  refreshRuntimeCombatStats,
 
-  // exporta esses helpers só se você quiser testar isolado no futuro.
-  // não reexporto no "pai" por enquanto, pra não expandir API pública sem motivo.
   _internal: {
     sanitizeSpeed,
+    toNum,
     loadSpeedFromStats,
     loadBoundsForInstance,
+    applyCombatStatsToRuntime,
   },
 };

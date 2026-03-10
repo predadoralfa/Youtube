@@ -7,6 +7,9 @@ const { enforceSingleSession, clearIfCurrentSession } = require("./wiring/sessio
 const { onConnected, installDisconnectHandler } = require("./wiring/lifecycle");
 const { registerGameHandlers } = require("./wiring/handlers");
 
+// ✨ NOVO: Handlers de combate
+const { registerCombatHandlers } = require("./handlers/combat/combatHandler");
+
 function registerSocket(io) {
   installPersistenceHooks(io);
   installAuthMiddleware(io);
@@ -23,6 +26,9 @@ function registerSocket(io) {
 
       // (C) handlers
       registerGameHandlers(io, socket);
+
+      // ✨ NOVO: Handlers de combate
+      registerCombatHandlers(socket, io);
 
       // (D) disconnect -> pending 10s
       installDisconnectHandler({

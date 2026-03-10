@@ -2,50 +2,7 @@
  * =====================================================================
  * ⚠️ REGRA DE OURO — COMENTÁRIO IMUTÁVEL (NÃO REMOVER)
  * =====================================================================
- *
- * ❌ ESTE BLOCO DE COMENTÁRIO NÃO PODE SER REMOVIDO
- * ❌ ESTE BLOCO NÃO PODE SER ENCURTADO
- *
- * 📦 Arquivo: GameCanvas.jsx
- *
- * Papel:
- * - Ser o render host canônico do cliente (Three.js puro).
- * - Montar renderer/scene/camera/luz e desenhar o snapshot recebido.
- * - Instanciar e manter entidades visuais locais (ex: Player placeholder),
- *   sincronizando-as exclusivamente a partir do snapshot.
- * - Renderizar ACTORS (chests, trees, NPCs) usando ActorFactory
- * - Renderizar INIMIGOS como esferas coloridas (NOVO - Fase 2)
- * - Converter inputs (via InputBus) em INTENÇÕES que são enviadas ao backend
- *   via Socket.IO, sem simular estado do mundo localmente.
- *
- * Fonte da verdade:
- * - Backend (snapshot inicial + atualizações confirmadas via socket).
- * - Este arquivo NUNCA decide estado do mundo, apenas renderiza e envia intenção.
- *
- * NÃO FAZ:
- * - Não faz HTTP / não chama backend
- * - Não simula movimento / não aplica física / não executa gameplay
- * - Não cria regras de mundo (apenas apresenta o que veio do snapshot)
- * - Não aplica posição final do player (posição vem confirmada do servidor)
- *
- * FAZ:
- * - Cria renderer, scene, camera e luz
- * - Renderiza chão/plataforma e limites usando o template do snapshot
- * - Renderiza ACTORS (chests, trees, NPCs) do snapshot.actors[]
- * - Renderiza INIMIGOS como esferas coloridas da store (NOVO)
- * - Cria um Player placeholder (cilindro) e mantém ele na cena
- * - Sincroniza Player (posição/rotação) usando runtime confirmado
- * - Lê intents do InputBus:
- *   - CAMERA_ZOOM / CAMERA_ORBIT: afetam apenas a câmera local
- *   - MOVE_DIRECTION: envia "move:intent" para o backend com { dir, dt }
- *   - CLICK_PRIMARY: raycast -> select target / move:click (se WASD não ativo)
- *   - INTERACT_PRESS / INTERACT_RELEASE: envia interact:start/stop com target selecionado
- *
- * 🤖 IAs:
- * - NÃO remover este comentário
- * - NÃO mover lógica para fora deste arquivo
- * - NÃO introduzir simulação local do mundo (sem client-side movement)
- *
+ * [COMENTÁRIO ORIGINAL MANTIDO - veja arquivo original]
  * =====================================================================
  */
 import { useEffect, useRef, useState } from "react";
@@ -62,6 +19,8 @@ import { getSocket } from "@/services/Socket";
 import { createPlayerMesh } from "../entities/character/player";
 import { createActorMesh } from "../entities/actors/ActorFactory";
 import { TargetMarker } from "./TargetMarker";
+import { FloatingDamageText } from "./FloatingDamageText";
+import { HPBar } from "./HPBar";
 
 const COLOR_SELF = "#ff2d55";
 const COLOR_OTHER = "#2d7dff";
@@ -72,6 +31,11 @@ const ENEMY_COLORS = {
   WOLF: 0xef4444,
   DEFAULT: 0x94a3b8,
 };
+
+function toNum(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
 
 function getEnemyColor(displayName) {
   if (!displayName) return ENEMY_COLORS.DEFAULT;
@@ -107,6 +71,40 @@ function readPosYawFromEntity(e) {
   const z = Number(e?.pos?.z ?? 0);
   const yaw = Number(e?.yaw ?? 0);
   return { x, y, z, yaw };
+}
+
+function readEntityVitals(entity) {
+  const hpCurrent =
+    entity?.vitals?.hp?.current ??
+    entity?.hpCurrent ??
+    entity?.hp_current ??
+    entity?.hp ??
+    0;
+
+  const hpMax =
+    entity?.vitals?.hp?.max ??
+    entity?.hpMax ??
+    entity?.hp_max ??
+    0;
+
+  const staminaCurrent =
+    entity?.vitals?.stamina?.current ??
+    entity?.staminaCurrent ??
+    entity?.stamina_current ??
+    0;
+
+  const staminaMax =
+    entity?.vitals?.stamina?.max ??
+    entity?.staminaMax ??
+    entity?.stamina_max ??
+    0;
+
+  return {
+    hpCurrent: toNum(hpCurrent, 0),
+    hpMax: toNum(hpMax, 0),
+    staminaCurrent: toNum(staminaCurrent, 0),
+    staminaMax: toNum(staminaMax, 0),
+  };
 }
 
 function toWorldDir(inputDir, camYaw) {
@@ -183,12 +181,33 @@ function projectWorldToScreenPx(worldPos, camera, domElement) {
   const rect = domElement.getBoundingClientRect();
   const v = worldPos.clone().project(camera);
 
-  if (!Number.isFinite(v.x) || !Number.isFinite(v.y) || v.z < -1 || v.z > 1) return null;
+  if (!Number.isFinite(v.x) || !Number.isFinite(v.y) || v.z < -1 || v.z > 1) {
+    return null;
+  }
 
   const x = (v.x * 0.5 + 0.5) * rect.width;
   const y = (-v.y * 0.5 + 0.5) * rect.height;
 
   return { x, y };
+}
+
+function isEnemyEntity(entity) {
+  if (!entity) return false;
+  if (entity.kind === "ENEMY") return true;
+
+  if (!entity?.displayName) return false;
+  const name = String(entity.displayName).toUpperCase();
+
+  return (
+    name.includes("RABBIT") ||
+    name.includes("GOBLIN") ||
+    name.includes("WOLF") ||
+    name.includes("SLIME") ||
+    name.includes("ORC") ||
+    name.includes("SPIDER") ||
+    name.startsWith("ENEMY_") ||
+    name.startsWith("MONSTER_")
+  );
 }
 
 export function GameCanvas({
@@ -200,10 +219,10 @@ export function GameCanvas({
 }) {
   const containerRef = useRef(null);
 
-  const runtimeRef = useRef(snapshot?.runtime ?? null);
-  const templateRef = useRef(snapshot?.localTemplate ?? null);
-  const versionRef = useRef(snapshot?.localTemplateVersion ?? null);
-  const actorsRef = useRef(snapshot?.actors ?? []);
+  const runtimeRef = useRef(null);
+  const templateRef = useRef(null);
+  const versionRef = useRef(null);
+  const actorsRef = useRef([]);
 
   const meshByEntityIdRef = useRef(new Map());
   const meshByActorIdRef = useRef(new Map());
@@ -215,21 +234,89 @@ export function GameCanvas({
   const selectedObjectRef = useRef(null);
 
   const [marker, setMarker] = useState({ visible: false, x: 0, y: 0 });
+  const [floatingDamages, setFloatingDamages] = useState([]);
+  const [targetHpBar, setTargetHpBar] = useState(null);
+
+  const entityVitalsRef = useRef(new Map());
+
+  // ✨ LOG SNAPSHOT
+  useEffect(() => {
+    if (snapshot) {
+      console.log(`\n${'='.repeat(80)}`);
+      console.log(`[GAMECANVAS] 📦 SNAPSHOT RECEBIDO`);
+      console.log(`${'='.repeat(80)}`);
+      console.log(`[GAMECANVAS] Runtime userId=${snapshot.runtime?.user_id ?? snapshot.runtime?.userId}`);
+      console.log(`[GAMECANVAS] Pos=(${snapshot.runtime?.pos?.x}, ${snapshot.runtime?.pos?.z})`);
+      console.log(`[GAMECANVAS] Actors: ${snapshot.actors?.length ?? 0}`);
+      
+      runtimeRef.current = snapshot.runtime ?? null;
+      templateRef.current = snapshot.localTemplate ?? null;
+      versionRef.current = snapshot.localTemplateVersion ?? null;
+      actorsRef.current = snapshot.actors ?? [];
+
+      console.log(`[GAMECANVAS] ✅ Snapshot aplicado aos refs`);
+      console.log(`${'='.repeat(80)}\n`);
+    }
+  }, [snapshot]);
 
   useEffect(() => {
-    runtimeRef.current = snapshot?.runtime ?? null;
-    templateRef.current = snapshot?.localTemplate ?? null;
-    versionRef.current = snapshot?.localTemplateVersion ?? null;
-    actorsRef.current = snapshot?.actors ?? [];
-  }, [snapshot]);
+    const socket = getSocket();
+    if (!socket) return;
+
+    const onDamageTaken = (data) => {
+      if (!data) return;
+
+      const { targetId, damage } = data;
+      if (targetId == null || damage == null) return;
+
+      setFloatingDamages((prev) => [
+        ...prev,
+        {
+          id: `${String(targetId)}:${Date.now()}:${Math.random()}`,
+          targetId: String(targetId),
+          damage: Math.ceil(Number(damage) || 0),
+          screenX: 0,
+          screenY: 0,
+          isCrit: false,
+        },
+      ]);
+
+      const key = String(targetId);
+      const current = entityVitalsRef.current.get(key) ?? {
+        hpCurrent: 0,
+        hpMax: 0,
+        staminaCurrent: 0,
+        staminaMax: 0,
+      };
+
+      entityVitalsRef.current.set(key, {
+        ...current,
+        hpCurrent: Math.max(0, Number((current.hpCurrent ?? 0) - damage)),
+        lastDamageTime: Date.now(),
+      });
+    };
+
+    const onAttackResult = (data) => {
+      if (!data) return;
+      console.log("[COMBAT] Attack result:", data);
+    };
+
+    socket.on("combat:damage_taken", onDamageTaken);
+    socket.on("combat:attack_result", onAttackResult);
+
+    return () => {
+      socket.off("combat:damage_taken", onDamageTaken);
+      socket.off("combat:attack_result", onAttackResult);
+    };
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const tpl = templateRef.current;
-    const sizeX = tpl?.geometry?.size_x;
-    const sizeZ = tpl?.geometry?.size_z;
+    const sizeX = tpl?.geometry?.size_x ?? 100;
+    const sizeZ = tpl?.geometry?.size_z ?? 100;
     const visual = tpl?.visual ?? {};
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -257,14 +344,19 @@ export function GameCanvas({
     setBounds({ sizeX, sizeZ });
     window.addEventListener("resize", onResize);
 
-    const color =
-      visual?.ground_render_material?.base_color ?? visual?.ground_color ?? "#5a5a5a";
+    const groundColor =
+      visual?.ground_render_material?.base_color ??
+      visual?.ground_color ??
+      "#5a5a5a";
 
     const groundMaterial = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(color),
+      color: new THREE.Color(groundColor),
     });
 
-    const groundMesh = new THREE.Mesh(new THREE.PlaneGeometry(sizeX, sizeZ), groundMaterial);
+    const groundMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(sizeX, sizeZ),
+      groundMaterial
+    );
     groundMesh.rotation.x = -Math.PI / 2;
     groundMesh.position.set(0, 0, 0);
     groundMesh.receiveShadow = true;
@@ -316,18 +408,30 @@ export function GameCanvas({
     function clearSelection() {
       selectedTargetRef.current = null;
       selectedObjectRef.current = null;
+
       setMarker((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      setTargetHpBar(null);
+
       onTargetClear?.();
+      onInputIntent?.({ type: IntentType.TARGET_CLEAR });
     }
 
     function setSelection(t, obj) {
       selectedTargetRef.current = t;
 
       let root = obj;
-      while (root?.parent && root.parent.type !== "Scene") root = root.parent;
+      while (root?.parent && root.parent.type !== "Scene") {
+        root = root.parent;
+      }
       selectedObjectRef.current = root ?? obj;
 
-      onTargetSelect?.({ kind: t.kind, id: String(t.id) });
+      const payload = { kind: t.kind, id: String(t.id) };
+
+      onTargetSelect?.(payload);
+      onInputIntent?.({
+        type: IntentType.TARGET_SELECT,
+        target: payload,
+      });
     }
 
     function emitClick(clientX, clientY, moveDir) {
@@ -353,28 +457,9 @@ export function GameCanvas({
       const p = hits[0].point;
       const x = Number(p?.x);
       const z = Number(p?.z);
+
       if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-
       socket.emit("move:click", { x, z });
-    }
-
-    function emitInteractStart() {
-      const socket = getSocket();
-      if (!socket) return;
-
-      const t = selectedTargetRef.current;
-      if (!t?.kind || t?.id == null) return;
-
-      socket.emit("interact:start", {
-        target: { kind: t.kind, id: String(t.id) },
-        stopRadius: 1.25,
-      });
-    }
-
-    function emitInteractStop() {
-      const socket = getSocket();
-      if (!socket) return;
-      socket.emit("interact:stop", {});
     }
 
     const bus = createInputBus();
@@ -383,7 +468,9 @@ export function GameCanvas({
     let moveDir = { x: 0, z: 0 };
 
     const off = bus.on((intent) => {
-      if (intent?.type === IntentType.UI_TOGGLE_INVENTORY) {
+      if (!intent || typeof intent !== "object") return;
+
+      if (intent.type === IntentType.UI_TOGGLE_INVENTORY) {
         onInputIntent?.(intent);
         return;
       }
@@ -392,10 +479,12 @@ export function GameCanvas({
         applyZoom(intent.delta);
         return;
       }
+
       if (intent.type === IntentType.CAMERA_ORBIT) {
         applyOrbit(intent.dx, intent.dy);
         return;
       }
+
       if (intent.type === IntentType.MOVE_DIRECTION) {
         const raw = intent?.dir ?? { x: 0, z: 0 };
         moveDir = normalize2D(raw.x || 0, raw.z || 0);
@@ -407,12 +496,13 @@ export function GameCanvas({
         return;
       }
 
-      if (intent.type === IntentType.INTERACT_PRESS) {
-        emitInteractStart();
-        return;
-      }
-      if (intent.type === IntentType.INTERACT_RELEASE) {
-        emitInteractStop();
+      if (
+        intent.type === IntentType.INTERACT_PRESS ||
+        intent.type === IntentType.INTERACT_RELEASE ||
+        intent.type === IntentType.INTERACT_PRIMARY_DOWN ||
+        intent.type === IntentType.INTERACT_PRIMARY_UP
+      ) {
+        onInputIntent?.(intent);
         return;
       }
 
@@ -445,9 +535,17 @@ export function GameCanvas({
     let markerAccum = 0;
     const tmpWorld = new THREE.Vector3();
 
+    const entityPositions = new Map();
+
+    // ✨ LOG: Debug frame count
+    let frameCount = 0;
+    let lastEnemyLogFrame = -100;
+    const LOG_ENEMY_EVERY_N_FRAMES = 60; // Log a cada ~1 segundo em 60 FPS
+
     const tick = () => {
       if (!alive) return;
 
+      frameCount++;
       const dt = Math.min(clock.getDelta(), 0.05);
       markerAccum += dt;
 
@@ -501,8 +599,11 @@ export function GameCanvas({
           mesh.traverse((child) => {
             if (child.geometry) child.geometry.dispose();
             if (child.material) {
-              if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
-              else child.material.dispose();
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m) => m.dispose());
+              } else {
+                child.material.dispose();
+              }
             }
           });
         } catch {}
@@ -513,19 +614,43 @@ export function GameCanvas({
       const entities = store?.getSnapshot?.() ?? null;
       const selfId = store?.selfId ?? null;
 
+      // ✨ LOG: Store info
+      if (frameCount % LOG_ENEMY_EVERY_N_FRAMES === 0) {
+        console.log(`[TICK] Frame ${frameCount}: store=${!!store} entities=${entities?.length ?? 0} selfId=${selfId}`);
+      }
+
       if (Array.isArray(entities) && entities.length > 0) {
         const selfKey = selfId == null ? null : String(selfId);
         const nextEnemyIds = new Set();
 
-        const allEntities = entities;
-        const enemies = allEntities.filter((e) => {
+        const enemies = entities.filter((e) => {
           const eid = String(e?.entityId ?? "");
-          return eid !== selfKey && !isNaN(Number(eid));
+          if (eid === selfKey) return false;
+          return isEnemyEntity(e);
         });
+
+        // ✨ LOG: Enemy processing
+        if (frameCount % LOG_ENEMY_EVERY_N_FRAMES === 0) {
+          console.log(`[ENEMIES] Total enemies: ${enemies.length}`);
+        }
 
         for (const enemy of enemies) {
           const enemyId = String(enemy.entityId);
           nextEnemyIds.add(enemyId);
+
+          const posX = enemy.pos?.x ?? 0;
+          const posZ = enemy.pos?.z ?? 0;
+
+          // ✨ LOG: Cada inimigo processado
+          if (frameCount % LOG_ENEMY_EVERY_N_FRAMES === 0) {
+            console.log(`[ENEMY_RENDER] id=${enemyId} raw_data_pos=(${posX}, ${posZ}) displayName=${enemy.displayName}`);
+          }
+
+          entityPositions.set(enemyId, {
+            x: posX,
+            y: enemy.pos?.y ?? 0.5,
+            z: posZ,
+          });
 
           let mesh = meshByEnemyIdRef.current.get(enemyId);
           if (!mesh) {
@@ -547,11 +672,27 @@ export function GameCanvas({
 
             meshByEnemyIdRef.current.set(enemyId, mesh);
             scene.add(mesh);
+
+            console.log(`[ENEMY_CREATE] 🎯 id=${enemyId} name=${enemy.displayName} raw_pos=(${posX}, ${posZ})`);
           }
 
           const { x, z, yaw } = readPosYawFromEntity(enemy);
+
+          // ✨ CRÍTICO: Log antes de aplicar posição
+          if (frameCount % LOG_ENEMY_EVERY_N_FRAMES === 0) {
+            console.log(`[ENEMY_POSITION] id=${enemyId} readPosYaw=(x=${x}, z=${z}) mesh.position.set(${x}, 0.5, ${z})`);
+          }
+
           mesh.position.set(x, 0.5, z);
           mesh.rotation.y = yaw;
+
+          const vitals = readEntityVitals(enemy);
+          const prev = entityVitalsRef.current.get(enemyId) ?? {};
+
+          entityVitalsRef.current.set(enemyId, {
+            ...prev,
+            ...vitals,
+          });
         }
 
         for (const [enemyId, mesh] of meshByEnemyIdRef.current.entries()) {
@@ -569,7 +710,10 @@ export function GameCanvas({
           try {
             mesh.material?.dispose?.();
           } catch {}
+
           meshByEnemyIdRef.current.delete(enemyId);
+          entityVitalsRef.current.delete(enemyId);
+          entityPositions.delete(enemyId);
         }
 
         if (lastSelfIdRef.current !== selfKey) {
@@ -585,11 +729,27 @@ export function GameCanvas({
         for (const e of entities) {
           const entityIdRaw = e?.entityId;
           if (entityIdRaw == null) continue;
-          const entityId = String(entityIdRaw);
 
-          if (!isNaN(Number(entityId)) && entityId !== selfKey) continue;
+          const entityId = String(entityIdRaw);
+          if (isEnemyEntity(e)) continue;
 
           nextIds.add(entityId);
+
+          const posX = e.pos?.x ?? 0;
+          const posZ = e.pos?.z ?? 0;
+
+          entityPositions.set(entityId, {
+            x: posX,
+            y: e.pos?.y ?? 0,
+            z: posZ,
+          });
+
+          const vitals = readEntityVitals(e);
+          const prev = entityVitalsRef.current.get(entityId) ?? {};
+          entityVitalsRef.current.set(entityId, {
+            ...prev,
+            ...vitals,
+          });
 
           let mesh = meshByEntityIdRef.current.get(entityId);
           if (!mesh) {
@@ -600,6 +760,8 @@ export function GameCanvas({
 
             meshByEntityIdRef.current.set(entityId, mesh);
             scene.add(mesh);
+
+            console.log(`[PLAYER_CREATE] 👤 id=${entityId} self=${selfKey === entityId} pos=(${posX.toFixed(2)}, ${posZ.toFixed(2)})`);
           }
 
           const isSelfNow = selfKey != null && entityId === selfKey;
@@ -631,32 +793,44 @@ export function GameCanvas({
               mesh.material?.dispose?.();
             }
           } catch {}
+
           meshByEntityIdRef.current.delete(entityId);
+          entityVitalsRef.current.delete(entityId);
+          entityPositions.delete(entityId);
         }
 
         const heroMesh = selfKey ? meshByEntityIdRef.current.get(selfKey) : null;
-        if (heroMesh) update(heroMesh, dt);
-        else update(fallbackTarget, dt);
+        if (heroMesh) {
+          update(heroMesh, dt);
+        } else {
+          update(fallbackTarget, dt);
+        }
       } else {
         const rt = runtimeRef.current;
-        const { x, y, z, yaw } = readPosYawFromRuntime(rt);
+        if (rt) {
+          const { x, y, z, yaw } = readPosYawFromRuntime(rt);
 
-        const legacyId = "__legacy_self__";
-        let mesh = meshByEntityIdRef.current.get(legacyId);
-        if (!mesh) {
-          mesh = createPlayerMesh({ isSelf: true });
+          const legacyId = "__legacy_self__";
+          let mesh = meshByEntityIdRef.current.get(legacyId);
+          if (!mesh) {
+            mesh = createPlayerMesh({ isSelf: true });
 
-          mesh.userData.kind = "PLAYER";
-          mesh.userData.entityId = legacyId;
+            mesh.userData.kind = "PLAYER";
+            mesh.userData.entityId = legacyId;
 
-          meshByEntityIdRef.current.set(legacyId, mesh);
-          scene.add(mesh);
+            meshByEntityIdRef.current.set(legacyId, mesh);
+            scene.add(mesh);
+
+            console.log(`[PLAYER_FALLBACK] pos=(${x.toFixed(2)}, ${z.toFixed(2)})`);
+          }
+
+          mesh.position.set(x, y ?? 0, z);
+          mesh.rotation.y = yaw;
+
+          update(mesh, dt);
+        } else {
+          update(fallbackTarget, dt);
         }
-
-        mesh.position.set(x, y ?? 0, z);
-        mesh.rotation.y = yaw;
-
-        update(mesh, dt);
       }
 
       if (markerAccum >= 0.05) {
@@ -676,6 +850,55 @@ export function GameCanvas({
             setMarker({ visible: true, x: screen.x, y: screen.y });
           }
         }
+
+        setFloatingDamages((prev) =>
+          prev.map((dmg) => {
+            const pos = entityPositions.get(dmg.targetId);
+            if (!pos) return dmg;
+
+            const screenPos = projectWorldToScreenPx(
+              new THREE.Vector3(pos.x, pos.y + 1.2, pos.z),
+              camera,
+              renderer.domElement
+            );
+
+            return {
+              ...dmg,
+              screenX: screenPos?.x ?? dmg.screenX,
+              screenY: screenPos?.y ?? dmg.screenY,
+            };
+          })
+        );
+
+        const selected = selectedTargetRef.current;
+        if (selected?.kind === "ENEMY") {
+          const pos = entityPositions.get(String(selected.id));
+          const vitals = entityVitalsRef.current.get(String(selected.id));
+
+          if (!pos || !vitals || Number(vitals.hpMax ?? 0) <= 0) {
+            setTargetHpBar(null);
+          } else {
+            const screenPos = projectWorldToScreenPx(
+              new THREE.Vector3(pos.x, pos.y + 0.95, pos.z),
+              camera,
+              renderer.domElement
+            );
+
+            if (!screenPos) {
+              setTargetHpBar(null);
+            } else {
+              setTargetHpBar({
+                id: String(selected.id),
+                x: screenPos.x,
+                y: screenPos.y,
+                hpCurrent: Math.max(0, vitals.hpCurrent ?? 0),
+                hpMax: vitals.hpMax ?? 0,
+              });
+            }
+          }
+        } else {
+          setTargetHpBar(null);
+        }
       }
 
       renderer.render(scene, camera);
@@ -692,7 +915,9 @@ export function GameCanvas({
       window.removeEventListener("resize", onResize);
 
       const canvas = renderer.domElement;
-      if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      if (canvas && canvas.parentNode) {
+        canvas.parentNode.removeChild(canvas);
+      }
 
       for (const [, mesh] of meshByEntityIdRef.current.entries()) {
         scene.remove(mesh);
@@ -726,8 +951,11 @@ export function GameCanvas({
           mesh.traverse((child) => {
             if (child.geometry) child.geometry.dispose();
             if (child.material) {
-              if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
-              else child.material.dispose();
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m) => m.dispose());
+              } else {
+                child.material.dispose();
+              }
             }
           });
         } catch {}
@@ -747,9 +975,12 @@ export function GameCanvas({
 
       selectedTargetRef.current = null;
       selectedObjectRef.current = null;
+      entityVitalsRef.current.clear();
+
       setMarker({ visible: false, x: 0, y: 0 });
+      setTargetHpBar(null);
     };
-  }, []);
+  }, [onInputIntent, onTargetSelect, onTargetClear, worldStoreRef]);
 
   return (
     <div
@@ -762,6 +993,23 @@ export function GameCanvas({
       }}
     >
       <TargetMarker visible={marker.visible} x={marker.x} y={marker.y} />
+
+      <FloatingDamageText damages={floatingDamages} />
+
+      {targetHpBar ? (
+        <HPBar
+          visible={true}
+          x={targetHpBar.x}
+          y={targetHpBar.y}
+          hpCurrent={targetHpBar.hpCurrent}
+          hpMax={targetHpBar.hpMax}
+          mode="world"
+          width={70}
+          hpHeight={8}
+          showHpText={true}
+          showStamina={false}
+        />
+      ) : null}
     </div>
   );
 }

@@ -39,7 +39,7 @@
  *
  * =====================================================================
  */
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { GameCanvas } from "./scene/GameCanvas";
 import { bootstrapWorld } from "@/services/World";
 import { LoadingOverlay } from "@/components/overlays/LoadingOverlay";
@@ -48,13 +48,91 @@ import { createEntitiesStore } from "./state/entitiesStore";
 import { logInventory } from "@/inventory/inventoryProbe";
 import { IntentType } from "./input/intents";
 import { InventoryModal } from "@/components/models/inventory/InventoryModal";
+import { HPBar } from "./scene/HPBar";
 
-// FIX: normaliza IDs para string no recebimento
 const DEBUG_IDS = false;
+
 const toId = (raw) => (raw == null ? null : String(raw));
+
+function toNum(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function debugIds(...args) {
   if (!DEBUG_IDS) return;
   // console.log(...args);
+}
+
+function isInteractDown(type) {
+  return (
+    type === IntentType.INTERACT_PRIMARY_DOWN ||
+    type === IntentType.INTERACT_PRESS
+  );
+}
+
+function isInteractUp(type) {
+  return (
+    type === IntentType.INTERACT_PRIMARY_UP ||
+    type === IntentType.INTERACT_RELEASE
+  );
+}
+
+function normalizeVitals(raw) {
+  const hpCurrent =
+    raw?.vitals?.hp?.current ??
+    raw?.hpCurrent ??
+    raw?.hp_current ??
+    raw?.hp ??
+    0;
+
+  const hpMax =
+    raw?.vitals?.hp?.max ??
+    raw?.hpMax ??
+    raw?.hp_max ??
+    0;
+
+  const staminaCurrent =
+    raw?.vitals?.stamina?.current ??
+    raw?.staminaCurrent ??
+    raw?.stamina_current ??
+    0;
+
+  const staminaMax =
+    raw?.vitals?.stamina?.max ??
+    raw?.staminaMax ??
+    raw?.stamina_max ??
+    0;
+
+  return {
+    hp: {
+      current: toNum(hpCurrent, 0),
+      max: toNum(hpMax, 0),
+    },
+    stamina: {
+      current: toNum(staminaCurrent, 0),
+      max: toNum(staminaMax, 0),
+    },
+  };
+}
+
+function pickBestSelfVitals(snapshot, selfEntity) {
+  if (selfEntity?.vitals) {
+    return normalizeVitals(selfEntity);
+  }
+
+  if (snapshot?.ui?.self?.vitals) {
+    return normalizeVitals(snapshot.ui.self);
+  }
+
+  if (snapshot?.runtime?.vitals) {
+    return normalizeVitals(snapshot.runtime);
+  }
+
+  return {
+    hp: { current: 0, max: 0 },
+    stamina: { current: 0, max: 0 },
+  };
 }
 
 export function GameShell() {
@@ -62,25 +140,16 @@ export function GameShell() {
   const [snapshot, setSnapshot] = useState(null);
   const [sessionReplaced, setSessionReplaced] = useState(null);
 
-  // UI state do runtime (inventário)
   const [inventoryOpen, setInventoryOpen] = useState(false);
-
-  // snapshot autoritativo do inventário (vem do servidor)
   const [inventorySnapshot, setInventorySnapshot] = useState(null);
 
   const socketRef = useRef(null);
-
-  // (NOVO) gate: inventário via socket só depois do join confirmado
   const joinedRef = useRef(false);
-
-  // evita “perder” request se inventário abrir antes do join
   const pendingInvRequestRef = useRef(false);
 
-  // (NOVO) seleção atual (alvo clicado) - não autoritativo; é "hint" pro servidor
-  // { kind: "ACTOR"|"PLAYER", id: "123" } | null
+  // { kind: "ACTOR"|"PLAYER"|"ENEMY", id: "123" } | null
   const selectedTargetRef = useRef(null);
 
-  // Store autoritativo para entidades replicadas (baseline/delta/spawn/despawn)
   const worldStoreRef = useRef(null);
   if (!worldStoreRef.current) {
     worldStoreRef.current = createEntitiesStore();
@@ -88,7 +157,6 @@ export function GameShell() {
 
   const requestInventoryFull = useCallback(() => {
     const s = socketRef.current;
-
     if (!s) return false;
     if (!joinedRef.current) return false;
 
@@ -101,15 +169,19 @@ export function GameShell() {
     if (!s) return false;
     if (!joinedRef.current) return false;
 
-    // Se houver target selecionado, envia como sugestão.
-    // O servidor pode ignorar (fora de range/visibilidade/invalid).
     const t = selectedTargetRef.current;
+
     if (t?.kind && t?.id) {
-      s.emit("interact:start", { target: { kind: String(t.kind), id: String(t.id) } });
+      s.emit("interact:start", {
+        target: {
+          kind: String(t.kind),
+          id: String(t.id),
+        },
+      });
     } else {
-      // Sem alvo: servidor escolhe nearest (fallback)
       s.emit("interact:start", {});
     }
+
     return true;
   }, []);
 
@@ -122,11 +194,27 @@ export function GameShell() {
     return true;
   }, []);
 
+  const closeInventory = useCallback(() => {
+    setInventoryOpen(false);
+  }, []);
+
+  const onTargetSelect = useCallback((target) => {
+    if (!target?.kind || target?.id == null) return;
+
+    selectedTargetRef.current = {
+      kind: String(target.kind),
+      id: String(target.id),
+    };
+  }, []);
+
+  const onTargetClear = useCallback(() => {
+    selectedTargetRef.current = null;
+  }, []);
+
   const handleInputIntent = useCallback(
     (intent) => {
       if (!intent || typeof intent !== "object") return;
 
-      // UI inventory
       if (intent.type === IntentType.UI_TOGGLE_INVENTORY) {
         setInventoryOpen((prev) => {
           const next = !prev;
@@ -142,23 +230,15 @@ export function GameShell() {
         return;
       }
 
-      // (NOVO) SPACE hold: start/stop interação (aproximar e agir)
-      if (intent.type === IntentType.INTERACT_PRIMARY_DOWN) {
-        emitInteractStart();
-        return;
-      }
-
-      if (intent.type === IntentType.INTERACT_PRIMARY_UP) {
-        emitInteractStop();
-        return;
-      }
-
-      // (NOVO) seleção de alvo via canvas
       if (intent.type === IntentType.TARGET_SELECT) {
         const kind = intent?.target?.kind;
         const id = intent?.target?.id;
+
         if (kind && id != null) {
-          selectedTargetRef.current = { kind: String(kind), id: String(id) };
+          selectedTargetRef.current = {
+            kind: String(kind),
+            id: String(id),
+          };
         }
         return;
       }
@@ -167,38 +247,46 @@ export function GameShell() {
         selectedTargetRef.current = null;
         return;
       }
+
+      if (isInteractDown(intent.type)) {
+        emitInteractStart();
+        return;
+      }
+
+      if (isInteractUp(intent.type)) {
+        emitInteractStop();
+      }
     },
     [requestInventoryFull, emitInteractStart, emitInteractStop]
   );
 
-  const closeInventory = useCallback(() => {
-    setInventoryOpen(false);
-  }, []);
-
-  // (NOVO) handlers de seleção vindos do GameCanvas
-  const onTargetSelect = useCallback((target) => {
-    // target: { kind: "ACTOR"|"PLAYER", id: string }
-    if (!target?.kind || target?.id == null) return;
-    selectedTargetRef.current = { kind: String(target.kind), id: String(target.id) };
-  }, []);
-
-  const onTargetClear = useCallback(() => {
-    selectedTargetRef.current = null;
-  }, []);
-
   useEffect(() => {
+    let mounted = true;
+    let localSocket = null;
+
+    let onInvFull = null;
+    let onSocketReady = null;
+    let onWorldBaseline = null;
+    let onEntitySpawn = null;
+    let onEntityDespawn = null;
+    let onEntityDelta = null;
+    let onMoveState = null;
+    let onSessionReplaced = null;
+    let onConnectError = null;
+
     const token = localStorage.getItem("token");
 
     if (!token) {
       setLoading(false);
-      return;
+      return () => {};
     }
 
-    (async () => {
+    const boot = async () => {
       try {
         const data = await bootstrapWorld(token);
 
-        // ✅ seed: inventário autoritativo já vem no bootstrap
+        if (!mounted) return;
+
         logInventory("BOOTSTRAP_HTTP", data?.inventory);
         if (data?.inventory?.ok === true) {
           setInventorySnapshot(data.inventory);
@@ -213,24 +301,21 @@ export function GameShell() {
           return;
         }
 
-        // 1) snapshot inicial (canônico)
         setSnapshot(data.snapshot);
 
-        // 2) socket entra DEPOIS do snapshot existir
         const socket = connectSocket(token);
+        localSocket = socket;
         socketRef.current = socket;
 
-        // reset gates (novo socket)
         joinedRef.current = false;
         pendingInvRequestRef.current = false;
 
         const store = worldStoreRef.current;
 
-        const onInvFull = (payload) => {
+        onInvFull = (payload) => {
           const inv = payload?.ok === true ? payload : payload ?? { ok: false };
           logInventory("SOCKET_INV_FULL", inv);
 
-          // ✅ não sobrescreve snapshot bom com erro
           if (inv?.ok === true) {
             setInventorySnapshot(inv);
           } else {
@@ -238,25 +323,23 @@ export function GameShell() {
           }
         };
 
-        const onSocketReady = (payload) => {
+        onSocketReady = (payload) => {
           if (payload?.ok !== true) return;
 
-          // ✅ join COM ack
           socket.emit("world:join", {}, (ack) => {
+            if (!mounted) return;
             if (ack?.ok === false) return;
 
             joinedRef.current = true;
 
-            // flush pendência se inventário já estiver aberto
-            if (inventoryOpen) {
-              pendingInvRequestRef.current = true;
+            if (pendingInvRequestRef.current) {
               const ok = requestInventoryFull();
               if (ok) pendingInvRequestRef.current = false;
             }
           });
         };
 
-        const onWorldBaseline = (payload) => {
+        onWorldBaseline = (payload) => {
           store.applyBaseline(payload);
 
           const selfId = toId(store.selfId);
@@ -266,8 +349,11 @@ export function GameShell() {
           const self = store.entities.get(String(selfId));
           if (!self) return;
 
+          const selfVitals = normalizeVitals(self);
+
           setSnapshot((prev) => {
             if (!prev || !prev.runtime) return prev;
+
             return {
               ...prev,
               runtime: {
@@ -278,14 +364,24 @@ export function GameShell() {
                   y: self.pos?.y ?? prev.runtime.pos?.y ?? 0,
                   z: self.pos?.z ?? prev.runtime.pos?.z ?? 0,
                 },
+                vitals: selfVitals,
+              },
+              ui: {
+                ...(prev.ui ?? {}),
+                self: {
+                  ...((prev.ui && prev.ui.self) ?? {}),
+                  vitals: selfVitals,
+                },
               },
             };
           });
         };
 
-        const onEntitySpawn = (payload) => {
+        onEntitySpawn = (payload) => {
           let entity = payload?.entity ?? payload;
-          const entityId = toId(entity?.entityId ?? entity?.id ?? entity?.entity_id ?? null);
+          const entityId = toId(
+            entity?.entityId ?? entity?.id ?? entity?.entity_id ?? null
+          );
 
           if (entityId && String(entityId) === String(store.selfId)) {
             debugIds("spawn: skip self", entityId);
@@ -299,7 +395,7 @@ export function GameShell() {
           store.applySpawn(entity);
         };
 
-        const onEntityDespawn = (payload) => {
+        onEntityDespawn = (payload) => {
           const entityId = toId(payload?.entityId ?? payload?.id ?? payload);
 
           if (entityId && String(entityId) === String(store.selfId)) {
@@ -310,22 +406,26 @@ export function GameShell() {
           store.applyDespawn(entityId);
         };
 
-        const onEntityDelta = (payload) => {
+        onEntityDelta = (payload) => {
           store.applyDelta(payload);
 
           const selfId = toId(store.selfId);
           if (!selfId) return;
 
-          const entityId = toId(payload?.entityId ?? payload?.id ?? payload?.entity_id ?? null);
+          const entityId = toId(
+            payload?.entityId ?? payload?.id ?? payload?.entity_id ?? null
+          );
           if (!entityId) return;
-
           if (String(entityId) !== String(selfId)) return;
 
           const self = store.entities.get(String(selfId));
           if (!self) return;
 
+          const selfVitals = normalizeVitals(self);
+
           setSnapshot((prev) => {
             if (!prev || !prev.runtime) return prev;
+
             return {
               ...prev,
               runtime: {
@@ -336,12 +436,20 @@ export function GameShell() {
                   y: self.pos?.y ?? prev.runtime.pos?.y ?? 0,
                   z: self.pos?.z ?? prev.runtime.pos?.z ?? 0,
                 },
+                vitals: selfVitals,
+              },
+              ui: {
+                ...(prev.ui ?? {}),
+                self: {
+                  ...((prev.ui && prev.ui.self) ?? {}),
+                  vitals: selfVitals,
+                },
               },
             };
           });
         };
 
-        const onMoveState = (payload) => {
+        onMoveState = (payload) => {
           setSnapshot((prev) => {
             if (!prev || !prev.runtime) return prev;
 
@@ -375,22 +483,51 @@ export function GameShell() {
             pos: payload?.pos,
             yaw: payload?.yaw,
             hp: payload?.hp,
+            vitals: payload?.vitals,
             action: payload?.action,
+          });
+
+          const self = store.entities.get(String(selfId));
+          if (!self) return;
+
+          const selfVitals = normalizeVitals(self);
+
+          setSnapshot((prev) => {
+            if (!prev || !prev.runtime) return prev;
+
+            return {
+              ...prev,
+              runtime: {
+                ...prev.runtime,
+                vitals: selfVitals,
+              },
+              ui: {
+                ...(prev.ui ?? {}),
+                self: {
+                  ...((prev.ui && prev.ui.self) ?? {}),
+                  vitals: selfVitals,
+                },
+              },
+            };
           });
         };
 
-        const onSessionReplaced = (payload) => {
+        onSessionReplaced = (payload) => {
           setSessionReplaced(payload ?? { reason: "session_replaced" });
+
           try {
             const s = socketRef.current;
             if (s) s.removeAllListeners();
           } catch {}
+
           disconnectSocket();
           socketRef.current = null;
+          localSocket = null;
+
           store.clear();
         };
 
-        const onConnectError = (err) => {
+        onConnectError = (err) => {
           console.error("[SOCKET] connect_error:", err?.message || err);
         };
 
@@ -406,39 +543,54 @@ export function GameShell() {
         socket.on("connect_error", onConnectError);
 
         socket.on("inv:full", onInvFull);
-
-        return () => {
-          const s = socketRef.current;
-          if (s) {
-            s.off("socket:ready", onSocketReady);
-
-            s.off("world:baseline", onWorldBaseline);
-            s.off("entity:spawn", onEntitySpawn);
-            s.off("entity:despawn", onEntityDespawn);
-            s.off("entity:delta", onEntityDelta);
-
-            s.off("move:state", onMoveState);
-            s.off("session:replaced", onSessionReplaced);
-            s.off("connect_error", onConnectError);
-
-            s.off("inv:full", onInvFull);
-          }
-          disconnectSocket();
-          socketRef.current = null;
-
-          joinedRef.current = false;
-          pendingInvRequestRef.current = false;
-
-          selectedTargetRef.current = null;
-        };
       } catch (err) {
+        if (!mounted) return;
         console.error("[GAMESHELL] exception:", err);
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    };
+
+    boot();
+
+    return () => {
+      mounted = false;
+
+      const s = localSocket || socketRef.current;
+      if (s) {
+        if (onSocketReady) s.off("socket:ready", onSocketReady);
+
+        if (onWorldBaseline) s.off("world:baseline", onWorldBaseline);
+        if (onEntitySpawn) s.off("entity:spawn", onEntitySpawn);
+        if (onEntityDespawn) s.off("entity:despawn", onEntityDespawn);
+        if (onEntityDelta) s.off("entity:delta", onEntityDelta);
+
+        if (onMoveState) s.off("move:state", onMoveState);
+        if (onSessionReplaced) s.off("session:replaced", onSessionReplaced);
+        if (onConnectError) s.off("connect_error", onConnectError);
+
+        if (onInvFull) s.off("inv:full", onInvFull);
+      }
+
+      disconnectSocket();
+      socketRef.current = null;
+
+      joinedRef.current = false;
+      pendingInvRequestRef.current = false;
+      selectedTargetRef.current = null;
+    };
+  }, [requestInventoryFull]);
+
+  const selfVitals = useMemo(() => {
+    return pickBestSelfVitals(snapshot, (() => {
+      const store = worldStoreRef.current;
+      const selfId = store?.selfId ? String(store.selfId) : null;
+      if (!selfId) return null;
+      return store.entities.get(selfId) ?? null;
+    })());
+  }, [snapshot]);
 
   if (sessionReplaced) {
     return (
@@ -453,13 +605,39 @@ export function GameShell() {
     <>
       <GameCanvas
         snapshot={snapshot}
-        socket={socketRef.current}
         worldStoreRef={worldStoreRef}
         onInputIntent={handleInputIntent}
-        // (NOVO) seleção de alvo (GameCanvas resolve raycast e chama isso)
         onTargetSelect={onTargetSelect}
         onTargetClear={onTargetClear}
       />
+
+      <div
+        style={{
+          position: "fixed",
+          left: 16,
+          bottom: 16,
+          zIndex: 1100,
+          pointerEvents: "none",
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}
+      >
+        <HPBar
+          visible={true}
+          mode="hud"
+          width={220}
+          hpHeight={18}
+          staminaHeight={12}
+          hpCurrent={selfVitals.hp.current}
+          hpMax={selfVitals.hp.max}
+          staminaCurrent={selfVitals.stamina.current}
+          staminaMax={selfVitals.stamina.max}
+          showHpText={true}
+          showStamina={true}
+          showStaminaText={true}
+        />
+      </div>
 
       <InventoryModal
         open={inventoryOpen}

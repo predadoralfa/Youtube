@@ -1,24 +1,63 @@
 // cliente/src/World/state/entitiesStore.js
 // Store autoritativo de entidades replicadas (baseline/spawn/delta/despawn).
-// - NÃƒÂ£o depende de React.
-// - Controla rev (monotÃƒÂ´nico por entityId).
-// - Baseline ÃƒÂ© verdade completa do interesse atual.
+// - Não depende de React.
+// - Controla rev (monotônico por entityId).
+// - Baseline é verdade completa do interesse atual.
 //
-// Ã¢Å“â€¦ AtualizaÃƒÂ§ÃƒÂµes:
+// Atualizações:
 // - Normaliza entityId/selfId sempre para string (evita bug 1 vs "1").
-// - Baseline compatÃƒÂ­vel com payload.entities (legado) e payload.others (novo).
+// - Baseline compatível com payload.entities (legado) e payload.others (novo).
 // - applyDelta/applyDespawn normalizam id antes de acessar Map.
+// - Preserva kind e vitals (hp/stamina) para HUD e barras.
 
 function toId(raw) {
   if (raw == null) return null;
   return String(raw);
 }
 
-// FIX: debug opcional para verificar normalizaÃƒÂ§ÃƒÂ£o de IDs (desativado por padrÃƒÂ£o)
+function toNum(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+// FIX: debug opcional para verificar normalização de IDs (desativado por padrão)
 const DEBUG_IDS = false;
 function debugIds(...args) {
   if (!DEBUG_IDS) return;
   console.log("[ENTITIES_STORE][IDS]", ...args);
+}
+
+function normalizeVitals(raw) {
+  const vitals = raw?.vitals ?? null;
+  const stats = raw?.stats ?? null;
+
+  const hpCurrent = vitals?.hp?.current ?? raw?.hp ?? stats?.hpCurrent ?? stats?.hp_current;
+  const hpMax = vitals?.hp?.max ?? raw?.hpMax ?? raw?.hp_max ?? stats?.hpMax ?? stats?.hp_max;
+
+  const staminaCurrent =
+    vitals?.stamina?.current ??
+    raw?.staminaCurrent ??
+    raw?.stamina_current ??
+    stats?.staminaCurrent ??
+    stats?.stamina_current;
+
+  const staminaMax =
+    vitals?.stamina?.max ??
+    raw?.staminaMax ??
+    raw?.stamina_max ??
+    stats?.staminaMax ??
+    stats?.stamina_max;
+
+  return {
+    hp: {
+      current: toNum(hpCurrent, 0),
+      max: toNum(hpMax, 0),
+    },
+    stamina: {
+      current: toNum(staminaCurrent, 0),
+      max: toNum(staminaMax, 0),
+    },
+  };
 }
 
 function normalizeEntity(raw) {
@@ -37,12 +76,19 @@ function normalizeEntity(raw) {
       }
     : { x: 0, y: undefined, z: 0 };
 
+  const vitals = normalizeVitals(raw);
+
   const entity = {
     entityId,
+    kind: raw.kind ?? null,
     displayName: raw.displayName ?? raw.display_name ?? null,
     pos,
     yaw: Number(raw.yaw ?? 0),
-    hp: Number(raw.hp ?? 0),
+
+    // compat legado
+    hp: toNum(raw.hp ?? vitals.hp.current, 0),
+
+    vitals,
     action: raw.action ?? "idle",
     rev: Number(raw.rev ?? 0),
   };
@@ -50,12 +96,75 @@ function normalizeEntity(raw) {
   return entity;
 }
 
+/**
+ * ✨ CORRIGIDO: mergePos SEMPRE cria um novo objeto
+ * 
+ * Antes (❌ BUG):
+ * if (!newPos) return oldPos;  // ← Compartilha referência!
+ * 
+ * Agora (✅ CORRETO):
+ * Cria SEMPRE um novo objeto com cópia de valores
+ */
 function mergePos(oldPos, newPos) {
-  if (!newPos) return oldPos;
   return {
-    x: newPos.x != null ? Number(newPos.x) : oldPos.x,
-    y: newPos.y != null ? Number(newPos.y) : oldPos.y,
-    z: newPos.z != null ? Number(newPos.z) : oldPos.z,
+    x: newPos?.x != null ? Number(newPos.x) : (oldPos?.x ?? 0),
+    y: newPos?.y != null ? Number(newPos.y) : (oldPos?.y ?? undefined),
+    z: newPos?.z != null ? Number(newPos.z) : (oldPos?.z ?? 0),
+  };
+}
+
+function mergeVitals(baseVitals, rawDelta, nextHpCompat) {
+  const current = baseVitals ?? {
+    hp: { current: 0, max: 0 },
+    stamina: { current: 0, max: 0 },
+  };
+
+  const deltaVitals = rawDelta?.vitals ?? null;
+  const stats = rawDelta?.stats ?? null;
+
+  const hpCurrent =
+    deltaVitals?.hp?.current ??
+    rawDelta?.hp ??
+    rawDelta?.hpCurrent ??
+    rawDelta?.hp_current ??
+    stats?.hpCurrent ??
+    stats?.hp_current ??
+    nextHpCompat ??
+    current.hp.current;
+
+  const hpMax =
+    deltaVitals?.hp?.max ??
+    rawDelta?.hpMax ??
+    rawDelta?.hp_max ??
+    stats?.hpMax ??
+    stats?.hp_max ??
+    current.hp.max;
+
+  const staminaCurrent =
+    deltaVitals?.stamina?.current ??
+    rawDelta?.staminaCurrent ??
+    rawDelta?.stamina_current ??
+    stats?.staminaCurrent ??
+    stats?.stamina_current ??
+    current.stamina.current;
+
+  const staminaMax =
+    deltaVitals?.stamina?.max ??
+    rawDelta?.staminaMax ??
+    rawDelta?.stamina_max ??
+    stats?.staminaMax ??
+    stats?.stamina_max ??
+    current.stamina.max;
+
+  return {
+    hp: {
+      current: toNum(hpCurrent, 0),
+      max: toNum(hpMax, 0),
+    },
+    stamina: {
+      current: toNum(staminaCurrent, 0),
+      max: toNum(staminaMax, 0),
+    },
   };
 }
 
@@ -78,7 +187,16 @@ export function createEntitiesStore() {
 
   function applyBaseline(payload) {
     // Baseline sempre vence: troca completa do estado replicado.
-    if (!payload || payload.ok !== true) return;
+    console.log("[ENTITIES_STORE] 📦 applyBaseline chamado");
+    console.log("[ENTITIES_STORE] payload.ok:", payload?.ok);
+    console.log("[ENTITIES_STORE] payload.you:", payload?.you);
+    console.log("[ENTITIES_STORE] payload.others:", payload?.others);
+    console.log("[ENTITIES_STORE] payload.entities:", payload?.entities);
+    
+    if (!payload || payload.ok !== true) {
+      console.log("[ENTITIES_STORE] ❌ REJEITADO: !payload ou payload.ok !== true");
+      return;
+    }
 
     state.entities.clear();
 
@@ -88,61 +206,86 @@ export function createEntitiesStore() {
 
     // FIX: normaliza selfId ANTES de inserir others, para evitar "self como other"
     const you = payload.you ?? null;
+    console.log("[ENTITIES_STORE] you (depois de null coalesce):", you);
+    
     let nextSelfId = null;
     let youEntity = null;
 
     if (typeof you === "string" || typeof you === "number") {
       nextSelfId = toId(you);
+      console.log("[ENTITIES_STORE] ✅ you é primitivo (string/number), nextSelfId:", nextSelfId);
       debugIds("baseline: selfId set (primitive)", nextSelfId);
     } else if (you && typeof you === "object") {
+      console.log("[ENTITIES_STORE] you é objeto, normalizando...");
       youEntity = normalizeEntity(you);
+      console.log("[ENTITIES_STORE] youEntity após normalize:", youEntity);
       if (youEntity) {
         nextSelfId = youEntity.entityId;
+        console.log("[ENTITIES_STORE] ✅ youEntity normalizado, nextSelfId:", nextSelfId);
         debugIds("baseline: selfId set (entity)", nextSelfId);
+      } else {
+        console.log("[ENTITIES_STORE] ❌ youEntity é null após normalize!");
       }
+    } else {
+      console.log("[ENTITIES_STORE] ⚠️ you não é primitivo nem objeto:", typeof you);
     }
 
-    // FIX: compat: baseline pode vir como { others } (novo) ou { entities } (legado)
+    // compat: baseline pode vir como { others } (novo) ou { entities } (legado)
     const list = Array.isArray(payload.others)
       ? payload.others
       : Array.isArray(payload.entities)
         ? payload.entities
         : [];
 
+    console.log("[ENTITIES_STORE] others/entities list count:", list.length);
+
     for (const raw of list) {
       const e = normalizeEntity(raw);
       if (!e) continue;
-      // FIX: evita inserir self como "other" se vier indevidamente no baseline
+
+      // evita inserir self como "other" se vier indevidamente no baseline
       if (nextSelfId && e.entityId === nextSelfId) {
+        console.log("[ENTITIES_STORE] 🚫 Pulando self na lista:", e.entityId);
         debugIds("baseline: skip self in others", e.entityId);
         continue;
       }
+
+      console.log("[ENTITIES_STORE] ➕ Adicionando entidade:", e.entityId, e);
       state.entities.set(e.entityId, e);
     }
 
-    // FIX: aplica selfId normalizado (string) no estado
-    // FIX: se baseline nÃ£o enviar "you", mantÃ©m selfId anterior para evitar null/ownership swap
+    // se baseline não enviar "you", mantém selfId anterior para evitar null/ownership swap
     if (nextSelfId == null) {
+      console.log("[ENTITIES_STORE] ⚠️ nextSelfId é NULL! selfId anterior:", state.selfId);
       debugIds("baseline: missing you, keep selfId", state.selfId);
     } else {
+      console.log("[ENTITIES_STORE] ✅ Setando state.selfId para:", nextSelfId);
       state.selfId = nextSelfId;
     }
 
-    // FIX: garante presenÃƒÂ§a do self mesmo se baseline nÃƒÂ£o listar self em "others"
+    // garante presença do self mesmo se baseline não listar self em "others"
     if (youEntity) {
+      console.log("[ENTITIES_STORE] 📍 Garantindo presença do self no mapa");
       const current = state.entities.get(youEntity.entityId);
       if (!current || youEntity.rev >= (current.rev ?? 0)) {
+        console.log("[ENTITIES_STORE] ✅ Inserindo self no mapa:", youEntity.entityId);
         state.entities.set(youEntity.entityId, youEntity);
       }
     }
+
+    console.log("[ENTITIES_STORE] ✅ applyBaseline COMPLETO. state.selfId:", state.selfId);
+    console.log("[ENTITIES_STORE] Entidades no mapa:", Array.from(state.entities.keys()));
   }
 
   function applySpawn(entityRaw) {
     const e = normalizeEntity(entityRaw);
     if (!e) return;
 
-    // FIX: evita tratar self como "other" em spawn
+    console.log("[ENTITIES_STORE] 🎯 applySpawn entityId:", e.entityId, "selfId:", state.selfId);
+
+    // evita tratar self como "other" em spawn
     if (state.selfId && e.entityId === state.selfId) {
+      console.log("[ENTITIES_STORE] 🚫 applySpawn PULANDO SELF:", e.entityId);
       debugIds("spawn: skip self", e.entityId);
       return;
     }
@@ -150,20 +293,27 @@ export function createEntitiesStore() {
     const cur = state.entities.get(e.entityId);
     const curRev = cur?.rev ?? -1;
 
-    // SÃƒÂ³ aplica se rev for maior (ou se nÃƒÂ£o existir)
+    // só aplica se rev for maior (ou se não existir)
     if (!cur || e.rev > curRev) {
+      console.log("[ENTITIES_STORE] ✅ applySpawn ADICIONANDO:", e.entityId);
       state.entities.set(e.entityId, e);
+    } else {
+      console.log("[ENTITIES_STORE] ⏭️ applySpawn IGNORANDO (rev old):", e.entityId, "cur.rev:", curRev, "e.rev:", e.rev);
     }
   }
 
   function applyDespawn(entityIdRaw) {
     const entityId = toId(entityIdRaw);
     if (!entityId) return;
-    // FIX: evita despawn do self por acidente
+
+    // evita despawn do self por acidente
     if (state.selfId && entityId === state.selfId) {
+      console.log("[ENTITIES_STORE] 🚫 applyDespawn PULANDO SELF:", entityId);
       debugIds("despawn: skip self", entityId);
       return;
     }
+
+    console.log("[ENTITIES_STORE] ✅ applyDespawn REMOVENDO:", entityId);
     state.entities.delete(entityId);
   }
 
@@ -181,28 +331,44 @@ export function createEntitiesStore() {
     const cur = state.entities.get(entityId);
     const curRev = cur?.rev ?? -1;
 
-    // Regra obrigatÃƒÂ³ria: sÃƒÂ³ aplica se rev maior
+    // regra obrigatória: só aplica se rev maior
     if (nextRev <= curRev) return;
 
-    // Se nÃƒÂ£o existe ainda, cria com defaults e aplica delta
+    // Se não existe ainda, cria com defaults e aplica delta
     const base =
       cur ??
       normalizeEntity({
         entityId,
+        kind: delta.kind ?? null,
         displayName: null,
         pos: { x: 0, z: 0 },
         yaw: 0,
         hp: 0,
+        vitals: {
+          hp: { current: 0, max: 0 },
+          stamina: { current: 0, max: 0 },
+        },
         action: "idle",
         rev: -1,
       });
 
+    const nextHpCompat = delta.hp != null ? Number(delta.hp) : base.hp;
+    const nextVitals = mergeVitals(base.vitals, delta, nextHpCompat);
+
     const next = {
       ...base,
       rev: nextRev,
+      kind: delta.kind != null ? delta.kind : base.kind,
+      displayName:
+        delta.displayName != null
+          ? delta.displayName
+          : delta.display_name != null
+            ? delta.display_name
+            : base.displayName,
       pos: mergePos(base.pos, delta.pos),
       yaw: delta.yaw != null ? Number(delta.yaw) : base.yaw,
-      hp: delta.hp != null ? Number(delta.hp) : base.hp,
+      hp: nextHpCompat,
+      vitals: nextVitals,
       action: delta.action != null ? delta.action : base.action,
     };
 
@@ -210,12 +376,12 @@ export function createEntitiesStore() {
   }
 
   function getSnapshot() {
-    // Render-friendly: array estÃƒÂ¡vel (sem expor o Map)
+    // Render-friendly: array estável (sem expor o Map)
     return Array.from(state.entities.values());
   }
 
   return {
-    // estado (somente leitura via referÃƒÂªncia)
+    // estado (somente leitura via referência)
     entities: state.entities,
     get selfId() {
       return state.selfId;
@@ -230,7 +396,7 @@ export function createEntitiesStore() {
       return state.t;
     },
 
-    // mutaÃƒÂ§ÃƒÂµes
+    // mutações
     clear,
     applyBaseline,
     applySpawn,

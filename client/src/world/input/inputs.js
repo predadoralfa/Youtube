@@ -36,6 +36,16 @@ export function bindInputs(domElement, bus) {
     bus.emit(intentMoveDirection(x, z));
   }
 
+  function isTypingTarget(target) {
+    if (!target || typeof target !== "object") return false;
+
+    const tag = String(target.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select") return true;
+    if (target.isContentEditable) return true;
+
+    return false;
+  }
+
   // =========================
   // Mouse (click + wheel + orbit)
   // =========================
@@ -62,8 +72,10 @@ export function bindInputs(domElement, bus) {
 
   function onMouseMove(e) {
     if (!orbiting) return;
+
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
+
     lastX = e.clientX;
     lastY = e.clientY;
 
@@ -79,7 +91,6 @@ export function bindInputs(domElement, bus) {
   }
 
   function onWheel(e) {
-    // deltaY positivo = zoom out; negativo = zoom in
     const delta = e.deltaY;
     bus.emit(intentCameraZoom(delta));
     e.preventDefault();
@@ -89,6 +100,8 @@ export function bindInputs(domElement, bus) {
   // Teclado
   // =========================
   function onKeyDown(e) {
+    if (isTypingTarget(e.target)) return;
+
     // evita repetir spam (segurar tecla)
     if (e.repeat) return;
 
@@ -101,18 +114,21 @@ export function bindInputs(domElement, bus) {
       e.preventDefault();
       return;
     }
+
     if (k === "a") {
       keys.a = true;
       emitMove();
       e.preventDefault();
       return;
     }
+
     if (k === "s") {
       keys.s = true;
       emitMove();
       e.preventDefault();
       return;
     }
+
     if (k === "d") {
       keys.d = true;
       emitMove();
@@ -120,22 +136,23 @@ export function bindInputs(domElement, bus) {
       return;
     }
 
-    // I = inventário (mantém seu padrão)
+    // I = inventário
     if (k === "i") {
       bus.emit(intentUiToggleInventory());
       e.preventDefault();
       return;
     }
 
-    // SPACE = interact start
+    // SPACE = interact press
     if (e.code === "Space" || k === " ") {
       bus.emit(intentInteractPress());
       e.preventDefault();
-      return;
     }
   }
 
   function onKeyUp(e) {
+    if (isTypingTarget(e.target)) return;
+
     const k = e.key?.toLowerCase?.();
 
     // WASD
@@ -145,18 +162,21 @@ export function bindInputs(domElement, bus) {
       e.preventDefault();
       return;
     }
+
     if (k === "a") {
       keys.a = false;
       emitMove();
       e.preventDefault();
       return;
     }
+
     if (k === "s") {
       keys.s = false;
       emitMove();
       e.preventDefault();
       return;
     }
+
     if (k === "d") {
       keys.d = false;
       emitMove();
@@ -164,18 +184,16 @@ export function bindInputs(domElement, bus) {
       return;
     }
 
-    // SPACE = interact stop
+    // SPACE = interact release
     if (e.code === "Space" || k === " ") {
       bus.emit(intentInteractRelease());
       e.preventDefault();
-      return;
     }
   }
 
   // =========================
   // Bind
   // =========================
-  // context menu off (pra RMB orbit não abrir menu)
   function onContextMenu(e) {
     e.preventDefault();
   }

@@ -5,16 +5,19 @@ const { spawnTick } = require("./spawnTick");
 
 let _timer = null;
 let _running = false;
+let _io = null; // ✨ NOVO: referência para io
 
-function startSpawnLoop() {
+function startSpawnLoop(io = null) {
   if (_timer) return;
+
+  _io = io; // ✨ NOVO: guardar io
 
   _timer = setInterval(async () => {
     if (_running) return; // evita overlap se o tick demorar
     _running = true;
 
     try {
-      await spawnTick(Date.now());
+      await spawnTick(Date.now(), _io); // ✨ NOVO: passar io
     } catch (err) {
       console.error("[SPAWN] loop error:", err);
     } finally {
@@ -33,6 +36,7 @@ function stopSpawnLoop() {
   clearInterval(_timer);
   _timer = null;
   _running = false;
+  _io = null;
   console.log("[SPAWN] loop stopped");
 }
 

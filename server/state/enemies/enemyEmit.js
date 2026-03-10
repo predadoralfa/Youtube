@@ -1,71 +1,83 @@
 // server/state/enemies/enemyEmit.js
+// ✨ COM LOGS EXTENSOS PARA DEBUG
 
-const { computeChunkFromPos, getUsersInChunks } = require("../presenceIndex");
-const { toDelta } = require("./enemyEntity");
+const { toEntity, toDelta } = require("./enemyEntity");
 
 /**
- * Emite delta de inimigo para todos os players que podem vê-lo (interesse/chunk).
+ * ✨ CORRIGIDO: Emite delta de inimigo para ROOM GERAL DE INSTÂNCIA
+ * (em vez de rooms de chunk específicas)
  * 
- * Estratégia:
- * - Calcula chunk do inimigo
- * - Pega todos os players visíveis naquele chunk
- * - Envia delta para cada um
+ * Razão: Enquanto o mapa é menor que um chunk, todos os players
+ * estão na mesma sala e recebem todos os deltas.
+ * 
+ * TODO: Quando tiver múltiplos chunks, voltar para sistema de interesse
+ * baseado em chunks.
  */
 function emitEnemyDelta(io, enemy) {
-  if (!enemy) return;
+  if (!io || !enemy) {
+    console.warn(`[EMIT_DELTA] ⚠️ io=${!!io} enemy=${!!enemy}`);
+    return;
+  }
 
   const delta = toDelta(enemy);
 
-  // Calcula chunk do inimigo
-  const { cx, cz } = computeChunkFromPos(enemy.pos);
-
-  // Pega todos os players interessados naquele chunk
-  const interestedUserIds = getUsersInChunks(enemy.instanceId, cx, cz);
-  if (!interestedUserIds || interestedUserIds.size === 0) return;
-
-  // Envia delta para cada player do chunk
-  for (const userId of interestedUserIds) {
-    const roomId = `inst:${enemy.instanceId}_${cx}:${cz}`;
-    io.to(roomId).emit("entity:delta", delta);
-  }
+  // ✨ CORRIGIDO: Emitir para room geral da instância
+  const roomId = `inst:${enemy.instanceId}`;
+  
+  console.log(`[EMIT_DELTA] 📤 Enemy delta: id=${enemy.id} displayName=${enemy.displayName} room=${roomId} pos=(${delta.pos?.x}, ${delta.pos?.z})`);
+  
+  io.to(roomId).emit("entity:delta", delta);
+  
+  console.log(`[EMIT_DELTA] ✅ Emitido para room: ${roomId}`);
 }
 
 /**
- * Emite spawn (baseline) de inimigo quando aparece para um player
+ * Emite spawn/baseline de inimigo quando aparece para um player.
+ * Usa o serializer central para manter contrato consistente com baseline/delta.
+ * 
+ * ✨ TAMBÉM CORRIGIDO: Room geral da instância
  */
 function emitEnemySpawn(io, enemy) {
-  if (!enemy) return;
+  if (!io || !enemy) {
+    console.warn(`[EMIT_SPAWN] ⚠️ io=${!!io} enemy=${!!enemy}`);
+    return;
+  }
 
-  const entity = {
-    entityId: String(enemy.id),
-    displayName: enemy.enemyDefCode ?? "Enemy",
-    pos: enemy.pos ?? { x: 0, z: 0 },
-    yaw: Number(enemy.yaw ?? 0),
-    hp: Number(enemy.stats?.hpCurrent ?? 0),
-    action: enemy.action ?? "idle",
-    rev: Number(enemy.rev ?? 0),
-  };
+  const entity = toEntity(enemy);
 
-  // Calcula chunk
-  const { cx, cz } = computeChunkFromPos(enemy.pos);
-  const roomId = `inst:${enemy.instanceId}_${cx}:${cz}`;
-
+  // ✨ CORRIGIDO: Emitir para room geral da instância
+  const roomId = `inst:${enemy.instanceId}`;
+  
+  console.log(`[EMIT_SPAWN] 📤 Enemy spawn: id=${enemy.id} displayName=${enemy.displayName} room=${roomId} pos=(${entity.pos.x}, ${entity.pos.z})`);
+  
   io.to(roomId).emit("entity:spawn", entity);
+  
+  console.log(`[EMIT_SPAWN] ✅ Emitido para room: ${roomId}`);
 }
 
 /**
- * Emite despawn (morte/desaparecimento) de inimigo
+ * Emite despawn de inimigo.
+ * 
+ * ✨ TAMBÉM CORRIGIDO: Room geral da instância
  */
 function emitEnemyDespawn(io, enemy) {
-  if (!enemy) return;
+  if (!io || !enemy) {
+    console.warn(`[EMIT_DESPAWN] ⚠️ io=${!!io} enemy=${!!enemy}`);
+    return;
+  }
 
-  const { cx, cz } = computeChunkFromPos(enemy.pos);
-  const roomId = `inst:${enemy.instanceId}_${cx}:${cz}`;
-
+  // ✨ CORRIGIDO: Emitir para room geral da instância
+  const roomId = `inst:${enemy.instanceId}`;
+  
+  console.log(`[EMIT_DESPAWN] 📤 Enemy despawn: id=${enemy.id} displayName=${enemy.displayName} room=${roomId}`);
+  
   io.to(roomId).emit("entity:despawn", {
     entityId: String(enemy.id),
+    kind: "ENEMY",
     rev: Number(enemy.rev ?? 0),
   });
+  
+  console.log(`[EMIT_DESPAWN] ✅ Emitido para room: ${roomId}`);
 }
 
 module.exports = {

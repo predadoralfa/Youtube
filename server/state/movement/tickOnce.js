@@ -1,6 +1,8 @@
 // server/state/movement/tickOnce.js
-// ✨ ATUALIZADO: Adiciona movimento aleatório de inimigos (ETAPA 2)
-// TODO resto do código permanece IDÊNTICO
+// ✨ ATUALIZADO: Adiciona combate de inimigos (ETAPA 2B)
+// ETAPA 1: Movimento de players (código original, intacto)
+// ETAPA 2A: Movimento aleatório de inimigos (código original)
+// ETAPA 2B: IA DE INIMIGOS - COMBATE (✨ NOVO)
 
 const { getAllRuntimes, markRuntimeDirty } = require("../runtimeStore");
 const { moveUserChunk, computeChunkFromPos } = require("../presenceIndex");
@@ -12,20 +14,25 @@ const { bumpRev, toDelta } = require("./entity");
 const { emitDeltaToInterest } = require("./emit");
 const { handleChunkTransition } = require("./chunkTransition");
 
-// ✅ NOVO: coleta de actors
+// ✅ EXISTENTE: coleta de actors
 const { attemptCollectFromActor } = require("../../service/actorCollectService");
 
-// ✨ NOVO: movimento de inimigos (ETAPA 2)
+// ✅ EXISTENTE: movimento de inimigos
 const { tickEnemyMovement } = require("../enemies/enemyMovement");
 const { emitEnemyDelta } = require("../enemies/enemyEmit");
+const { getEnemiesForInstance } = require("../enemies/enemiesRuntimeStore");
+
+// ✨ NOVO: IA do inimigo (combate)
+const { tickEnemyAI } = require("../enemies/enemyAI");
 
 /**
- * Um tick de movimento (processa CLICK-to-move + movimento aleatório de inimigos).
+ * Um tick de movimento (processa CLICK-to-move + movimento aleatório de inimigos + IA de combate).
  * 
  * ETAPA 1: Movimento de players (código original, intacto)
- * ETAPA 2: Movimento de inimigos (novo, adiciona ao final)
+ * ETAPA 2A: Movimento aleatório de inimigos (código original)
+ * ETAPA 2B: IA do inimigo - perseguição e combate (✨ NOVO)
  */
-function tickOnce(io, nowMsValue) {
+async function tickOnce(io, nowMsValue) {
   const t = nowMsValue;
 
   // ========================================
@@ -230,11 +237,11 @@ function tickOnce(io, nowMsValue) {
   }
 
   // ========================================
-  // ETAPA 2: Movimento de INIMIGOS (NOVO)
+  // ETAPA 2A: Movimento de INIMIGOS (ALEATÓRIO)
   // ========================================
   // Processa movimento aleatório de inimigos
   // de todas as instâncias ativas
-  
+
   const allRuntimes = getAllRuntimes();
   const uniqueInstanceIds = new Set();
 
@@ -252,6 +259,18 @@ function tickOnce(io, nowMsValue) {
 
     // Emitir deltas dos inimigos que mudaram
     for (const enemy of changedEnemies) {
+      emitEnemyDelta(io, enemy);
+    }
+
+    // ========================================
+    // ETAPA 2B: IA DO INIMIGO (COMBATE) ✨ NOVO
+    // ========================================
+    // Perseguição, auto-ataque, timeouts de combate
+    const enemies = getEnemiesForInstance(instanceId);
+    const aiChangedEnemies = await tickEnemyAI(enemies, t, dt);
+
+    // Emitir deltas dos inimigos que mudaram por IA
+    for (const enemy of aiChangedEnemies) {
       emitEnemyDelta(io, enemy);
     }
   }

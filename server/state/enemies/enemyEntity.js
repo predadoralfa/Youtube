@@ -2,47 +2,101 @@
 
 /**
  * Converters para entidades de inimigos.
- * Padrão: mesma estrutura de movement/entity.js, mas para inimigos.
+ * Padrão: compatível com movement/entity.js, mas para ENEMY.
+ * 
+ * ✨ CORRIGIDO: entityId agora usa prefixo "enemy_" para evitar conflito com playerIds
  */
 
+function toNum(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function readHpCurrent(enemy) {
+  return toNum(
+    enemy?.hpCurrent ??
+      enemy?.hp_current ??
+      enemy?.hp ??
+      enemy?.stats?.hpCurrent ??
+      enemy?.stats?.hp_current,
+    0
+  );
+}
+
+function readHpMax(enemy) {
+  return toNum(
+    enemy?.hpMax ??
+      enemy?.hp_max ??
+      enemy?.stats?.hpMax ??
+      enemy?.stats?.hp_max,
+    0
+  );
+}
+
 function bumpRev(enemy) {
-    const cur = Number(enemy.rev ?? 0);
-    enemy.rev = Number.isFinite(cur) ? cur + 1 : 1;
-  }
-  
-  /**
-   * Converte enemy runtime para entity replicável (baseline/spawn).
-   * Padrão compatível com entitiesStore do client.
-   */
-  function toEntity(enemy) {
-    return {
-      entityId: String(enemy.id),
-      displayName: enemy.enemyDefCode ?? "Enemy",
-      pos: enemy.pos ?? { x: 0, z: 0 },
-      yaw: Number(enemy.yaw ?? 0),
-      hp: Number(enemy.stats?.hpCurrent ?? 0),
-      action: enemy.action ?? "idle",
-      rev: Number(enemy.rev ?? 0),
-    };
-  }
-  
-  /**
-   * Converte para delta (atualização incremental).
-   * Reduz payload (só campos que mudam).
-   */
-  function toDelta(enemy) {
-    return {
-      entityId: String(enemy.id),
-      pos: enemy.pos ?? { x: 0, z: 0 },
-      yaw: Number(enemy.yaw ?? 0),
-      hp: Number(enemy.stats?.hpCurrent ?? 0),
-      action: enemy.action ?? "idle",
-      rev: Number(enemy.rev ?? 0),
-    };
-  }
-  
-  module.exports = {
-    bumpRev,
-    toEntity,
-    toDelta,
+  const cur = Number(enemy.rev ?? 0);
+  enemy.rev = Number.isFinite(cur) ? cur + 1 : 1;
+}
+
+/**
+ * ✨ CORRIGIDO: Converte enemy runtime para entity replicável (baseline/spawn).
+ * 
+ * ANTES (❌ BUG):
+ * entityId: String(enemy.id),  // "1", "2" → conflita com playerIds!
+ * 
+ * AGORA (✅ CORRETO):
+ * entityId: `enemy_${enemy.id}`,  // "enemy_1", "enemy_2" → nunca conflita!
+ */
+function toEntity(enemy) {
+  const hpCurrent = readHpCurrent(enemy);
+  const hpMax = readHpMax(enemy);
+
+  return {
+    entityId: `enemy_${enemy.id}`,  // ✨ PREFIXO ADICIONADO
+    kind: "ENEMY",
+    displayName: enemy.enemyDefCode ?? enemy.displayName ?? "Enemy",
+    pos: enemy.pos ?? { x: 0, z: 0 },
+    yaw: Number(enemy.yaw ?? 0),
+    hp: hpCurrent, // compat legado
+    action: enemy.action ?? "idle",
+    rev: Number(enemy.rev ?? 0),
+
+    vitals: {
+      hp: {
+        current: hpCurrent,
+        max: hpMax,
+      },
+    },
   };
+}
+
+/**
+ * ✨ CORRIGIDO: Converte para delta (atualização incremental).
+ */
+function toDelta(enemy) {
+  const hpCurrent = readHpCurrent(enemy);
+  const hpMax = readHpMax(enemy);
+
+  return {
+    entityId: `enemy_${enemy.id}`,  // ✨ PREFIXO ADICIONADO
+    kind: "ENEMY",
+    pos: enemy.pos ?? { x: 0, z: 0 },
+    yaw: Number(enemy.yaw ?? 0),
+    hp: hpCurrent, // compat legado
+    action: enemy.action ?? "idle",
+    rev: Number(enemy.rev ?? 0),
+
+    vitals: {
+      hp: {
+        current: hpCurrent,
+        max: hpMax,
+      },
+    },
+  };
+}
+
+module.exports = {
+  bumpRev,
+  toEntity,
+  toDelta,
+};
