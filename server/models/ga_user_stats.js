@@ -57,6 +57,12 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 1
       },
 
+      attack_range: {
+        type: DataTypes.FLOAT,
+        allowNull: false,
+        defaultValue: 1
+      },
+
       move_speed: {
         type: DataTypes.FLOAT,
         allowNull: false,

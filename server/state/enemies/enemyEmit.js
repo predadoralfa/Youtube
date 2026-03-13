@@ -24,11 +24,8 @@ function emitEnemyDelta(io, enemy) {
   // ✨ CORRIGIDO: Emitir para room geral da instância
   const roomId = `inst:${enemy.instanceId}`;
   
-  console.log(`[EMIT_DELTA] 📤 Enemy delta: id=${enemy.id} displayName=${enemy.displayName} room=${roomId} pos=(${delta.pos?.x}, ${delta.pos?.z})`);
   
   io.to(roomId).emit("entity:delta", delta);
-  
-  console.log(`[EMIT_DELTA] ✅ Emitido para room: ${roomId}`);
 }
 
 /**

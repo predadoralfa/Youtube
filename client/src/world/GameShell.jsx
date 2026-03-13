@@ -150,6 +150,10 @@ export function GameShell() {
   // { kind: "ACTOR"|"PLAYER"|"ENEMY", id: "123" } | null
   const selectedTargetRef = useRef(null);
 
+  // ✨ NOVO: Rastrear estado de combate com inimigo
+  // Detecta qual inimigo já teve interact:start enviado
+  const combatTargetRef = useRef(null);
+
   const worldStoreRef = useRef(null);
   if (!worldStoreRef.current) {
     worldStoreRef.current = createEntitiesStore();
@@ -205,10 +209,15 @@ export function GameShell() {
       kind: String(target.kind),
       id: String(target.id),
     };
+
+    // ✨ NOVO: Reset combate quando muda de alvo
+    combatTargetRef.current = null;
   }, []);
 
   const onTargetClear = useCallback(() => {
     selectedTargetRef.current = null;
+    // ✨ NOVO: Limpar combate também
+    combatTargetRef.current = null;
   }, []);
 
   const handleInputIntent = useCallback(
@@ -239,22 +248,66 @@ export function GameShell() {
             kind: String(kind),
             id: String(id),
           };
+          // ✨ NOVO: Reset combate quando seleciona novo alvo
+          combatTargetRef.current = null;
         }
         return;
       }
 
       if (intent.type === IntentType.TARGET_CLEAR) {
         selectedTargetRef.current = null;
+        combatTargetRef.current = null;
         return;
       }
 
+      // ✨ MODIFICADO: Lógica de combate em 2 estágios
       if (isInteractDown(intent.type)) {
+        const target = selectedTargetRef.current;
+
+        console.log("[INPUT] Interact press | Target:", target);
+
+        if (target?.kind === "ENEMY") {
+          const targetId = String(target.id);
+
+          // ESTÁGIO 1: Primeira vez - enviar interact:start
+          if (combatTargetRef.current !== targetId) {
+            console.log("[COMBAT] STAGE 1: Iniciando movimento para inimigo", targetId);
+            socketRef.current?.emit("interact:start", {
+              target: {
+                kind: String(target.kind),
+                id: targetId,
+              },
+            });
+            // Marcar que já enviou interact:start para este inimigo
+            combatTargetRef.current = targetId;
+            return;
+          }
+
+          // ESTÁGIO 2: Já moveu, agora atacar
+          console.log("[COMBAT] STAGE 2: Desfirindo ataque ao inimigo", targetId);
+          socketRef.current?.emit("combat:attack", {
+            targetId: targetId,
+            targetKind: "ENEMY",
+          });
+          return;
+        }
+
+        // Para ACTOR e outros: comportamento normal
         emitInteractStart();
         return;
       }
 
+      // ✨ MODIFICADO: Não enviar interact:stop para ENEMY
       if (isInteractUp(intent.type)) {
-        emitInteractStop();
+        const target = selectedTargetRef.current;
+
+        // Apenas enviar interact:stop para ACTOR/CONTAINER/PLAYER
+        // NÃO para ENEMY (combate é automático)
+        if (target?.kind && target.kind !== "ENEMY") {
+          emitInteractStop();
+        }
+        // Se é ENEMY, não fazer nada ao soltar SPACE
+        return;
       }
     },
     [requestInventoryFull, emitInteractStart, emitInteractStop]
@@ -273,6 +326,7 @@ export function GameShell() {
     let onMoveState = null;
     let onSessionReplaced = null;
     let onConnectError = null;
+    let onEnemyAttack = null;
 
     const token = localStorage.getItem("token");
 
@@ -531,6 +585,13 @@ export function GameShell() {
           console.error("[SOCKET] connect_error:", err?.message || err);
         };
 
+        // ✨ NOVO: Escutar ataques do inimigo
+        onEnemyAttack = (payload) => {
+          console.log("[COMBAT] Enemy attack received:", payload);
+          // O GameCanvas já processa o dano via combat:damage_taken
+          // Este listener é só para log
+        };
+
         socket.on("socket:ready", onSocketReady);
 
         socket.on("world:baseline", onWorldBaseline);
@@ -543,6 +604,7 @@ export function GameShell() {
         socket.on("connect_error", onConnectError);
 
         socket.on("inv:full", onInvFull);
+        socket.on("combat:enemy_attack", onEnemyAttack);
       } catch (err) {
         if (!mounted) return;
         console.error("[GAMESHELL] exception:", err);
@@ -572,6 +634,7 @@ export function GameShell() {
         if (onConnectError) s.off("connect_error", onConnectError);
 
         if (onInvFull) s.off("inv:full", onInvFull);
+        if (onEnemyAttack) s.off("combat:enemy_attack", onEnemyAttack);
       }
 
       disconnectSocket();
@@ -580,6 +643,7 @@ export function GameShell() {
       joinedRef.current = false;
       pendingInvRequestRef.current = false;
       selectedTargetRef.current = null;
+      combatTargetRef.current = null;
     };
   }, [requestInventoryFull]);
 

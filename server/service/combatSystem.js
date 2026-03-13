@@ -2,25 +2,18 @@
 
 /**
  * =====================================================================
- * COMBAT SYSTEM - Core Unitário
+ * COMBAT SYSTEM - Core de Combate
  * =====================================================================
  *
  * Responsabilidade:
- * - Validar se um ataque é legal (range, cooldown, alvo vivo, etc)
- * - Calcular dano (attack_power - defense)
- * - Aplicar dano no alvo (reduzir HP)
- * - Detectar morte
- * - Retornar resultado completo do ataque
+ * - Carregar stats de combate (player/enemy)
+ * - Validar ataque (distância, cooldown)
+ * - Calcular dano
+ * - Aplicar dano (desconta HP)
+ * - Determinar morte
  *
- * Servidor é AUTORIDADE: Cliente nunca calcula dano, sempre pede validação.
- *
- * Fluxo:
- * 1. Player clica em inimigo + aperta SPACE (ou evento de ataque)
- * 2. Frontend envia "combat:attack" com { targetId, targetKind }
- * 3. Backend (aqui) valida tudo
- * 4. Se valid: aplica dano, retorna resultado
- * 5. Se invalid: rejeita com motivo
- * 6. Frontend renderiza dano flutuante + atualiza HP bars
+ * Este arquivo é o "source of truth" de combate
+ * Qualquer lógica de dano, critério, buffs, etc vai aqui
  *
  * =====================================================================
  */
@@ -28,300 +21,260 @@
 const db = require("../models");
 
 /**
- * Helpers de validação
+ * =====================================================================
+ * Carregar stats de combate do PLAYER
+ * =====================================================================
  */
-function toPositiveNumber(value, fallback = 0) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return n;
-}
+async function loadPlayerCombatStats(userId) {
+  try {
+    const stats = await db.GaUserStats.findByPk(userId, {
+      attributes: [
+        "hp_current",
+        "hp_max",
+        "attack_power",
+        "defense",
+        "attack_speed",
+        "move_speed",
+        "attack_range"  // ✨ NOVO CAMPO (ver se existe no banco)
+      ]
+    });
 
-function toUInt(value, fallback = 0) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return fallback;
-  return Math.floor(n);
-}
+    if (!stats) return null;
 
-/**
- * Calcula distância entre dois pontos 2D
- */
-function distance2D(x1, z1, x2, z2) {
-  const dx = x2 - x1;
-  const dz = z2 - z1;
-  return Math.hypot(dx, dz);
+    return {
+      hpCurrent: Number(stats.hp_current),
+      hpMax: Number(stats.hp_max),
+      attackPower: Number(stats.attack_power),
+      defense: Number(stats.defense),
+      attackSpeed: Number(stats.attack_speed),
+      moveSpeed: Number(stats.move_speed),
+      attackRange: Number(stats.attack_range || 2.5)  // Default 2.5 se não tiver
+    };
+  } catch (err) {
+    console.error(`[COMBAT] Error loading player stats for ${userId}:`, err);
+    return null;
+  }
 }
 
 /**
  * =====================================================================
- * CORE: Validar + Executar um ataque
+ * Carregar stats de combate do ENEMY
  * =====================================================================
+ */
+async function loadEnemyCombatStats(enemyInstanceId) {
+  try {
+    // Buscar stats da instância do inimigo
+    const stats = await db.GaEnemyInstanceStats.findByPk(enemyInstanceId, {
+      attributes: [
+        "hp_current",
+        "hp_max",
+        "attack_speed",
+        "move_speed"
+      ],
+      include: [
+        {
+          association: "enemyInstance",
+          attributes: ["enemy_def_id"],
+          include: [
+            {
+              association: "enemyDef",
+              attributes: ["id"],
+              include: [
+                {
+                  association: "baseStats",
+                  attributes: ["hp_max"]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    });
+
+    if (!stats) return null;
+
+    // TODO: Carregar attack_power e attack_range de GaEnemyDefStats quando adicionar
+    const attackPower = 5;  // Default por enquanto
+    const attackRange = 1.2; // Default por enquanto
+    const defense = 0;
+
+    return {
+      hpCurrent: Number(stats.hp_current),
+      hpMax: Number(stats.hp_max),
+      attackPower: attackPower,
+      defense: defense,
+      attackSpeed: Number(stats.attack_speed),
+      moveSpeed: Number(stats.move_speed),
+      attackRange: attackRange
+    };
+  } catch (err) {
+    console.error(`[COMBAT] Error loading enemy stats for ${enemyInstanceId}:`, err);
+    return null;
+  }
+}
+
+/**
+ * =====================================================================
+ * EXECUTAR ATAQUE - Core da lógica de combate
+ * =====================================================================
+ *
+ * Validações:
+ * - Distância dentro do range
+ * - Cooldown respeitado
+ * - Dano calculado
+ * - HP atualizado
  *
  * Retorna:
  * {
  *   ok: boolean,
- *   error?: string,
- *   damage?: number,
- *   targetDied?: boolean,
- *   targetHPBefore?: number,
- *   targetHPAfter?: number
+ *   damage: number,
+ *   targetHPBefore: number,
+ *   targetHPAfter: number,
+ *   targetHPMax: number,
+ *   targetDied: boolean,
+ *   cooldownMs: number,
+ *   newCooldownStartMs: number,
+ *   error?: string
  * }
  */
-async function executeAttack({
-  attackerId,           // ID do atacante (player)
-  attackerKind,         // "PLAYER" | "ENEMY"
-  targetId,             // ID do alvo
-  targetKind,           // "ENEMY" | "PLAYER"
-  attackerPos,          // { x, z } posição atual do atacante
-  targetPos,            // { x, z } posição atual do alvo
-  attackerAttackPower,  // attack_power do atacante
-  attackerAttackSpeed,  // attack_speed (para cooldown)
-  targetDefense,        // defense do alvo
-  attackRange,          // range do ataque (1.0 para player melee)
-  lastAttackAtMs,       // timestamp do último ataque do atacante
-  nowMs                 // timestamp atual
-}) {
-  // ===================================================================
-  // 1. VALIDAÇÕES DE ENTIDADE
-  // ===================================================================
-
-  if (!attackerId || !targetId) {
-    return { ok: false, error: "MISSING_ID" };
-  }
-
-  if (!Number.isFinite(attackerPos?.x) || !Number.isFinite(attackerPos?.z)) {
-    return { ok: false, error: "INVALID_ATTACKER_POS" };
-  }
-
-  if (!Number.isFinite(targetPos?.x) || !Number.isFinite(targetPos?.z)) {
-    return { ok: false, error: "INVALID_TARGET_POS" };
-  }
+async function executeAttack(params) {
+  const {
+    attackerId,
+    attackerKind,      // "PLAYER" or "ENEMY"
+    targetId,
+    targetKind,        // "PLAYER" or "ENEMY"
+    attackerPos,       // { x, z }
+    targetPos,         // { x, z }
+    attackerAttackPower,
+    attackerAttackSpeed,
+    targetDefense,
+    attackRange,
+    lastAttackAtMs,
+    nowMs
+  } = params;
 
   // ===================================================================
-  // 2. VALIDAÇÃO DE RANGE
+  // 1. VALIDAR DISTÂNCIA
   // ===================================================================
 
-  const dist = distance2D(attackerPos.x, attackerPos.z, targetPos.x, targetPos.z);
-  const effectiveRange = toPositiveNumber(attackRange, 1.0);
+  const dx = targetPos.x - attackerPos.x;
+  const dz = targetPos.z - attackerPos.z;
+  const dist = Math.hypot(dx, dz);
 
-  if (dist > effectiveRange) {
+  if (dist > attackRange) {
     return {
       ok: false,
       error: "OUT_OF_RANGE",
       distance: dist,
-      range: effectiveRange
+      attackRange: attackRange
     };
   }
 
   // ===================================================================
-  // 3. VALIDAÇÃO DE COOLDOWN (attack_speed)
+  // 2. VALIDAR COOLDOWN (attack_speed)
   // ===================================================================
 
-  const attackSpeed = toPositiveNumber(attackerAttackSpeed, 1.0);
-  const cooldownMs = 1000 / attackSpeed; // ex: speed 2.0 = 500ms cooldown
+  // attack_speed = 1.0 significa 1 ataque por segundo
+  // cooldown em ms = 1000 / attack_speed
+  const cooldownMs = 1000 / attackerAttackSpeed;
+  const timeSinceLastAttack = nowMs - lastAttackAtMs;
 
-  const lastAttack = toUInt(lastAttackAtMs, 0);
-  const timeSinceLastAttack = nowMs - lastAttack;
-
-  if (lastAttack > 0 && timeSinceLastAttack < cooldownMs) {
+  if (timeSinceLastAttack < cooldownMs) {
     return {
       ok: false,
       error: "ON_COOLDOWN",
-      cooldownMs,
-      timeSinceLastAttack,
-      timeRemaining: cooldownMs - timeSinceLastAttack
+      cooldownRemaining: cooldownMs - timeSinceLastAttack,
+      cooldownTotal: cooldownMs
     };
   }
 
   // ===================================================================
-  // 4. VALIDAÇÃO DE ALVO (target deve estar vivo)
+  // 3. CALCULAR DANO (SIMPLES POR ENQUANTO)
   // ===================================================================
 
-  let target = null;
+  // Damage = attack_power - defense (min 1)
+  const baseDamage = Math.max(1, attackerAttackPower - targetDefense);
+
+  // TODO: Adicionar crítico, buff, debuff, etc aqui depois
+  const damage = baseDamage;
+
+  // ===================================================================
+  // 4. APLICAR DANO AO ALVO
+  // ===================================================================
+
   let targetHPBefore = 0;
+  let targetHPAfter = 0;
   let targetHPMax = 0;
+  let targetDied = false;
 
-  if (targetKind === "ENEMY") {
-    target = await db.GaEnemyInstance.findByPk(targetId, {
-      include: ["stats"]
-    });
+  try {
+    if (targetKind === "PLAYER") {
+      // Atualizar HP do player no banco
+      const stats = await db.GaUserStats.findByPk(targetId);
+      if (stats) {
+        targetHPBefore = Number(stats.hp_current);
+        targetHPMax = Number(stats.hp_max);
 
-    if (!target) {
-      return { ok: false, error: "TARGET_NOT_FOUND" };
+        const newHP = Math.max(0, targetHPBefore - damage);
+        targetHPAfter = newHP;
+
+        await stats.update({ hp_current: newHP });
+
+        targetDied = newHP <= 0;
+
+        console.log(`[COMBAT] Player ${targetId} took ${damage} damage (${targetHPBefore} -> ${targetHPAfter})`);
+      }
+    } else if (targetKind === "ENEMY") {
+      // Atualizar HP do enemy no banco
+      const stats = await db.GaEnemyInstanceStats.findByPk(targetId);
+      if (stats) {
+        targetHPBefore = Number(stats.hp_current);
+        targetHPMax = Number(stats.hp_max);
+
+        const newHP = Math.max(0, targetHPBefore - damage);
+        targetHPAfter = newHP;
+
+        await stats.update({ hp_current: newHP });
+
+        // Marcar inimigo como morto se HP = 0
+        if (newHP <= 0) {
+          await db.GaEnemyInstance.update(
+            { status: "DEAD", dead_at: new Date() },
+            { where: { id: targetId } }
+          );
+          targetDied = true;
+        }
+
+        console.log(`[COMBAT] Enemy ${targetId} took ${damage} damage (${targetHPBefore} -> ${targetHPAfter})`);
+      }
     }
-
-    if (target.status !== "ALIVE") {
-      return { ok: false, error: "TARGET_NOT_ALIVE", status: target.status };
-    }
-
-    const stats = target.stats;
-    if (!stats) {
-      return { ok: false, error: "TARGET_STATS_NOT_FOUND" };
-    }
-
-    targetHPBefore = toUInt(stats.hp_current, 0);
-    targetHPMax = toUInt(stats.hp_max, 100);
-
-  } else if (targetKind === "PLAYER") {
-    const playerUser = await db.GaUser.findByPk(targetId);
-    if (!playerUser || playerUser.status !== "ONLINE") {
-      return { ok: false, error: "TARGET_NOT_FOUND" };
-    }
-
-    const playerStats = await db.GaUserStats.findByPk(targetId);
-    if (!playerStats) {
-      return { ok: false, error: "TARGET_STATS_NOT_FOUND" };
-    }
-
-    targetHPBefore = toUInt(playerStats.hp_current, 100);
-    targetHPMax = toUInt(playerStats.hp_max, 100);
-
-  } else {
-    return { ok: false, error: "UNKNOWN_TARGET_KIND" };
-  }
-
-  if (targetHPBefore <= 0) {
-    return { ok: false, error: "TARGET_ALREADY_DEAD" };
-  }
-
-  // ===================================================================
-  // 5. CALCULAR DANO
-  // ===================================================================
-
-  const attackPower = toUInt(attackerAttackPower, 10);
-  const defense = toUInt(targetDefense, 0);
-
-  // Fórmula: dano = attack_power - defense, mínimo 1
-  let damage = Math.max(1, attackPower - defense);
-
-  // ===================================================================
-  // 6. APLICAR DANO
-  // ===================================================================
-
-  const targetHPAfter = Math.max(0, targetHPBefore - damage);
-  const targetDied = targetHPAfter <= 0;
-
-  // Atualizar no banco
-  if (targetKind === "ENEMY" && target) {
-    target.stats.hp_current = targetHPAfter;
-    
-    if (targetDied) {
-      target.status = "DEAD";
-      target.dead_at = new Date();
-    }
-
-    await target.stats.save();
-    await target.save();
-
-  } else if (targetKind === "PLAYER") {
-    const playerStats = await db.GaUserStats.findByPk(targetId);
-    if (playerStats) {
-      playerStats.hp_current = targetHPAfter;
-      await playerStats.save();
-    }
-
-    // Se player morreu, pode fazer algo (game over, respawn, etc)
-    if (targetDied) {
-      console.log("[COMBAT] Player morreu:", targetId);
-      // TODO: Implementar morte do player mais tarde
-    }
+  } catch (err) {
+    console.error(`[COMBAT] Error applying damage:`, err);
+    return {
+      ok: false,
+      error: "DAMAGE_APPLY_FAILED",
+      details: err.message
+    };
   }
 
   // ===================================================================
-  // 7. RETORNAR RESULTADO
+  // 5. RETORNAR RESULTADO
   // ===================================================================
 
   return {
     ok: true,
-    damage,
-    targetHPBefore,
-    targetHPAfter,
-    targetHPMax,
-    targetDied,
-    cooldownMs,
-    newCooldownStartMs: nowMs // Frontend sabe quando começar countdown de novo
-  };
-}
-
-/**
- * =====================================================================
- * Carregar stats de ataque de um player
- * =====================================================================
- *
- * Retorna objeto com tudo que precisa para fazer ataque
- */
-async function loadPlayerCombatStats(userId) {
-  const stats = await db.GaUserStats.findByPk(userId);
-
-  if (!stats) {
-    return {
-      attackPower: 10,
-      defense: 0,
-      attackSpeed: 1.0,
-      attackRange: 1.0 // TODO: depois será dinâmico (arma, skills, etc)
-    };
-  }
-
-  return {
-    attackPower: toUInt(stats.attack_power, 10),
-    defense: toUInt(stats.defense, 0),
-    attackSpeed: toPositiveNumber(stats.attack_speed, 1.0),
-    attackRange: 1.0 // Por enquanto fixo, depois dinamico
-  };
-}
-
-/**
- * =====================================================================
- * Carregar stats de ataque de um inimigo
- * =====================================================================
- *
- * Retorna objeto com tudo que precisa para fazer ataque
- */
-async function loadEnemyCombatStats(enemyInstanceId) {
-  const enemyInstance = await db.GaEnemyInstance.findByPk(enemyInstanceId, {
-    include: [
-      {
-        association: "definition",
-        include: ["baseStats"]
-      },
-      "stats"
-    ]
-  });
-
-  if (!enemyInstance) {
-    return null;
-  }
-
-  const defStats = enemyInstance.definition?.baseStats;
-  const instStats = enemyInstance.stats;
-
-  if (!defStats || !instStats) {
-    return null;
-  }
-
-  // Para inimigos, attack_power vem do template
-  // TODO: depois fazer isso dinâmico (drops, evoluções, etc)
-  const attackPower = toUInt(defStats.attack_power || 5, 5);
-  const defense = toUInt(defStats.defense || 0, 0);
-  const attackSpeed = toPositiveNumber(defStats.attack_speed, 1.0);
-  const attackRange = toPositiveNumber(defStats.attack_range, 1.2);
-
-  return {
-    attackPower,
-    defense,
-    attackSpeed,
-    attackRange
+    damage: damage,
+    targetHPBefore: targetHPBefore,
+    targetHPAfter: targetHPAfter,
+    targetHPMax: targetHPMax,
+    targetDied: targetDied,
+    cooldownMs: cooldownMs,
+    newCooldownStartMs: nowMs
   };
 }
 
 module.exports = {
-  executeAttack,
   loadPlayerCombatStats,
   loadEnemyCombatStats,
-
-  // Internals para testes
-  _internal: {
-    distance2D,
-    toPositiveNumber,
-    toUInt
-  }
+  executeAttack
 };

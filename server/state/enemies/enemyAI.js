@@ -1,257 +1,286 @@
 // server/state/enemies/enemyAI.js
-
-/**
- * =====================================================================
- * ENEMY AI - Comportamento do Inimigo
- * =====================================================================
- *
- * Responsabilidade:
- * - Gerenciar estado do inimigo (PASSIVE -> COMBAT -> IDLE)
- * - Perseguir player até 15 units de distância
- * - Auto-atacar quando dentro do range próprio
- * - Voltar ao idle quando player sai do range
- *
- * Executa no tick (50ms) como parte do loop principal
- *
- * Estados:
- * PASSIVE: inimigo patrulha normalmente (movimento aleatório)
- * COMBAT: inimigo levou dano, persegue e ataca
- * IDLE: inimigo parou de perseguir (player longe demais)
- *
- * =====================================================================
- */
+// ✨ FINAL: Compatível com tickOnce.js - Função tickEnemyAI
 
 const { getRuntime } = require("../runtimeStore");
-const { executeAttack, loadEnemyCombatStats } = require("../../service/combatSystem");
 
-/**
- * Limites de combate
- */
-const COMBAT_RANGE_MAX = 15.0;        // Max 15 units de distância para perseguir
-const COMBAT_TIMEOUT_MS = 30000;       // Timeout: se não atacar em 30s, volta ao idle
+const COMBAT_RANGE_LIMIT = 15; // Perseguir até 15 unidades
+const ENEMY_ATTACK_COOLDOWN_MS = 1500; // 1.5s entre ataques
 
-/**
- * Calcula distância entre dois pontos 2D
- */
-function distance2D(x1, z1, x2, z2) {
-  const dx = x2 - x1;
-  const dz = z2 - z1;
-  return Math.hypot(dx, dz);
+function isFiniteNumber(n) {
+  return typeof n === "number" && Number.isFinite(n);
 }
 
-/**
- * Normaliza um vetor 2D
- */
-function normalize2D(x, z) {
-  const len = Math.hypot(x, z);
-  if (len <= 0.00001) return { x: 0, z: 0 };
+function calculateDistance(p1, p2) {
+  const dx = p1.x - p2.x;
+  const dz = p1.z - p2.z;
+  return Math.sqrt(dx * dx + dz * dz);
+}
+
+function normalizeDirection(x, z) {
+  const len = Math.sqrt(x * x + z * z);
+  if (len === 0) return { x: 0, z: 0 };
   return { x: x / len, z: z / len };
 }
 
 /**
- * =====================================================================
- * Processa IA de um inimigo por tick
- * =====================================================================
- *
- * Chamado a cada 50ms pelo movimento tick
- * Retorna true se inimigo se moveu (para emitir delta)
+ * ✨ Volta inimigo ao spawn e limpa combate
  */
-async function updateEnemyAI(enemy, nowMs, dt) {
-  // Inimigos mortos não fazem nada
-  if (enemy.status !== "ALIVE") {
-    return false;
+function resetEnemyToSpawn(enemy) {
+  if (!enemy) return;
+
+  const hadCombat = enemy._combatMode || enemy._combatActive;
+  
+  if (enemy._spawnPos) {
+    enemy.pos = { ...enemy._spawnPos };
   }
-
-  // ===================================================================
-  // 1. VERIFICAR SE INIMIGO ESTÁ EM COMBATE
-  // ===================================================================
-
-  const inCombat = enemy._combatMode === true;
-  const combatTargetId = enemy._combatTargetId;
-  const combatStartedAt = enemy._combatStartedAtMs || 0;
-
-  // Se está em combate, tentar perseguir e atacar
-  if (inCombat && combatTargetId) {
-    // Tentar encontrar target
-    const targetRuntime = getRuntime(combatTargetId);
-
-    if (!targetRuntime) {
-      // Target não existe mais (desconectou?)
-      endCombat(enemy);
-      return false;
-    }
-
-    const targetPos = {
-      x: Number(targetRuntime.pos?.x ?? 0),
-      z: Number(targetRuntime.pos?.z ?? 0)
-    };
-
-    const enemyPos = enemy.pos;
-    const dist = distance2D(enemyPos.x, enemyPos.z, targetPos.x, targetPos.z);
-
-    // ===================================================================
-    // 1A. VERIFICAR TIMEOUT (foi atacado, mas passou muito tempo)
-    // ===================================================================
-
-    const timeSinceCombatStart = nowMs - combatStartedAt;
-    if (timeSinceCombatStart > COMBAT_TIMEOUT_MS) {
-      console.log(`[ENEMY_AI] Enemy ${enemy.id} combat timeout - returning to idle`);
-      endCombat(enemy);
-      return false;
-    }
-
-    // ===================================================================
-    // 1B. MUITO LONGE - PARAR PERSEGUIÇÃO
-    // ===================================================================
-
-    if (dist > COMBAT_RANGE_MAX) {
-      console.log(`[ENEMY_AI] Enemy ${enemy.id} target too far (${dist.toFixed(1)} > ${COMBAT_RANGE_MAX}) - returning to idle`);
-      endCombat(enemy);
-      return false;
-    }
-
-    // ===================================================================
-    // 1C. DENTRO DO RANGE - PERSEGUIR
-    // ===================================================================
-
-    if (dist > enemy.stats.moveSpeed * dt) {
-      // Perseguir: calcular direção para target
-      const dx = targetPos.x - enemyPos.x;
-      const dz = targetPos.z - enemyPos.z;
-      const dir = normalize2D(dx, dz);
-
-      const speed = Number(enemy.stats?.moveSpeed) || 3.5;
-      const newPosX = enemyPos.x + dir.x * speed * dt;
-      const newPosZ = enemyPos.z + dir.z * speed * dt;
-
-      // Atualizar posição
-      enemy.pos = { x: newPosX, z: newPosZ };
-
-      // Atualizar yaw (apontar para o alvo)
-      const newYaw = Math.atan2(dx, dz);
-      enemy.yaw = newYaw;
-
-      enemy.action = "move";
-      enemy.rev = (enemy.rev || 0) + 1;
-
-      return true; // Moveu, emitir delta
-    }
-
-    // ===================================================================
-    // 1D. PRÓXIMO O SUFICIENTE - TENTAR ATACAR
-    // ===================================================================
-
-    const enemyCombatStats = await loadEnemyCombatStats(enemy.id);
-    if (!enemyCombatStats) {
-      return false;
-    }
-
-    const attackRange = enemyCombatStats.attackRange || 1.2;
-
-    if (dist <= attackRange) {
-      // Dentro do range - tentar atacar
-      const lastEnemyAttackMs = enemy._lastAttackAtMs || 0;
-
-      const attackResult = await executeAttack({
-        attackerId: enemy.id,
-        attackerKind: "ENEMY",
-        targetId: combatTargetId,
-        targetKind: "PLAYER",
-        attackerPos: enemyPos,
-        targetPos: targetPos,
-        attackerAttackPower: enemyCombatStats.attackPower,
-        attackerAttackSpeed: enemyCombatStats.attackSpeed,
-        targetDefense: 0, // TODO: carregar defesa do player
-        attackRange: attackRange,
-        lastAttackAtMs: lastEnemyAttackMs,
-        nowMs: nowMs
-      });
-
-      if (attackResult.ok) {
-        // Ataque bem-sucedido
-        enemy._lastAttackAtMs = nowMs;
-
-        console.log(`[ENEMY_AI] Enemy ${enemy.id} attacked player ${combatTargetId} for ${attackResult.damage} damage`);
-
-        // Atualizar HP do inimigo no store (já foi atualizado no banco por combatSystem)
-        // Aqui só marcamos como dirty para enviar delta
-        enemy.action = "attack";
-        enemy.rev = (enemy.rev || 0) + 1;
-
-        return true; // Emitir estado de ataque
-      } else {
-        // Ataque falhou (cooldown, etc) - continuar
-        return false;
-      }
-    }
-
-    // Dentro do range mas não tão perto - mover mais perto
-    return false;
-  }
-
-  // ===================================================================
-  // 2. SEM COMBATE - COMPORTAMENTO PASSIVO (movimento aleatório)
-  // ===================================================================
-
-  // Já é tratado pelo enemyMovement.js
-  // Aqui só garantimos que não tem flags de combate
-  if (!inCombat) {
-    enemy._combatMode = false;
-    enemy._combatTargetId = null;
-    enemy._combatStartedAtMs = null;
-  }
-
-  return false;
-}
-
-/**
- * =====================================================================
- * Terminar combate - voltar ao estado PASSIVE
- * =====================================================================
- */
-function endCombat(enemy) {
+  
   enemy._combatMode = false;
+  enemy._combatActive = false;
   enemy._combatTargetId = null;
   enemy._combatStartedAtMs = null;
   enemy._lastAttackAtMs = 0;
-  enemy.action = "idle";
-  // Movimento aleatório volta a funcionar (será tratado pelo enemyMovement.js)
+  
+  enemy.moveMode = "IDLE";
+  enemy.moveTarget = null;
+  enemy.moveStopRadius = null;
+
+  // Log apenas se estava em combate
+  if (hadCombat) {
+    console.log(`[ENEMY_AI] 🔄 Enemy ${enemy.id} resetado ao spawn`);
+  }
 }
 
 /**
- * =====================================================================
- * Tick principal de IA - chamado para cada inimigo
- * =====================================================================
+ * ✨ Atualizar IA de um inimigo
+ * Retorna: true se o inimigo mudou de estado/posição
  */
-async function tickEnemyAI(enemies, nowMs, dt) {
+function updateSingleEnemyAI(enemy, nowMs) {
+  if (!enemy || !enemy.pos || String(enemy.status) !== "ALIVE") {
+    return false;
+  }
+
+  const prevMoveMode = enemy.moveMode;
+  let changed = false;
+
+  // ==========================================
+  // CASO 1: Inimigo congelado
+  // (Esperando 1º ataque após click+SPACE)
+  // ==========================================
+  if (enemy._combatMode === true && enemy._combatActive === false) {
+    if (enemy.moveMode !== "IDLE") {
+      enemy.moveMode = "IDLE";
+      enemy.moveTarget = null;
+      enemy.moveStopRadius = null;
+      changed = true;
+      console.log(`[ENEMY_AI] ❄️ Enemy ${enemy.id} CONGELADO (esperando 1º ataque)`);
+    }
+    return changed;
+  }
+
+  // ==========================================
+  // CASO 2: Inimigo em combate ativo
+  // (Perseguir e atacar)
+  // ==========================================
+  if (enemy._combatMode === true && enemy._combatActive === true) {
+    const targetId = enemy._combatTargetId;
+    if (!targetId) {
+      console.log(`[ENEMY_AI] ⚠️ Enemy ${enemy.id} em combate mas sem target`);
+      resetEnemyToSpawn(enemy);
+      return true;
+    }
+
+    const targetRt = getRuntime(String(targetId));
+    if (!targetRt) {
+      console.log(`[ENEMY_AI] ⚠️ Enemy ${enemy.id} target desconectou`);
+      resetEnemyToSpawn(enemy);
+      return true;
+    }
+
+    const targetPos = targetRt.pos;
+    if (!targetPos || !isFiniteNumber(targetPos.x) || !isFiniteNumber(targetPos.z)) {
+      console.log(`[ENEMY_AI] ⚠️ Enemy ${enemy.id} posição target inválida`);
+      resetEnemyToSpawn(enemy);
+      return true;
+    }
+
+    // Calcular distância
+    const dist = calculateDistance(enemy.pos, targetPos);
+
+    // ✨ Se muito longe, voltar ao spawn
+    if (dist > COMBAT_RANGE_LIMIT) {
+      console.log(`[ENEMY_AI] 📍 Enemy ${enemy.id} escapou (${dist.toFixed(1)} > ${COMBAT_RANGE_LIMIT}), resetando`);
+      resetEnemyToSpawn(enemy);
+      return true;
+    }
+
+    // Perseguir: definir alvo e deixar movimento processar
+    const newMoveMode = "FOLLOW";
+    if (prevMoveMode !== newMoveMode) {
+      console.log(`[ENEMY_AI] 🔥 Enemy ${enemy.id} perseguindo player ${targetId}`);
+      changed = true;
+    }
+
+    enemy.moveMode = newMoveMode;
+    enemy.moveTarget = { x: targetPos.x, z: targetPos.z };
+    enemy.moveStopRadius = 1.2; // Range de ataque
+    enemy.moveTickAtMs = nowMs;
+
+    return changed;
+  }
+
+  // ==========================================
+  // CASO 3: Normal (patrulha / idle)
+  // ==========================================
+  if (enemy.moveMode !== "IDLE") {
+    enemy.moveMode = "IDLE";
+    enemy.moveTarget = null;
+    enemy.moveStopRadius = null;
+    changed = true;
+  }
+
+  return changed;
+}
+
+/**
+ * ✨ Processar ataques automáticos de um inimigo
+ * Retorna: null ou { enemyId, targetId, damage, ... }
+ */
+function updateSingleEnemyAttack(enemy, nowMs) {
+  if (!enemy) return null;
+  if (!enemy._combatActive) return null;
+  if (!enemy._combatTargetId) return null;
+  if (String(enemy.status) !== "ALIVE") return null;
+
+  const targetId = String(enemy._combatTargetId);
+  const targetRt = getRuntime(targetId);
+  if (!targetRt) {
+    // Target desconectou, limpar
+    resetEnemyToSpawn(enemy);
+    return null;
+  }
+
+  // Validar posições
+  if (!enemy.pos || !targetRt.pos) return null;
+  if (!isFiniteNumber(enemy.pos.x) || !isFiniteNumber(enemy.pos.z)) return null;
+  if (!isFiniteNumber(targetRt.pos.x) || !isFiniteNumber(targetRt.pos.z)) return null;
+
+  // Verificar cooldown
+  const lastAttackMs = enemy._lastAttackAtMs ?? 0;
+  if (nowMs - lastAttackMs < ENEMY_ATTACK_COOLDOWN_MS) {
+    return null;
+  }
+
+  // Verificar distância
+  const dist = calculateDistance(enemy.pos, targetRt.pos);
+  const attackRange = 1.2;
+
+  if (dist > attackRange) {
+    // Longe demais, não ataca
+    return null;
+  }
+
+  // ✨ ACERTO! Inimigo ataca player
+  
+  // Calcular dano: attackPower do inimigo - defense do player
+  const enemyAttackPower = enemy.attackPower || 5;
+  const playerDefense = targetRt._defense || 0;
+  const damage = Math.max(1, enemyAttackPower - playerDefense);
+
+  console.log(`[ENEMY_AI] 🔥 Enemy ${enemy.id} ataca player ${targetId} com ${damage} dano`);
+
+  // Aplicar dano ao player
+  if (!targetRt.vitals) {
+    targetRt.vitals = { hp: { current: 100, max: 100 } };
+  }
+  if (!targetRt.vitals.hp) {
+    targetRt.vitals.hp = { current: 100, max: 100 };
+  }
+
+  const hpBefore = targetRt.vitals.hp.current;
+  targetRt.vitals.hp.current = Math.max(0, hpBefore - damage);
+  const hpAfter = targetRt.vitals.hp.current;
+  const hpMax = targetRt.vitals.hp.max;
+
+  // Atualizar cooldown
+  enemy._lastAttackAtMs = nowMs;
+
+  // Retornar resultado para broadcast
+  return {
+    enemyId: enemy.id,
+    targetId: String(targetId),
+    damage,
+    targetHPBefore: hpBefore,
+    targetHPAfter: hpAfter,
+    targetHPMax: hpMax,
+    targetDied: hpAfter <= 0,
+  };
+}
+
+/**
+ * ✨ FUNÇÃO PRINCIPAL: Processar IA de todos os inimigos
+ * Chamado por tickOnce.js
+ * 
+ * @param {Array} enemies - Lista de inimigos da instância
+ * @param {number} t - Timestamp atual
+ * @param {number} dt - Delta time em segundos
+ * 
+ * @returns {Array} Lista de inimigos que mudaram
+ */
+function tickEnemyAI(enemies, t, dt) {
+  if (!enemies || !Array.isArray(enemies)) {
+    return [];
+  }
+
   const changedEnemies = [];
+  const attacks = [];
 
   for (const enemy of enemies) {
-    try {
-      const changed = await updateEnemyAI(enemy, nowMs, dt);
-      if (changed) {
+    if (!enemy || String(enemy.status) !== "ALIVE") {
+      continue;
+    }
+
+    // Atualizar IA
+    const aiChanged = updateSingleEnemyAI(enemy, t);
+    if (aiChanged) {
+      changedEnemies.push(enemy);
+    }
+
+    // Processar ataques
+    const attackResult = updateSingleEnemyAttack(enemy, t);
+    if (attackResult) {
+      attacks.push(attackResult);
+      // Inimigo que atacou também mudou
+      if (!changedEnemies.includes(enemy)) {
         changedEnemies.push(enemy);
       }
-    } catch (err) {
-      console.error(`[ENEMY_AI] Error updating enemy ${enemy?.id}:`, err);
     }
+  }
+
+  // Armazenar ataques para later broadcast (se necessário)
+  // Pode ser acessado via getLastEnemyAttacks()
+  if (attacks.length > 0) {
+    enemies._lastTickAttacks = attacks;
   }
 
   return changedEnemies;
 }
 
+/**
+ * ✨ Obter ataques da última execução (para broadcast)
+ */
+function getLastTickAttacks(enemies) {
+  if (!enemies || !Array.isArray(enemies)) {
+    return [];
+  }
+  return enemies._lastTickAttacks || [];
+}
+
 module.exports = {
   tickEnemyAI,
-  updateEnemyAI,
-  endCombat,
-
-  // Constantes (importáveis)
-  COMBAT_RANGE_MAX,
-  COMBAT_TIMEOUT_MS,
-
-  // Internals
-  _internal: {
-    distance2D,
-    normalize2D
-  }
+  getLastTickAttacks,
+  updateSingleEnemyAI,
+  updateSingleEnemyAttack,
+  resetEnemyToSpawn,
+  COMBAT_RANGE_LIMIT,
+  ENEMY_ATTACK_COOLDOWN_MS,
 };

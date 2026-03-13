@@ -614,11 +614,6 @@ export function GameCanvas({
       const entities = store?.getSnapshot?.() ?? null;
       const selfId = store?.selfId ?? null;
 
-      // ✨ LOG: Store info
-      if (frameCount % LOG_ENEMY_EVERY_N_FRAMES === 0) {
-        console.log(`[TICK] Frame ${frameCount}: store=${!!store} entities=${entities?.length ?? 0} selfId=${selfId}`);
-      }
-
       if (Array.isArray(entities) && entities.length > 0) {
         const selfKey = selfId == null ? null : String(selfId);
         const nextEnemyIds = new Set();
@@ -629,23 +624,12 @@ export function GameCanvas({
           return isEnemyEntity(e);
         });
 
-        // ✨ LOG: Enemy processing
-        if (frameCount % LOG_ENEMY_EVERY_N_FRAMES === 0) {
-          console.log(`[ENEMIES] Total enemies: ${enemies.length}`);
-        }
-
         for (const enemy of enemies) {
           const enemyId = String(enemy.entityId);
           nextEnemyIds.add(enemyId);
 
           const posX = enemy.pos?.x ?? 0;
           const posZ = enemy.pos?.z ?? 0;
-
-          // ✨ LOG: Cada inimigo processado
-          if (frameCount % LOG_ENEMY_EVERY_N_FRAMES === 0) {
-            console.log(`[ENEMY_RENDER] id=${enemyId} raw_data_pos=(${posX}, ${posZ}) displayName=${enemy.displayName}`);
-          }
-
           entityPositions.set(enemyId, {
             x: posX,
             y: enemy.pos?.y ?? 0.5,
@@ -677,11 +661,6 @@ export function GameCanvas({
           }
 
           const { x, z, yaw } = readPosYawFromEntity(enemy);
-
-          // ✨ CRÍTICO: Log antes de aplicar posição
-          if (frameCount % LOG_ENEMY_EVERY_N_FRAMES === 0) {
-            console.log(`[ENEMY_POSITION] id=${enemyId} readPosYaw=(x=${x}, z=${z}) mesh.position.set(${x}, 0.5, ${z})`);
-          }
 
           mesh.position.set(x, 0.5, z);
           mesh.rotation.y = yaw;
