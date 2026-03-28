@@ -241,24 +241,15 @@ export function GameCanvas({
   const entityVitalsRef = useRef(new Map());
   const entityPositionsRef = useRef(new Map());
   const seenDamageEventIdsRef = useRef(new Set());
+  const damageTtlMs = 1200;
 
   // ✨ LOG SNAPSHOT
   useEffect(() => {
     if (snapshot) {
-      console.log(`\n${'='.repeat(80)}`);
-      console.log(`[GAMECANVAS] 📦 SNAPSHOT RECEBIDO`);
-      console.log(`${'='.repeat(80)}`);
-      console.log(`[GAMECANVAS] Runtime userId=${snapshot.runtime?.user_id ?? snapshot.runtime?.userId}`);
-      console.log(`[GAMECANVAS] Pos=(${snapshot.runtime?.pos?.x}, ${snapshot.runtime?.pos?.z})`);
-      console.log(`[GAMECANVAS] Actors: ${snapshot.actors?.length ?? 0}`);
-      
       runtimeRef.current = snapshot.runtime ?? null;
       templateRef.current = snapshot.localTemplate ?? null;
       versionRef.current = snapshot.localTemplateVersion ?? null;
       actorsRef.current = snapshot.actors ?? [];
-
-      console.log(`[GAMECANVAS] ✅ Snapshot aplicado aos refs`);
-      console.log(`${'='.repeat(80)}\n`);
     }
   }, [snapshot]);
 
@@ -284,8 +275,16 @@ export function GameCanvas({
 
       const targetKey = String(targetId);
       const worldPos = entityPositionsRef.current.get(targetKey);
-      let screenX = 0;
-      let screenY = 0;
+      let screenX = null;
+      let screenY = null;
+
+      console.log(
+        `[DAMAGE_RENDER] event=${String(eventId ?? "no-event-id")} target=${targetKey} damage=${Number(damage)} ` +
+        `worldPos=${worldPos ? `(${Number(worldPos.x ?? 0).toFixed(2)}, ${Number(worldPos.y ?? 0).toFixed(2)}, ${Number(worldPos.z ?? 0).toFixed(2)})` : "null"}`
+      );
+
+      const containerRect = containerRef.current?.getBoundingClientRect?.() ?? null;
+
       if (worldPos && containerRef.current && cameraRef.current) {
         const screenPos = projectWorldToScreenPx(
           new THREE.Vector3(worldPos.x, worldPos.y + 1.2, worldPos.z),
@@ -298,6 +297,12 @@ export function GameCanvas({
         }
       }
 
+      console.log(
+        `[DAMAGE_RENDER] event=${String(eventId ?? "no-event-id")} screen=(${screenX == null ? "null" : screenX.toFixed(1)}, ${screenY == null ? "null" : screenY.toFixed(1)}) ` +
+        `container=${containerRect ? `${containerRect.left.toFixed(1)},${containerRect.top.toFixed(1)} ${containerRect.width.toFixed(1)}x${containerRect.height.toFixed(1)}` : "null"} ` +
+        `hp=${Number.isFinite(Number(targetHPAfter)) ? Number(targetHPAfter) : "n/a"}/${Number.isFinite(Number(targetHPMax)) ? Number(targetHPMax) : "n/a"}`
+      );
+
       setFloatingDamages((prev) => [
         ...prev,
         {
@@ -306,6 +311,8 @@ export function GameCanvas({
           damage: exactDamageText,
           screenX,
           screenY,
+          startedAt: Date.now(),
+          ttlMs: damageTtlMs,
           isCrit: false,
         },
       ]);
@@ -364,6 +371,41 @@ export function GameCanvas({
   }, []);
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+
+      setFloatingDamages((prev) => {
+        if (!prev || prev.length === 0) return prev;
+
+        let changed = false;
+        const alive = [];
+        const removedIds = [];
+
+        for (const dmg of prev) {
+          const startedAt = Number(dmg?.startedAt ?? 0);
+          const ttlMs = Number(dmg?.ttlMs ?? damageTtlMs);
+          if (startedAt > 0 && now - startedAt < ttlMs) {
+            alive.push(dmg);
+          } else {
+            changed = true;
+            removedIds.push(dmg?.id);
+          }
+        }
+
+        if (!changed) return prev;
+
+        for (const id of removedIds) {
+          if (id != null) seenDamageEventIdsRef.current.delete(String(id));
+        }
+
+        return alive;
+      });
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
@@ -376,6 +418,10 @@ export function GameCanvas({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.shadowMap.enabled = true;
+    renderer.domElement.style.position = "absolute";
+    renderer.domElement.style.left = "0";
+    renderer.domElement.style.top = "0";
+    renderer.domElement.style.zIndex = "0";
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -712,7 +758,6 @@ export function GameCanvas({
             meshByEnemyIdRef.current.set(enemyId, mesh);
             scene.add(mesh);
 
-            console.log(`[ENEMY_CREATE] 🎯 id=${enemyId} name=${enemy.displayName} raw_pos=(${posX}, ${posZ})`);
           }
 
           const { x, z, yaw } = readPosYawFromEntity(enemy);
@@ -795,7 +840,6 @@ export function GameCanvas({
             meshByEntityIdRef.current.set(entityId, mesh);
             scene.add(mesh);
 
-            console.log(`[PLAYER_CREATE] 👤 id=${entityId} self=${selfKey === entityId} pos=(${posX.toFixed(2)}, ${posZ.toFixed(2)})`);
           }
 
           const isSelfNow = selfKey != null && entityId === selfKey;
@@ -855,7 +899,6 @@ export function GameCanvas({
             meshByEntityIdRef.current.set(legacyId, mesh);
             scene.add(mesh);
 
-            console.log(`[PLAYER_FALLBACK] pos=(${x.toFixed(2)}, ${z.toFixed(2)})`);
           }
 
           mesh.position.set(x, y ?? 0, z);
@@ -1027,26 +1070,36 @@ export function GameCanvas({
         height: "100vh",
         overflow: "hidden",
         position: "relative",
+        isolation: "isolate",
       }}
     >
-      <TargetMarker visible={marker.visible} x={marker.x} y={marker.y} />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 10,
+          pointerEvents: "none",
+        }}
+      >
+        <TargetMarker visible={marker.visible} x={marker.x} y={marker.y} />
 
-      <FloatingDamageText damages={floatingDamages} />
+        <FloatingDamageText damages={floatingDamages} />
 
-      {targetHpBar ? (
-        <HPBar
-          visible={true}
-          x={targetHpBar.x}
-          y={targetHpBar.y}
-          hpCurrent={targetHpBar.hpCurrent}
-          hpMax={targetHpBar.hpMax}
-          mode="world"
-          width={70}
-          hpHeight={8}
-          showHpText={true}
-          showStamina={false}
-        />
-      ) : null}
+        {targetHpBar ? (
+          <HPBar
+            visible={true}
+            x={targetHpBar.x}
+            y={targetHpBar.y}
+            hpCurrent={targetHpBar.hpCurrent}
+            hpMax={targetHpBar.hpMax}
+            mode="world"
+            width={70}
+            hpHeight={8}
+            showHpText={true}
+            showStamina={false}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

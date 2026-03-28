@@ -20,13 +20,6 @@ function toNum(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-// FIX: debug opcional para verificar normalização de IDs (desativado por padrão)
-const DEBUG_IDS = false;
-function debugIds(...args) {
-  if (!DEBUG_IDS) return;
-  console.log("[ENTITIES_STORE][IDS]", ...args);
-}
-
 function normalizeVitals(raw) {
   const vitals = raw?.vitals ?? null;
   const stats = raw?.stats ?? null;
@@ -210,14 +203,7 @@ export function createEntitiesStore() {
 
   function applyBaseline(payload) {
     // Baseline sempre vence: troca completa do estado replicado.
-    console.log("[ENTITIES_STORE] 📦 applyBaseline chamado");
-    console.log("[ENTITIES_STORE] payload.ok:", payload?.ok);
-    console.log("[ENTITIES_STORE] payload.you:", payload?.you);
-    console.log("[ENTITIES_STORE] payload.others:", payload?.others);
-    console.log("[ENTITIES_STORE] payload.entities:", payload?.entities);
-    
     if (!payload || payload.ok !== true) {
-      console.log("[ENTITIES_STORE] ❌ REJEITADO: !payload ou payload.ok !== true");
       return;
     }
 
@@ -229,28 +215,16 @@ export function createEntitiesStore() {
 
     // FIX: normaliza selfId ANTES de inserir others, para evitar "self como other"
     const you = payload.you ?? null;
-    console.log("[ENTITIES_STORE] you (depois de null coalesce):", you);
-    
     let nextSelfId = null;
     let youEntity = null;
 
     if (typeof you === "string" || typeof you === "number") {
       nextSelfId = toId(you);
-      console.log("[ENTITIES_STORE] ✅ you é primitivo (string/number), nextSelfId:", nextSelfId);
-      debugIds("baseline: selfId set (primitive)", nextSelfId);
     } else if (you && typeof you === "object") {
-      console.log("[ENTITIES_STORE] you é objeto, normalizando...");
       youEntity = normalizeEntity(you);
-      console.log("[ENTITIES_STORE] youEntity após normalize:", youEntity);
       if (youEntity) {
         nextSelfId = youEntity.entityId;
-        console.log("[ENTITIES_STORE] ✅ youEntity normalizado, nextSelfId:", nextSelfId);
-        debugIds("baseline: selfId set (entity)", nextSelfId);
-      } else {
-        console.log("[ENTITIES_STORE] ❌ youEntity é null após normalize!");
       }
-    } else {
-      console.log("[ENTITIES_STORE] ⚠️ you não é primitivo nem objeto:", typeof you);
     }
 
     // compat: baseline pode vir como { others } (novo) ou { entities } (legado)
@@ -260,44 +234,31 @@ export function createEntitiesStore() {
         ? payload.entities
         : [];
 
-    console.log("[ENTITIES_STORE] others/entities list count:", list.length);
-
     for (const raw of list) {
       const e = normalizeEntity(raw);
       if (!e) continue;
 
       // evita inserir self como "other" se vier indevidamente no baseline
       if (nextSelfId && e.entityId === nextSelfId) {
-        console.log("[ENTITIES_STORE] 🚫 Pulando self na lista:", e.entityId);
-        debugIds("baseline: skip self in others", e.entityId);
         continue;
       }
 
-      console.log("[ENTITIES_STORE] ➕ Adicionando entidade:", e.entityId, e);
       state.entities.set(e.entityId, e);
     }
 
     // se baseline não enviar "you", mantém selfId anterior para evitar null/ownership swap
-    if (nextSelfId == null) {
-      console.log("[ENTITIES_STORE] ⚠️ nextSelfId é NULL! selfId anterior:", state.selfId);
-      debugIds("baseline: missing you, keep selfId", state.selfId);
-    } else {
-      console.log("[ENTITIES_STORE] ✅ Setando state.selfId para:", nextSelfId);
+    if (nextSelfId != null) {
       state.selfId = nextSelfId;
     }
 
     // garante presença do self mesmo se baseline não listar self em "others"
     if (youEntity) {
-      console.log("[ENTITIES_STORE] 📍 Garantindo presença do self no mapa");
       const current = state.entities.get(youEntity.entityId);
       if (!current || youEntity.rev >= (current.rev ?? 0)) {
-        console.log("[ENTITIES_STORE] ✅ Inserindo self no mapa:", youEntity.entityId);
         state.entities.set(youEntity.entityId, youEntity);
       }
     }
 
-    console.log("[ENTITIES_STORE] ✅ applyBaseline COMPLETO. state.selfId:", state.selfId);
-    console.log("[ENTITIES_STORE] Entidades no mapa:", Array.from(state.entities.keys()));
     emitChange();
   }
 
@@ -305,12 +266,8 @@ export function createEntitiesStore() {
     const e = normalizeEntity(entityRaw);
     if (!e) return;
 
-    console.log("[ENTITIES_STORE] 🎯 applySpawn entityId:", e.entityId, "selfId:", state.selfId);
-
     // evita tratar self como "other" em spawn
     if (state.selfId && e.entityId === state.selfId) {
-      console.log("[ENTITIES_STORE] 🚫 applySpawn PULANDO SELF:", e.entityId);
-      debugIds("spawn: skip self", e.entityId);
       return;
     }
 
@@ -319,11 +276,8 @@ export function createEntitiesStore() {
 
     // só aplica se rev for maior (ou se não existir)
     if (!cur || e.rev > curRev) {
-      console.log("[ENTITIES_STORE] ✅ applySpawn ADICIONANDO:", e.entityId);
       state.entities.set(e.entityId, e);
       emitChange();
-    } else {
-      console.log("[ENTITIES_STORE] ⏭️ applySpawn IGNORANDO (rev old):", e.entityId, "cur.rev:", curRev, "e.rev:", e.rev);
     }
   }
 
@@ -333,12 +287,9 @@ export function createEntitiesStore() {
 
     // evita despawn do self por acidente
     if (state.selfId && entityId === state.selfId) {
-      console.log("[ENTITIES_STORE] 🚫 applyDespawn PULANDO SELF:", entityId);
-      debugIds("despawn: skip self", entityId);
       return;
     }
 
-    console.log("[ENTITIES_STORE] ✅ applyDespawn REMOVENDO:", entityId);
     state.entities.delete(entityId);
     emitChange();
   }
@@ -348,8 +299,6 @@ export function createEntitiesStore() {
 
     const entityId = toId(delta.entityId ?? delta.id ?? delta.entity_id ?? null);
     if (!entityId) return;
-
-    debugIds("delta: normalized id", entityId);
 
     const nextRev = Number(delta.rev ?? NaN);
     if (!Number.isFinite(nextRev)) return;

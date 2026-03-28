@@ -1,102 +1,99 @@
 /**
  * src/world/scene/FloatingDamageText.jsx
- * 
+ *
  * Papel:
- * - Mostrar texto de dano flutuante acima da cabeça da entidade que levou dano
- * - Desaparecer após animação
- * 
+ * - Mostrar texto de dano flutuante acima da cabeca da entidade que levou dano
+ * - Renderizar somente os hits vivos recebidos do backend
+ *
  * Fonte da verdade:
- * - Backend (snapshot inicial + atualizações confirmadas via socket).
- * - Este arquivo NUNCA decide estado do mundo, apenas renderiza e envia intenção.
- * 
- * NÃO FAZ: 
- * - Não calcula dano, nem decide se é critico
- * - Não decide posição final do texto (deixa para GameCanvas)
- * - Não calcula animação (deixa para React)
- * - Não decide se o texto deve aparecer (deixa para GameCanvas)
- * - Não decide se o texto deve desaparecer (deixa para React)
- * - Não decide se o texto deve ser critico (deixa para GameCanvas)
- * - Não decide se o texto deve ser normal (deixa para GameCanvas)
- * - Não decide se o texto deve ser grande (deixa para GameCanvas)
- * - Não decide se o texto deve ser pequeno (deixa para GameCanvas)
- * - Não decide se o texto deve ser vermelho (deixa para GameCanvas)
+ * - Backend confirma cada hit via socket.
+ * - Este componente apenas desenha o snapshot atual dos hits ativos.
  */
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export function FloatingDamageText({ damages }) {
-  const [floatingTexts, setFloatingTexts] = useState([]);
-  const seenDamageIdsRef = useRef(new Set());
+  const [now, setNow] = useState(() => Date.now());
 
-  useLayoutEffect(() => {
-    if (!damages || damages.length === 0) {
-      setFloatingTexts([]);
-      seenDamageIdsRef.current.clear();
-      return;
-    }
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
 
-    const seen = seenDamageIdsRef.current;
-    const newTexts = [];
+    const testNode = document.createElement("div");
+    testNode.setAttribute("data-floating-damage-test", "true");
+    testNode.textContent = "TEST_RENDER";
+    Object.assign(testNode.style, {
+      position: "fixed",
+      left: "24px",
+      top: "24px",
+      zIndex: "2147483647",
+      pointerEvents: "none",
+      padding: "6px 10px",
+      borderRadius: "6px",
+      background: "rgba(255, 0, 0, 0.95)",
+      color: "#fff",
+      fontSize: "14px",
+      fontWeight: "700",
+      boxShadow: "0 0 8px rgba(0,0,0,0.4)",
+    });
 
-    for (let idx = 0; idx < damages.length; idx += 1) {
-      const dmg = damages[idx];
-      if (!dmg || dmg.id == null) continue;
-      if (seen.has(dmg.id)) continue;
+    document.body.appendChild(testNode);
 
-      seen.add(dmg.id);
-      newTexts.push({
-        id: dmg.id,
-        x: dmg.screenX,
-        y: dmg.screenY,
-        damage: dmg.damage,
-        isCrit: dmg.isCrit ?? false,
-        startTime: Date.now(),
-      });
-    }
+    return () => {
+      testNode.remove();
+    };
+  }, []);
 
-    if (newTexts.length === 0) return;
-    setFloatingTexts((prev) => [...prev, ...newTexts]);
-  }, [damages]);
-
-  // Remover textos que já finalizaram animação
   useEffect(() => {
     const interval = setInterval(() => {
-      setFloatingTexts((prev) => {
-        const now = Date.now();
-        const alive = [];
-        const removed = [];
-
-        for (const text of prev) {
-          if (now - text.startTime < 1500) {
-            alive.push(text);
-          } else {
-            removed.push(text);
-          }
-        }
-
-        if (removed.length > 0) {
-          const seen = seenDamageIdsRef.current;
-          for (const text of removed) {
-            seen.delete(text.id);
-          }
-        }
-
-        return alive;
-      });
+      setNow(Date.now());
     }, 50);
 
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <>
-      {floatingTexts.map((text) => {
-        const elapsed = Date.now() - text.startTime;
-        const duration = 1500; // ms
-        const progress = elapsed / duration;
+  if (!damages || damages.length === 0) {
+    return null;
+  }
 
-        // Animar: move para cima e desaparece
-        const offsetY = progress * 80; // 80px para cima
+  const content = (
+    <>
+      <div
+        style={{
+          position: "fixed",
+          left: "24px",
+          top: "64px",
+          zIndex: 2147483647,
+          pointerEvents: "none",
+          padding: "6px 10px",
+          borderRadius: "6px",
+          background: "rgba(0, 0, 0, 0.85)",
+          color: "#00ff88",
+          fontSize: "12px",
+          fontWeight: 700,
+          boxShadow: "0 0 8px rgba(0,0,0,0.4)",
+        }}
+      >
+        DAMAGE_COUNT={damages.length} FIRST=
+        {Number.isFinite(Number(damages[0]?.screenX ?? damages[0]?.x)) && Number.isFinite(Number(damages[0]?.screenY ?? damages[0]?.y))
+          ? `${Number(damages[0].screenX ?? damages[0].x).toFixed(1)},${Number(damages[0].screenY ?? damages[0].y).toFixed(1)}`
+          : "invalid"}
+      </div>
+
+      {damages.map((text) => {
+        const screenX = Number(text?.screenX ?? text?.x);
+        const screenY = Number(text?.screenY ?? text?.y);
+
+        if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+          return null;
+        }
+
+        const startedAt = Number(text?.startedAt ?? now);
+        const duration = Number(text?.ttlMs ?? 1200);
+        const elapsed = Math.max(0, now - startedAt);
+        const progress = duration > 0 ? Math.min(1, elapsed / duration) : 1;
+
+        const offsetY = progress * 80;
         const opacity = Math.max(0, 1 - progress);
 
         return (
@@ -104,11 +101,11 @@ export function FloatingDamageText({ damages }) {
             key={text.id}
             style={{
               position: "fixed",
-              left: `${text.x}px`,
-              top: `${text.y - offsetY}px`,
+              left: `${screenX}px`,
+              top: `${screenY - offsetY}px`,
               transform: "translate(-50%, -50%)",
               pointerEvents: "none",
-              zIndex: 2000,
+              zIndex: 2147483647,
               opacity,
               transition: "none",
             }}
@@ -134,4 +131,10 @@ export function FloatingDamageText({ damages }) {
       })}
     </>
   );
+
+  if (typeof document === "undefined") {
+    return content;
+  }
+
+  return createPortal(content, document.body);
 }

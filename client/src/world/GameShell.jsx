@@ -367,8 +367,6 @@ export function GameShell() {
 
           if (inv?.ok === true) {
             setInventorySnapshot(inv);
-          } else {
-            console.warn("[INV] inv:full not ok (ignored)", inv?.error);
           }
         };
 
