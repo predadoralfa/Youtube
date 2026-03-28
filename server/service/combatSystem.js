@@ -19,6 +19,7 @@
  */
 
 const db = require("../models");
+const { getRuntime, markStatsDirty } = require("../state/runtimeStore");
 
 /**
  * =====================================================================
@@ -183,20 +184,65 @@ async function executeAttack(params) {
 
   try {
     if (targetKind === "PLAYER") {
-      // Atualizar HP do player no banco
-      const stats = await db.GaUserStats.findByPk(targetId);
-      if (stats) {
-        targetHPBefore = Number(stats.hp_current);
-        targetHPMax = Number(stats.hp_max);
+      const runtime = getRuntime(targetId);
+      if (runtime) {
+        const hpCurrent = Number(
+          runtime.vitals?.hp?.current ??
+            runtime.combat?.hpCurrent ??
+            runtime.stats?.hpCurrent ??
+            runtime.hpCurrent ??
+            runtime.hp ??
+            100
+        );
+        const hpMax = Number(
+          runtime.vitals?.hp?.max ??
+            runtime.combat?.hpMax ??
+            runtime.stats?.hpMax ??
+            runtime.hpMax ??
+            100
+        );
+
+        targetHPBefore = hpCurrent;
+        targetHPMax = hpMax;
 
         const newHP = Math.max(0, targetHPBefore - damage);
         targetHPAfter = newHP;
-
-        await stats.update({ hp_current: newHP });
-
         targetDied = newHP <= 0;
 
+        if (!runtime.vitals) runtime.vitals = { hp: { current: hpMax, max: hpMax } };
+        if (!runtime.vitals.hp) runtime.vitals.hp = { current: hpMax, max: hpMax };
+        runtime.vitals.hp.current = newHP;
+        runtime.vitals.hp.max = hpMax;
+
+        runtime.hpCurrent = newHP;
+        runtime.hpMax = hpMax;
+        if (runtime.combat) {
+          runtime.combat.hpCurrent = newHP;
+          runtime.combat.hpMax = hpMax;
+        }
+        if (runtime.stats) {
+          runtime.stats.hpCurrent = newHP;
+          runtime.stats.hpMax = hpMax;
+        }
+
+        markStatsDirty(targetId);
+
         console.log(`[COMBAT] Player ${targetId} took ${damage} damage (${targetHPBefore} -> ${targetHPAfter})`);
+      } else {
+        // Fallback legado: persiste direto quando runtime não estiver carregado.
+        const stats = await db.GaUserStats.findByPk(targetId);
+        if (stats) {
+          targetHPBefore = Number(stats.hp_current);
+          targetHPMax = Number(stats.hp_max);
+
+          const newHP = Math.max(0, targetHPBefore - damage);
+          targetHPAfter = newHP;
+          targetDied = newHP <= 0;
+
+          await stats.update({ hp_current: newHP });
+
+          console.log(`[COMBAT] Player ${targetId} took ${damage} damage (${targetHPBefore} -> ${targetHPAfter})`);
+        }
       }
     } else if (targetKind === "ENEMY") {
       // Atualizar HP do enemy no banco

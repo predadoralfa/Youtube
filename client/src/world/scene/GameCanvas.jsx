@@ -274,7 +274,24 @@ export function GameCanvas({
       const exactDamageText = Number.isFinite(exactDamage) ? exactDamage : 0;
 
       const targetKey = String(targetId);
-      const worldPos = entityPositionsRef.current.get(targetKey);
+      let worldPos = entityPositionsRef.current.get(targetKey);
+      if (!worldPos) {
+        const mesh =
+          meshByEntityIdRef.current.get(targetKey) ??
+          meshByEnemyIdRef.current.get(targetKey) ??
+          meshByActorIdRef.current.get(targetKey) ??
+          null;
+
+        if (mesh?.getWorldPosition) {
+          const meshWorldPos = new THREE.Vector3();
+          mesh.getWorldPosition(meshWorldPos);
+          worldPos = {
+            x: meshWorldPos.x,
+            y: meshWorldPos.y,
+            z: meshWorldPos.z,
+          };
+        }
+      }
       let screenX = null;
       let screenY = null;
 

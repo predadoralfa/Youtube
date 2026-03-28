@@ -117,12 +117,12 @@ function normalizeVitals(raw) {
 }
 
 function pickBestSelfVitals(snapshot, selfEntity) {
-  if (selfEntity?.vitals) {
-    return normalizeVitals(selfEntity);
-  }
-
   if (snapshot?.ui?.self?.vitals) {
     return normalizeVitals(snapshot.ui.self);
+  }
+
+  if (selfEntity?.vitals) {
+    return normalizeVitals(selfEntity);
   }
 
   if (snapshot?.runtime?.vitals) {
@@ -396,10 +396,13 @@ export function GameShell() {
           const self = store.entities.get(String(selfId));
           if (!self) return;
 
-          const selfVitals = normalizeVitals(self);
-
           setSnapshot((prev) => {
             if (!prev || !prev.runtime) return prev;
+
+            const preservedVitals = prev?.ui?.self?.vitals
+              ? normalizeVitals(prev.ui.self)
+              : null;
+            const nextVitals = preservedVitals ?? normalizeVitals(self);
 
             return {
               ...prev,
@@ -411,13 +414,13 @@ export function GameShell() {
                   y: self.pos?.y ?? prev.runtime.pos?.y ?? 0,
                   z: self.pos?.z ?? prev.runtime.pos?.z ?? 0,
                 },
-                vitals: selfVitals,
+                vitals: nextVitals,
               },
               ui: {
                 ...(prev.ui ?? {}),
                 self: {
                   ...((prev.ui && prev.ui.self) ?? {}),
-                  vitals: selfVitals,
+                  vitals: nextVitals,
                 },
               },
             };
@@ -468,10 +471,13 @@ export function GameShell() {
           const self = store.entities.get(String(selfId));
           if (!self) return;
 
-          const selfVitals = normalizeVitals(self);
-
           setSnapshot((prev) => {
             if (!prev || !prev.runtime) return prev;
+
+            const preservedVitals = prev?.ui?.self?.vitals
+              ? normalizeVitals(prev.ui.self)
+              : null;
+            const nextVitals = preservedVitals ?? normalizeVitals(self);
 
             return {
               ...prev,
@@ -483,13 +489,13 @@ export function GameShell() {
                   y: self.pos?.y ?? prev.runtime.pos?.y ?? 0,
                   z: self.pos?.z ?? prev.runtime.pos?.z ?? 0,
                 },
-                vitals: selfVitals,
+                vitals: nextVitals,
               },
               ui: {
                 ...(prev.ui ?? {}),
                 self: {
                   ...((prev.ui && prev.ui.self) ?? {}),
-                  vitals: selfVitals,
+                  vitals: nextVitals,
                 },
               },
             };
@@ -537,22 +543,25 @@ export function GameShell() {
           const self = store.entities.get(String(selfId));
           if (!self) return;
 
-          const selfVitals = normalizeVitals(self);
-
           setSnapshot((prev) => {
             if (!prev || !prev.runtime) return prev;
+
+            const preservedVitals = prev?.ui?.self?.vitals
+              ? normalizeVitals(prev.ui.self)
+              : null;
+            const nextVitals = preservedVitals ?? normalizeVitals(self);
 
             return {
               ...prev,
               runtime: {
                 ...prev.runtime,
-                vitals: selfVitals,
+                vitals: nextVitals,
               },
               ui: {
                 ...(prev.ui ?? {}),
                 self: {
                   ...((prev.ui && prev.ui.self) ?? {}),
-                  vitals: selfVitals,
+                  vitals: nextVitals,
                 },
               },
             };
@@ -581,8 +590,42 @@ export function GameShell() {
         // ✨ NOVO: Escutar ataques do inimigo
         onEnemyAttack = (payload) => {
           console.log("[COMBAT] Enemy attack received:", payload);
-          // O GameCanvas já processa o dano via combat:damage_taken
-          // Este listener é só para log
+          setSnapshot((prev) => {
+            if (!prev?.runtime) return prev;
+
+            const currentVitals = prev.runtime.vitals ?? normalizeVitals(prev.runtime);
+            const hpCurrentRaw = payload?.targetHPAfter ?? payload?.hpAfter ?? payload?.damageAfter;
+            const hpMaxRaw = payload?.targetHPMax ?? payload?.hpMax;
+            const hpCurrent = Number.isFinite(Number(hpCurrentRaw))
+              ? Math.max(0, Number(hpCurrentRaw))
+              : currentVitals?.hp?.current ?? 0;
+            const hpMax = Number.isFinite(Number(hpMaxRaw))
+              ? Math.max(0, Number(hpMaxRaw))
+              : currentVitals?.hp?.max ?? 0;
+
+            const selfVitals = {
+              hp: {
+                current: hpCurrent,
+                max: hpMax,
+              },
+              stamina: currentVitals?.stamina ?? { current: 0, max: 0 },
+            };
+
+            return {
+              ...prev,
+              runtime: {
+                ...prev.runtime,
+                vitals: selfVitals,
+              },
+              ui: {
+                ...(prev.ui ?? {}),
+                self: {
+                  ...((prev.ui && prev.ui.self) ?? {}),
+                  vitals: selfVitals,
+                },
+              },
+            };
+          });
         };
 
         socket.on("socket:ready", onSocketReady);

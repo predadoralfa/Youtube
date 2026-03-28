@@ -1,7 +1,7 @@
 // server/state/enemies/enemyAI.js
 // ✨ FINAL: Compatível com tickOnce.js - Função tickEnemyAI
 
-const { getRuntime } = require("../runtimeStore");
+const { getRuntime, markStatsDirty } = require("../runtimeStore");
 const db = require("../../models");
 
 const COMBAT_RANGE_LIMIT = 15; // Perseguir até 15 unidades
@@ -227,13 +227,27 @@ async function updateSingleEnemyAttack(enemy, nowMs) {
   const hpAfter = targetRt.vitals.hp.current;
   const hpMax = targetRt.vitals.hp.max;
 
-  try {
-    const playerStatsRow = await db.GaUserStats.findByPk(Number(targetId));
-    if (playerStatsRow) {
-      await playerStatsRow.update({ hp_current: hpAfter, hp_max: hpMax });
+  if (targetRt) {
+    targetRt.hpCurrent = hpAfter;
+    targetRt.hpMax = hpMax;
+    if (targetRt.combat) {
+      targetRt.combat.hpCurrent = hpAfter;
+      targetRt.combat.hpMax = hpMax;
     }
-  } catch (err) {
-    console.error(`[ENEMY_AI] Failed to persist player hp for player=${targetId}:`, err);
+    if (targetRt.stats) {
+      targetRt.stats.hpCurrent = hpAfter;
+      targetRt.stats.hpMax = hpMax;
+    }
+    markStatsDirty(targetId, nowMs);
+  } else {
+    try {
+      const playerStatsRow = await db.GaUserStats.findByPk(Number(targetId));
+      if (playerStatsRow) {
+        await playerStatsRow.update({ hp_current: hpAfter, hp_max: hpMax });
+      }
+    } catch (err) {
+      console.error(`[ENEMY_AI] Failed to persist player hp for player=${targetId}:`, err);
+    }
   }
 
   // Atualizar cooldown
