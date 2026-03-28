@@ -78,7 +78,7 @@ async function loadEnemyCombatStats(enemyInstanceId) {
           include: [
             {
               association: "enemyDef",
-              attributes: ["id"],
+              attributes: ["id", "ai_profile_json"],
               include: [
                 {
                   association: "baseStats",
@@ -93,8 +93,11 @@ async function loadEnemyCombatStats(enemyInstanceId) {
 
     if (!stats) return null;
 
-    // TODO: Carregar attack_power e attack_range de GaEnemyDefStats quando adicionar
-    const attackPower = 5;  // Default por enquanto
+    const attackPower = Number(
+      stats?.enemyInstance?.enemyDef?.baseStats?.attack_power ??
+      stats?.enemyInstance?.enemyDef?.ai_profile_json?.attackPower ??
+      5
+    );
     const attackRange = 1.2; // Default por enquanto
     const defense = 0;
 

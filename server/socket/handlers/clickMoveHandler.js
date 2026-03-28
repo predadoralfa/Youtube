@@ -75,7 +75,13 @@ function registerClickMoveHandler(socket) {
       const tz = clamp(Number(z), minZ, maxZ);
 
       if (rt.combat?.state === "ENGAGED") {
-        clearPlayerCombat(rt);
+        const wasCancelled = clearPlayerCombat(rt);
+        if (wasCancelled) {
+          socket.emit("combat:cancelled", {
+            reason: "CLICK",
+            atMs: nowMs,
+          });
+        }
       }
 
       rt.moveMode = "CLICK";

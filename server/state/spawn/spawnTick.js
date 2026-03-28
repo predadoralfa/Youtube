@@ -23,6 +23,20 @@ function generateCirclePos(baseX, baseZ, radius) {
   };
 }
 
+function readAttackPowerFromProfile(aiProfileJson, fallback = 5) {
+  let profile = aiProfileJson;
+  if (typeof profile === "string") {
+    try {
+      profile = JSON.parse(profile);
+    } catch {
+      profile = null;
+    }
+  }
+
+  const attackPower = Number(profile?.attackPower);
+  return Number.isFinite(attackPower) && attackPower > 0 ? attackPower : fallback;
+}
+
 /**
  * Seleciona entry por weight (sorteio ponderado)
  */
@@ -272,6 +286,7 @@ async function processSpawner(spawner, nowMs, io = null) {
           hpMax: Number(baseStats.hp_max),
           moveSpeed: Number(baseStats.move_speed),
           attackSpeed: Number(baseStats.attack_speed),
+          attackPower: readAttackPowerFromProfile(enemyDef.ai_profile_json, 5),
         },
         rev: 0,
         dirty: false,

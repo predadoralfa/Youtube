@@ -62,6 +62,13 @@ function registerMoveHandler(socket) {
         return;
       }
 
+      if (result.combatCancelled) {
+        socket.emit("combat:cancelled", {
+          reason: "WASD",
+          atMs: nowMs,
+        });
+      }
+
       // Se nada mudou, não replica
       if (!result.moved && !result.yawChanged && !result.modeOrActionChanged) return;
 

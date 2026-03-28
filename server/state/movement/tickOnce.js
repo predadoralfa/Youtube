@@ -494,10 +494,13 @@ async function tickOnce(io, nowMsValue) {
     const attacks = getLastTickAttacks(enemies);
 
     if (attacks && Array.isArray(attacks) && attacks.length > 0) {
-      for (const attack of attacks) {
+    for (const attack of attacks) {
+        const enemyEventId = `ENEMY:${attack.enemyId}:PLAYER:${attack.targetId}:${t}`;
         io.to(`inst:${instanceId}`).emit("combat:enemy_attack", {
+          eventId: enemyEventId,
           enemyId: `enemy_${attack.enemyId}`,
           targetId: attack.targetId,
+          targetKind: "PLAYER",
           damage: attack.damage,
           targetHPBefore: attack.targetHPBefore,
           targetHPAfter: attack.targetHPAfter,

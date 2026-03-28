@@ -264,7 +264,7 @@ export function GameCanvas({
     const socket = getSocket();
     if (!socket) return;
 
-    const onDamageTaken = (data) => {
+    const applyDamageEvent = (data) => {
       if (!data) return;
 
       const { eventId, targetId, damage, targetHPAfter, targetHPMax } = data;
@@ -314,16 +314,34 @@ export function GameCanvas({
       });
     };
 
+    const onDamageTaken = (data) => {
+      applyDamageEvent(data);
+    };
+
     const onAttackResult = (data) => {
       if (!data) return;
       console.log("[COMBAT] Attack result:", data);
     };
 
+    const onEnemyAttack = (data) => {
+      applyDamageEvent(data);
+    };
+
+    const onCombatCancelled = () => {
+      seenDamageEventIdsRef.current.clear();
+      setFloatingDamages([]);
+      setTargetHpBar(null);
+    };
+
     socket.on("combat:damage_taken", onDamageTaken);
+    socket.on("combat:enemy_attack", onEnemyAttack);
+    socket.on("combat:cancelled", onCombatCancelled);
     socket.on("combat:attack_result", onAttackResult);
 
     return () => {
       socket.off("combat:damage_taken", onDamageTaken);
+      socket.off("combat:enemy_attack", onEnemyAttack);
+      socket.off("combat:cancelled", onCombatCancelled);
       socket.off("combat:attack_result", onAttackResult);
     };
   }, []);

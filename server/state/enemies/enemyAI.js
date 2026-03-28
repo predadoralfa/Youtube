@@ -199,8 +199,13 @@ function updateSingleEnemyAttack(enemy, nowMs) {
 
   // ✨ ACERTO! Inimigo ataca player
   
-  // Calcular dano: attackPower do inimigo - defense do player
-  const enemyAttackPower = enemy.attackPower || 5;
+  // Calcular dano: attackPower autoritativo do enemy - defense do player
+  const enemyAttackPower =
+    Number.isFinite(Number(enemy.attackPower))
+      ? Number(enemy.attackPower)
+      : Number.isFinite(Number(enemy.stats?.attackPower))
+        ? Number(enemy.stats.attackPower)
+        : 5;
   const playerDefense = targetRt._defense || 0;
   const damage = Math.max(1, enemyAttackPower - playerDefense);
 
@@ -276,9 +281,7 @@ function tickEnemyAI(enemies, t, dt) {
 
   // Armazenar ataques para later broadcast (se necessário)
   // Pode ser acessado via getLastEnemyAttacks()
-  if (attacks.length > 0) {
-    enemies._lastTickAttacks = attacks;
-  }
+  enemies._lastTickAttacks = attacks.length > 0 ? attacks : [];
 
   return changedEnemies;
 }
@@ -290,7 +293,9 @@ function getLastTickAttacks(enemies) {
   if (!enemies || !Array.isArray(enemies)) {
     return [];
   }
-  return enemies._lastTickAttacks || [];
+  const attacks = enemies._lastTickAttacks || [];
+  enemies._lastTickAttacks = [];
+  return attacks;
 }
 
 module.exports = {

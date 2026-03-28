@@ -44,10 +44,11 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
   const wasdActiveNow = isWASDActive(runtime, nowMs);
 
   let modeOrActionChanged = false;
+  let combatCancelled = false;
 
   if (wasdActiveNow) {
     if ((d.x !== 0 || d.z !== 0) && runtime.combat?.state === "ENGAGED") {
-      clearPlayerCombat(runtime);
+      combatCancelled = clearPlayerCombat(runtime);
     }
 
     if (runtime.moveMode === "CLICK") {
@@ -78,14 +79,15 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
 
   const speed = readRuntimeSpeedStrict(runtime);
   if (speed == null) {
-    return {
-      ok: false,
-      reason: "invalid_speed",
-      yawChanged,
-      moved: false,
-      modeOrActionChanged,
-      dir: d,
-    };
+      return {
+        ok: false,
+        reason: "invalid_speed",
+        yawChanged,
+        moved: false,
+        modeOrActionChanged,
+        combatCancelled,
+        dir: d,
+      };
   }
 
   let moved = false;
@@ -99,6 +101,7 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
         yawChanged,
         moved: false,
         modeOrActionChanged,
+        combatCancelled,
         dir: d,
       };
     }
@@ -117,6 +120,7 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
         yawChanged,
         moved: false,
         modeOrActionChanged,
+        combatCancelled,
         dir: d,
       };
     }
@@ -133,6 +137,7 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
     yawChanged,
     moved,
     modeOrActionChanged,
+    combatCancelled,
     dir: d,
   };
 }
