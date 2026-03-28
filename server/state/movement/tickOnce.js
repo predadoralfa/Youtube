@@ -122,7 +122,7 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
 /**
  * ✨ NOVO: Processa combate automático para player em ENGAGED
  */
-function processAutomaticCombat(io, rt, instanceId) {
+async function processAutomaticCombat(io, rt, instanceId) {
   if (!rt.combat || rt.combat.state !== "ENGAGED") {
     return;
   }
@@ -192,23 +192,19 @@ function processAutomaticCombat(io, rt, instanceId) {
   // ===== COMBATE PERTO: ATACAR =====
   if (distance <= ATTACK_RANGE) {
     console.log(`[AUTO_COMBAT] Player ${rt.userId} no range, tentando atacar...`);
-    // Executar ataque (será feito no tick com await)
-    // Por enquanto, apenas marcar flag para fazer depois
-    rt._pendingAutoAttack = true;
+    await executeServerSideAttack(io, rt, enemy);
     return;
   }
 
   // ===== COMBATE MÉDIO: PERSEGUIR =====
   console.log(`[AUTO_COMBAT] Player ${rt.userId} perseguindo enemy (distância: ${distance.toFixed(2)})`);
   
-  // Já está com moveTarget definido de interact:start
-  // Mas vamos certificar que está se movendo
-  if (rt.moveMode !== "CLICK" || !rt.moveTarget) {
-    console.log(`[AUTO_COMBAT] Re-setting moveTarget para enemy position`);
-    rt.moveMode = "CLICK";
-    rt.moveTarget = { x: enemyPos.x, z: enemyPos.z };
-    rt.moveStopRadius = ATTACK_RANGE;
-  }
+  // Sempre realinha o target para seguir o inimigo vivo
+  rt.moveMode = "CLICK";
+  rt.moveTarget = { x: enemyPos.x, z: enemyPos.z };
+  rt.moveStopRadius = ATTACK_RANGE;
+  rt.moveTickAtMs = t;
+  rt.action = "move";
 }
 
 /**
@@ -315,6 +311,9 @@ async function tickOnce(io, nowMsValue) {
         // ✅ MANTÉM moveTarget e chunk para continuar coletando
         // Não faz o continue abaixo que pararia o loop
         // Continua para fazer emit de move:state (feedback ao client)
+      } else if (rt.combat?.state === "ENGAGED" && rt.combat?.targetKind === "ENEMY") {
+        // Em combate, não solta o target ao chegar perto; o combate decide se ataca ou persegue.
+        rt.action = "move";
       } else {
         // ================================================================
         // SE NÃO ESTÁ EM INTERACT LOOP: PARA NORMALMENTE
@@ -466,20 +465,7 @@ async function tickOnce(io, nowMsValue) {
     for (const rt of allRuntimes) {
       if (!rt || String(rt.instanceId) !== String(instanceId)) continue;
 
-      processAutomaticCombat(io, rt, instanceId);
-
-      // Executar ataque pendente
-      if (rt._pendingAutoAttack) {
-        const targetId = rt.combat?.targetId;
-        if (targetId) {
-          const cleanId = String(targetId).replace(/^enemy_/, '');
-          const enemy = getEnemy(cleanId);
-          if (enemy) {
-            await executeServerSideAttack(io, rt, enemy);
-          }
-        }
-        rt._pendingAutoAttack = false;
-      }
+      await processAutomaticCombat(io, rt, instanceId);
     }
 
     // ========================================

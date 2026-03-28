@@ -23,6 +23,11 @@ function updateEnemyMovement(enemy, nowMs, dt) {
   // Inimigos mortos não se movem
   if (enemy.status !== "ALIVE") return false;
 
+  // Não mover quando combat acabou ou está congelado
+  if (enemy._combatMode && !enemy._combatActive) {
+    return false;
+  }
+
   const speed = Number(enemy.stats?.moveSpeed) || 3.5;
   const homeX = Number(enemy.homePos?.x) || 0;
   const homeZ = Number(enemy.homePos?.z) || 0;

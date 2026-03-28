@@ -5,6 +5,7 @@ const { getRuntime } = require("../runtimeStore");
 
 const COMBAT_RANGE_LIMIT = 15; // Perseguir até 15 unidades
 const ENEMY_ATTACK_COOLDOWN_MS = 1500; // 1.5s entre ataques
+const ENEMY_ATTACK_RANGE = 1.2;
 
 function isFiniteNumber(n) {
   return typeof n === "number" && Number.isFinite(n);
@@ -37,6 +38,8 @@ function resetEnemyToSpawn(enemy) {
   enemy._combatMode = false;
   enemy._combatActive = false;
   enemy._combatTargetId = null;
+  enemy._moveTarget = null;
+  enemy._moveTargetSetAt = null;
   enemy._combatStartedAtMs = null;
   enemy._lastAttackAtMs = 0;
   
@@ -113,6 +116,19 @@ function updateSingleEnemyAI(enemy, nowMs) {
       return true;
     }
 
+    // ✨ Se estiver dentro do range de ataque, para pra bater
+    if (dist <= ENEMY_ATTACK_RANGE) {
+      enemy._moveTarget = null;
+      if (enemy.moveMode !== "IDLE") {
+        enemy.moveMode = "IDLE";
+        enemy.moveTarget = null;
+        enemy.moveStopRadius = null;
+        changed = true;
+        console.log(`[ENEMY_AI] ⚔️ Enemy ${enemy.id} parou para atacar`);
+      }
+      return changed;
+    }
+
     // Perseguir: definir alvo e deixar movimento processar
     const newMoveMode = "FOLLOW";
     if (prevMoveMode !== newMoveMode) {
@@ -122,8 +138,10 @@ function updateSingleEnemyAI(enemy, nowMs) {
 
     enemy.moveMode = newMoveMode;
     enemy.moveTarget = { x: targetPos.x, z: targetPos.z };
-    enemy.moveStopRadius = 1.2; // Range de ataque
+    enemy.moveStopRadius = ENEMY_ATTACK_RANGE;
     enemy.moveTickAtMs = nowMs;
+    enemy._moveTarget = { x: targetPos.x, z: targetPos.z };
+    enemy._moveTargetSetAt = nowMs;
 
     return changed;
   }
@@ -172,7 +190,7 @@ function updateSingleEnemyAttack(enemy, nowMs) {
 
   // Verificar distância
   const dist = calculateDistance(enemy.pos, targetRt.pos);
-  const attackRange = 1.2;
+  const attackRange = ENEMY_ATTACK_RANGE;
 
   if (dist > attackRange) {
     // Longe demais, não ataca

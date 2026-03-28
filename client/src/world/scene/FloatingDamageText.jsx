@@ -22,33 +22,63 @@
  * - Não decide se o texto deve ser vermelho (deixa para GameCanvas)
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 export function FloatingDamageText({ damages }) {
   const [floatingTexts, setFloatingTexts] = useState([]);
+  const seenDamageIdsRef = useRef(new Set());
 
   useEffect(() => {
     if (!damages || damages.length === 0) return;
 
-    // Adicionar novo floating text
-    const newTexts = damages.map((dmg, idx) => ({
-      id: `${dmg.targetId}-${Date.now()}-${idx}`,
-      x: dmg.screenX,
-      y: dmg.screenY,
-      damage: dmg.damage,
-      isCrit: dmg.isCrit ?? false,
-      startTime: Date.now(),
-    }));
+    const seen = seenDamageIdsRef.current;
+    const newTexts = [];
 
+    for (let idx = 0; idx < damages.length; idx += 1) {
+      const dmg = damages[idx];
+      if (!dmg || dmg.id == null) continue;
+      if (seen.has(dmg.id)) continue;
+
+      seen.add(dmg.id);
+      newTexts.push({
+        id: dmg.id,
+        x: dmg.screenX,
+        y: dmg.screenY,
+        damage: dmg.damage,
+        isCrit: dmg.isCrit ?? false,
+        startTime: Date.now(),
+      });
+    }
+
+    if (newTexts.length === 0) return;
     setFloatingTexts((prev) => [...prev, ...newTexts]);
   }, [damages]);
 
   // Remover textos que já finalizaram animação
   useEffect(() => {
     const interval = setInterval(() => {
-      setFloatingTexts((prev) =>
-        prev.filter((t) => Date.now() - t.startTime < 1500) // 1.5 segundos
-      );
+      setFloatingTexts((prev) => {
+        const now = Date.now();
+        const alive = [];
+        const removed = [];
+
+        for (const text of prev) {
+          if (now - text.startTime < 1500) {
+            alive.push(text);
+          } else {
+            removed.push(text);
+          }
+        }
+
+        if (removed.length > 0) {
+          const seen = seenDamageIdsRef.current;
+          for (const text of removed) {
+            seen.delete(text.id);
+          }
+        }
+
+        return alive;
+      });
     }, 50);
 
     return () => clearInterval(interval);

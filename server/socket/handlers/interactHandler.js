@@ -164,13 +164,6 @@ function startEnemyCombat({ enemy, attackerUserId, nowMs, rt }) {
     return false;
   }
 
-  // ✨ NOVO: Marcar inimigo como em combate
-  enemy._combatMode = true;
-  enemy._combatActive = false;  // Ainda congelado até primeiro ataque
-  enemy._combatTargetId = attackerUserId;
-  enemy._combatStartedAtMs = nowMs;
-  enemy._lastAttackAtMs = 0;
-
   // ✨ NOVO: Marcar player como em combate automático
   if (rt && rt.combat) {
     rt.combat.state = "ENGAGED";
@@ -178,8 +171,8 @@ function startEnemyCombat({ enemy, attackerUserId, nowMs, rt }) {
     rt.combat.targetKind = "ENEMY";
   }
 
-  console.log(`[INTERACT_DEBUG] ✅ Enemy ${enemy.id} em combate! Target: player ${attackerUserId}`);
   console.log(`[INTERACT_DEBUG] ✅ Player state=ENGAGED, targetId=${enemy.id}`);
+  console.log(`[INTERACT_DEBUG] ✅ Enemy ${enemy.id} ainda em patrulha até o primeiro golpe`);
   
   return true;
 }
