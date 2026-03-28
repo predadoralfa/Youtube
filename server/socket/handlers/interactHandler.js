@@ -352,26 +352,19 @@ function registerInteractHandler(io, socket) {
       }
 
       if (cur.kind === "ENEMY") {
-        // ✨ LIMPAR PREFIXO AQUI TAMBÉM!
-        const cleanEnemyId = String(cur.id).replace(/^enemy_/, '');
-        const enemy = getEnemy(cleanEnemyId);
-        
-        if (enemy) {
-          if (String(enemy._combatTargetId) === String(userId)) {
-            console.log(`[INTERACT_DEBUG] Saindo de combate com enemy ${enemy.id}`);
-            enemy._combatMode = false;
-            enemy._combatActive = false;
-            enemy._combatTargetId = null;
-          }
-        }
-
-        // ✨ NOVO: Resetar estado de combate do player
+        // Cancelamento encerra só o combate do player.
+        // O enemy continua perseguindo/atacando até perder o target por regra própria.
         if (rt.combat) {
           console.log(`[INTERACT_DEBUG] Resetando combat.state para IDLE`);
           rt.combat.state = "IDLE";
           rt.combat.targetId = null;
           rt.combat.targetKind = null;
         }
+
+        rt.moveMode = "STOP";
+        rt.moveTarget = null;
+        rt.moveStopRadius = null;
+        rt.action = "idle";
       }
 
       rt.interact = null;

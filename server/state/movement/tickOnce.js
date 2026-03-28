@@ -92,8 +92,10 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
   if (!targetEnemy._combatActive) {
     targetEnemy._combatActive = true;
     targetEnemy._combatMode = true;
+    targetEnemy._combatTargetId = userId;
     targetEnemy._lastAttackAtMs = 0;
   }
+  targetEnemy._combatTargetId = userId;
 
   // ===== BROADCAST DO DANO =====
   const instanceId = attackerRt.instanceId;

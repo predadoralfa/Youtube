@@ -215,10 +215,14 @@ export function GameShell() {
   }, []);
 
   const onTargetClear = useCallback(() => {
+    if (combatTargetRef.current != null) {
+      emitInteractStop();
+    }
+
     selectedTargetRef.current = null;
     // ✨ NOVO: Limpar combate também
     combatTargetRef.current = null;
-  }, []);
+  }, [emitInteractStop]);
 
   const handleInputIntent = useCallback(
     (intent) => {
@@ -290,16 +294,14 @@ export function GameShell() {
         return;
       }
 
-      // ✨ MODIFICADO: Não enviar interact:stop para ENEMY
       if (isInteractUp(intent.type)) {
         const target = selectedTargetRef.current;
 
-        // Apenas enviar interact:stop para ACTOR/CONTAINER/PLAYER
-        // NÃO para ENEMY (combate é automático)
+        // Soltar SPACE não cancela combate de ENEMY.
+        // O cancelamento explícito fica para seleção/ação de movimento.
         if (target?.kind && target.kind !== "ENEMY") {
           emitInteractStop();
         }
-        // Se é ENEMY, não fazer nada ao soltar SPACE
         return;
       }
     },

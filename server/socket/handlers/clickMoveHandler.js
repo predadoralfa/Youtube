@@ -5,6 +5,8 @@ const {
   isWASDActive,
 } = require("../../state/runtimeStore");
 
+const { clearPlayerCombat } = require("./move/clearCombat");
+
 function isFiniteNumber(n) {
   return typeof n === "number" && Number.isFinite(n);
 }
@@ -71,6 +73,10 @@ function registerClickMoveHandler(socket) {
       // clamp do target dentro de bounds (recomendado)
       const tx = clamp(Number(x), minX, maxX);
       const tz = clamp(Number(z), minZ, maxZ);
+
+      if (rt.combat?.state === "ENGAGED") {
+        clearPlayerCombat(rt);
+      }
 
       rt.moveMode = "CLICK";
       rt.moveTarget = { x: tx, z: tz };

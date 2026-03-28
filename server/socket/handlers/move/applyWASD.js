@@ -10,6 +10,7 @@ const {
 } = require("../../../state/movement/math");
 
 const { isFiniteNumber } = require("./validate");
+const { clearPlayerCombat } = require("./clearCombat");
 
 /**
  * Aplica um intent WASD no runtime.
@@ -45,6 +46,10 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
   let modeOrActionChanged = false;
 
   if (wasdActiveNow) {
+    if ((d.x !== 0 || d.z !== 0) && runtime.combat?.state === "ENGAGED") {
+      clearPlayerCombat(runtime);
+    }
+
     if (runtime.moveMode === "CLICK") {
       runtime.moveTarget = null;
       runtime.moveMode = "WASD";
