@@ -238,6 +238,7 @@ export function GameCanvas({
   const [targetHpBar, setTargetHpBar] = useState(null);
 
   const entityVitalsRef = useRef(new Map());
+  const seenDamageEventIdsRef = useRef(new Set());
 
   // ✨ LOG SNAPSHOT
   useEffect(() => {
@@ -266,15 +267,25 @@ export function GameCanvas({
     const onDamageTaken = (data) => {
       if (!data) return;
 
-      const { targetId, damage } = data;
+      const { eventId, targetId, damage, targetHPAfter, targetHPMax } = data;
       if (targetId == null || damage == null) return;
+
+      if (eventId && seenDamageEventIdsRef.current.has(String(eventId))) {
+        return;
+      }
+      if (eventId) {
+        seenDamageEventIdsRef.current.add(String(eventId));
+      }
+
+      const exactDamage = Number(damage);
+      const exactDamageText = Number.isFinite(exactDamage) ? exactDamage : 0;
 
       setFloatingDamages((prev) => [
         ...prev,
         {
-          id: `${String(targetId)}:${Date.now()}:${Math.random()}`,
+          id: String(eventId ?? `${String(targetId)}:${Date.now()}:${Math.random()}`),
           targetId: String(targetId),
-          damage: Math.ceil(Number(damage) || 0),
+          damage: exactDamageText,
           screenX: 0,
           screenY: 0,
           isCrit: false,
@@ -291,7 +302,14 @@ export function GameCanvas({
 
       entityVitalsRef.current.set(key, {
         ...current,
-        hpCurrent: Math.max(0, Number((current.hpCurrent ?? 0) - damage)),
+        hpCurrent:
+          Number.isFinite(Number(targetHPAfter))
+            ? Math.max(0, Number(targetHPAfter))
+            : Math.max(0, Number((current.hpCurrent ?? 0) - exactDamageText)),
+        hpMax:
+          Number.isFinite(Number(targetHPMax))
+            ? Math.max(0, Number(targetHPMax))
+            : current.hpMax,
         lastDamageTime: Date.now(),
       });
     };
@@ -955,6 +973,7 @@ export function GameCanvas({
       selectedTargetRef.current = null;
       selectedObjectRef.current = null;
       entityVitalsRef.current.clear();
+      seenDamageEventIdsRef.current.clear();
 
       setMarker({ visible: false, x: 0, y: 0 });
       setTargetHpBar(null);

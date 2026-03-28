@@ -169,6 +169,11 @@ function startEnemyCombat({ enemy, attackerUserId, nowMs, rt }) {
     rt.combat.state = "ENGAGED";
     rt.combat.targetId = enemy.id;
     rt.combat.targetKind = "ENEMY";
+    console.log(
+      `[INTERACT_DEBUG] Combat armed | player=${attackerUserId} enemy=${enemy.id} ` +
+      `attackRange=${Number(rt.combat?.attackRange ?? 1.2).toFixed(2)} attackSpeed=${Number(rt.combat?.attackSpeed ?? 1).toFixed(2)} ` +
+      `moveMode=${rt.moveMode ?? "null"} moveTarget=${rt.moveTarget ? `(${Number(rt.moveTarget.x ?? 0).toFixed(2)}, ${Number(rt.moveTarget.z ?? 0).toFixed(2)})` : "null"}`
+    );
   }
 
   console.log(`[INTERACT_DEBUG] ✅ Player state=ENGAGED, targetId=${enemy.id}`);
@@ -297,15 +302,7 @@ function registerInteractHandler(io, socket) {
         // ✨ Passar rt para ativar rt.combat.state = "ENGAGED"
         startEnemyCombat({ enemy, attackerUserId: userId, nowMs, rt });
         console.log(`[INTERACT_DEBUG] ✅ Combate automático iniciado`);
-        
-        const combatStopRadius = 1.2;
-        console.log(`[INTERACT_DEBUG] 12. Aplicando movimento com stopRadius=${combatStopRadius}...`);
-        const moveOk = applyApproach({ rt, nowMs, targetPos, stopRadius: combatStopRadius });
-        if (!moveOk) {
-          console.log(`[INTERACT_DEBUG] ❌ Falha ao aplicar movimento`);
-          return;
-        }
-        console.log(`[INTERACT_DEBUG] ✅ Movimento aplicado`);
+        console.log(`[INTERACT_DEBUG] 12. Combate armado; auto-combate do server vai assumir perseguição/ataque`);
       } else {
         console.log(`[INTERACT_DEBUG] 11. É ${targetKind} (não é ENEMY), movimento normal...`);
         const moveOk = applyApproach({ rt, nowMs, targetPos, stopRadius });

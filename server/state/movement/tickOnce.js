@@ -8,6 +8,7 @@ const { getActiveSocket } = require("../../socket/sessionIndex");
 const { DT_MAX } = require("./config");
 const { computeDtSeconds, normalize2D, clampPosToBounds, readRuntimeSpeedStrict } = require("./math");
 const { bumpRev, toDelta } = require("./entity");
+const { readHpCurrent, readHpMax } = require("../enemies/enemyEntity");
 const { emitDeltaToInterest } = require("./emit");
 const { handleChunkTransition } = require("./chunkTransition");
 
@@ -31,8 +32,6 @@ const { loadEnemyCombatStats } = require("../../service/combatSystem");
 async function executeServerSideAttack(io, attackerRt, targetEnemy) {
   const userId = attackerRt.userId;
   const nowMs = Date.now();
-
-  console.log(`[AUTO_ATTACK] Player ${userId} ataque automático a enemy ${targetEnemy.id}`);
 
   // ===== VALIDAÇÕES =====
   const attackerPos = {
@@ -58,14 +57,12 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
   const timeSinceLastAttack = nowMs - lastAttackMs;
 
   if (timeSinceLastAttack < cooldownMs) {
-    console.log(`[AUTO_ATTACK] Cooldown ativo (${(cooldownMs - timeSinceLastAttack).toFixed(0)}ms)`);
     return false;
   }
 
   // Validar distância
-  const attackRange = stats?.attackRange || 1.2;
+  const attackRange = Number(attackerRt.combat?.attackRange ?? stats?.attackRange ?? 1.2);
   if (distance > attackRange) {
-    console.log(`[AUTO_ATTACK] Muito longe: ${distance.toFixed(2)} > ${attackRange}`);
     return false;
   }
 
@@ -74,23 +71,25 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
   const targetDefense = enemyStats?.defense || 0;
   const damage = Math.max(0, (stats?.attackPower || 10) - targetDefense);
 
-  const targetHPBefore = targetEnemy.hp_current ?? 100;
+  const targetHPBefore = readHpCurrent(targetEnemy) || 0;
   const targetHPAfter = Math.max(0, targetHPBefore - damage);
-  const targetHPMax = targetEnemy.hp_max ?? 100;
+  const targetHPMax = readHpMax(targetEnemy) || 0;
   const targetDied = targetHPAfter <= 0;
 
   // Atualizar HP do inimigo
+  targetEnemy.hpCurrent = targetHPAfter;
   targetEnemy.hp_current = targetHPAfter;
+  if (!targetEnemy.stats) targetEnemy.stats = {};
+  targetEnemy.stats.hpCurrent = targetHPAfter;
+  targetEnemy.stats.hpMax = targetHPMax;
   targetEnemy._hpChanged = true;
 
   // Atualizar cooldown do player
   attackerRt.combat.lastAttackAtMs = nowMs;
-
-  console.log(`[AUTO_ATTACK] ⚔️ ACERTO! Dano: ${damage}, Enemy HP: ${targetHPBefore} → ${targetHPAfter}/${targetHPMax}`);
+  attackerRt._lastAttackAtMs = nowMs;
 
   // ===== ATIVAR COMBATE DO INIMIGO (se não estava ativo) =====
   if (!targetEnemy._combatActive) {
-    console.log(`[AUTO_ATTACK] 🎯 Inimigo ACORDANDO!`);
     targetEnemy._combatActive = true;
     targetEnemy._combatMode = true;
     targetEnemy._lastAttackAtMs = 0;
@@ -98,7 +97,9 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
 
   // ===== BROADCAST DO DANO =====
   const instanceId = attackerRt.instanceId;
+  const combatEventId = `PLAYER:${userId}:ENEMY:${targetEnemy.id}:${nowMs}`;
   io.to(`inst:${instanceId}`).emit("combat:damage_taken", {
+    eventId: combatEventId,
     attackerId: userId,
     targetId: `enemy_${targetEnemy.id}`,
     targetKind: "ENEMY",
@@ -110,9 +111,21 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
     timestamp: nowMs,
   });
 
+  const activeSocket = getActiveSocket(userId);
+  if (activeSocket) {
+    activeSocket.emit("combat:attack_result", {
+      ok: true,
+      source: "AUTO",
+      damage,
+      targetHPAfter,
+      targetHPMax,
+      targetDied,
+      cooldownMs,
+    });
+  }
+
   // ===== HANDLE MORTE =====
   if (targetDied) {
-    console.log(`[AUTO_ATTACK] ☠️ Enemy ${targetEnemy.id} MORREU!`);
     targetEnemy.status = "DEAD";
   }
 
@@ -122,7 +135,7 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
 /**
  * ✨ NOVO: Processa combate automático para player em ENGAGED
  */
-async function processAutomaticCombat(io, rt, instanceId) {
+async function processAutomaticCombat(io, rt, instanceId, nowMs) {
   if (!rt.combat || rt.combat.state !== "ENGAGED") {
     return;
   }
@@ -131,7 +144,6 @@ async function processAutomaticCombat(io, rt, instanceId) {
   const targetKind = rt.combat.targetKind;
 
   if (!targetId || targetKind !== "ENEMY") {
-    console.log(`[AUTO_COMBAT] Invalid combat state for ${rt.userId}`);
     return;
   }
 
@@ -140,7 +152,6 @@ async function processAutomaticCombat(io, rt, instanceId) {
   const enemy = getEnemy(cleanEnemyId);
 
   if (!enemy) {
-    console.log(`[AUTO_COMBAT] Enemy ${cleanEnemyId} não encontrado, resetando combate`);
     rt.combat.state = "IDLE";
     rt.combat.targetId = null;
     rt.combat.targetKind = null;
@@ -148,7 +159,6 @@ async function processAutomaticCombat(io, rt, instanceId) {
   }
 
   if (String(enemy.status) !== "ALIVE") {
-    console.log(`[AUTO_COMBAT] Enemy ${cleanEnemyId} não está ALIVE (${enemy.status}), resetando combate`);
     rt.combat.state = "IDLE";
     rt.combat.targetId = null;
     rt.combat.targetKind = null;
@@ -163,47 +173,29 @@ async function processAutomaticCombat(io, rt, instanceId) {
   const dz = enemyPos.z - playerPos.z;
   const distance = Math.sqrt(dx * dx + dz * dz);
 
-  const COMBAT_RANGE_LIMIT = 15; // Máximo antes de sair de combate
-  const ATTACK_RANGE = 1.2; // Quando ataca
-
-  // ===== COMBATE MUITO LONGE: CANCELAR =====
-  if (distance > COMBAT_RANGE_LIMIT) {
-    console.log(`[AUTO_COMBAT] Player ${rt.userId} saiu do range de combate (${distance.toFixed(2)} > ${COMBAT_RANGE_LIMIT})`);
-    rt.combat.state = "IDLE";
-    rt.combat.targetId = null;
-    rt.combat.targetKind = null;
-
-    // Parar movimento
-    rt.moveMode = "STOP";
-    rt.moveTarget = null;
-    rt.action = "idle";
-
-    // Avisar inimigo que saiu
-    if (enemy._combatTargetId === rt.userId) {
-      console.log(`[AUTO_COMBAT] Enemy ${enemy.id} saindo de combate (player longe)`);
-      enemy._combatMode = false;
-      enemy._combatActive = false;
-      enemy._combatTargetId = null;
-    }
-
-    return;
-  }
+  const ATTACK_RANGE = Number(rt.combat?.attackRange ?? 1.2); // Quando ataca
+  const APPROACH_STOP_RADIUS = 0.1;
 
   // ===== COMBATE PERTO: ATACAR =====
   if (distance <= ATTACK_RANGE) {
-    console.log(`[AUTO_COMBAT] Player ${rt.userId} no range, tentando atacar...`);
+    const attackSpeed = Number(rt.combat?.attackSpeed ?? 1) || 1;
+    const lastAttackMs = Number(rt.combat?.lastAttackAtMs ?? 0);
+    const cooldownMs = 1000 / attackSpeed;
+    const elapsedMs = Number(nowMs ?? Date.now()) - lastAttackMs;
+
+    if (elapsedMs < cooldownMs) {
+      return;
+    }
+
     await executeServerSideAttack(io, rt, enemy);
     return;
   }
 
   // ===== COMBATE MÉDIO: PERSEGUIR =====
-  console.log(`[AUTO_COMBAT] Player ${rt.userId} perseguindo enemy (distância: ${distance.toFixed(2)})`);
-  
   // Sempre realinha o target para seguir o inimigo vivo
   rt.moveMode = "CLICK";
   rt.moveTarget = { x: enemyPos.x, z: enemyPos.z };
-  rt.moveStopRadius = ATTACK_RANGE;
-  rt.moveTickAtMs = t;
+  rt.moveStopRadius = APPROACH_STOP_RADIUS;
   rt.action = "move";
 }
 
@@ -212,6 +204,22 @@ async function processAutomaticCombat(io, rt, instanceId) {
  */
 async function tickOnce(io, nowMsValue) {
   const t = nowMsValue;
+
+  // ========================================
+  // ETAPA 0: COMBATE AUTOMÁTICO DOS PLAYERS
+  // Roda independente do movimento para manter
+  // a checagem de range/ataque em loop.
+  // ========================================
+  for (const rt of getAllRuntimes()) {
+    if (!rt) continue;
+    if (rt.connectionState === "DISCONNECTED_PENDING" || rt.connectionState === "OFFLINE") {
+      continue;
+    }
+
+    if (rt.combat?.state === "ENGAGED" && rt.combat?.targetKind === "ENEMY") {
+      await processAutomaticCombat(io, rt, rt.instanceId, t);
+    }
+  }
 
   // ========================================
   // ETAPA 1: Movimento de PLAYERS
@@ -314,6 +322,7 @@ async function tickOnce(io, nowMsValue) {
       } else if (rt.combat?.state === "ENGAGED" && rt.combat?.targetKind === "ENEMY") {
         // Em combate, não solta o target ao chegar perto; o combate decide se ataca ou persegue.
         rt.action = "move";
+        await processAutomaticCombat(io, rt, rt.instanceId, t);
       } else {
         // ================================================================
         // SE NÃO ESTÁ EM INTERACT LOOP: PARA NORMALMENTE
@@ -321,6 +330,10 @@ async function tickOnce(io, nowMsValue) {
         rt.moveTarget = null;
         rt.moveMode = "STOP";
         if (rt.action !== "idle") rt.action = "idle";
+      }
+
+      if (rt.combat?.state === "ENGAGED" && rt.combat?.targetKind === "ENEMY") {
+        continue;
       }
 
       bumpRev(rt);
@@ -415,6 +428,10 @@ async function tickOnce(io, nowMsValue) {
         chunk: rt.chunk ?? { cx, cz },
       });
     }
+
+    if (rt.combat?.state === "ENGAGED" && rt.combat?.targetKind === "ENEMY") {
+      await processAutomaticCombat(io, rt, rt.instanceId, t);
+    }
   }
 
   // ========================================
@@ -465,7 +482,7 @@ async function tickOnce(io, nowMsValue) {
     for (const rt of allRuntimes) {
       if (!rt || String(rt.instanceId) !== String(instanceId)) continue;
 
-      await processAutomaticCombat(io, rt, instanceId);
+      await processAutomaticCombat(io, rt, instanceId, t);
     }
 
     // ========================================

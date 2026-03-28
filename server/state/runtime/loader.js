@@ -37,6 +37,7 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
   const attackPower = toNum(combatStats?.attackPower, 10);
   const defense = toNum(combatStats?.defense, 0);
   const attackSpeed = toNum(combatStats?.attackSpeed, 1);
+  const attackRange = toNum(combatStats?.attackRange, 1.2);
 
   runtime.combat = {
     hpCurrent,
@@ -46,6 +47,7 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
     attackPower,
     defense,
     attackSpeed,
+    attackRange,
 
     // runtime-only
     lastAttackAtMs: Number(runtime?.combat?.lastAttackAtMs ?? 0),
@@ -63,6 +65,7 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
   runtime.attackPower = attackPower;
   runtime.defense = defense;
   runtime.attackSpeed = attackSpeed;
+  runtime.attackRange = attackRange;
 
   // shape espelhado para leitores que esperem stats agregados
   runtime.stats = {
@@ -74,6 +77,7 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
     attackPower,
     defense,
     attackSpeed,
+    attackRange,
   };
 
   return runtime;

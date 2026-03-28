@@ -97,6 +97,8 @@ function toDelta(enemy) {
 
 module.exports = {
   bumpRev,
+  readHpCurrent,
+  readHpMax,
   toEntity,
   toDelta,
 };

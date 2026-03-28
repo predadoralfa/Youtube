@@ -32,6 +32,7 @@ async function loadPlayerCombatStats(userId) {
       "attack_power",
       "defense",
       "attack_speed",
+      "attack_range",
     ],
   });
 
@@ -44,6 +45,7 @@ async function loadPlayerCombatStats(userId) {
       attackPower: 10,
       defense: 0,
       attackSpeed: 1,
+      attackRange: 1.2,
     };
   }
 
@@ -60,6 +62,7 @@ async function loadPlayerCombatStats(userId) {
     attackPower: toUInt(stats.attack_power, 10),
     defense: toUInt(stats.defense, 0),
     attackSpeed: toPositiveNumber(stats.attack_speed, 1),
+    attackRange: toPositiveNumber(stats.attack_range, 1.2),
   };
 }
 

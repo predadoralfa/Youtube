@@ -260,7 +260,7 @@ export function GameShell() {
         return;
       }
 
-      // ✨ MODIFICADO: Lógica de combate em 2 estágios
+      // Combate em um único comando: inicia a perseguição/auto-ataque no servidor.
       if (isInteractDown(intent.type)) {
         const target = selectedTargetRef.current;
 
@@ -269,7 +269,6 @@ export function GameShell() {
         if (target?.kind === "ENEMY") {
           const targetId = String(target.id);
 
-          // ESTÁGIO 1: Primeira vez - enviar interact:start
           if (combatTargetRef.current !== targetId) {
             console.log("[COMBAT] STAGE 1: Iniciando movimento para inimigo", targetId);
             socketRef.current?.emit("interact:start", {
@@ -278,17 +277,11 @@ export function GameShell() {
                 id: targetId,
               },
             });
-            // Marcar que já enviou interact:start para este inimigo
             combatTargetRef.current = targetId;
             return;
           }
 
-          // ESTÁGIO 2: Já moveu, agora atacar
-          console.log("[COMBAT] STAGE 2: Desfirindo ataque ao inimigo", targetId);
-          socketRef.current?.emit("combat:attack", {
-            targetId: targetId,
-            targetKind: "ENEMY",
-          });
+          console.log("[COMBAT] Combat already armed for enemy", targetId);
           return;
         }
 

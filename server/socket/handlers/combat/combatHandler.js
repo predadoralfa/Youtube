@@ -261,6 +261,8 @@ async function onCombatAttack(socket, io, payload) {
 
     // Ataque bem-sucedido!
     attackerRuntime._lastAttackAtMs = nowMs;
+    if (!attackerRuntime.combat) attackerRuntime.combat = {};
+    attackerRuntime.combat.lastAttackAtMs = nowMs;
 
     console.log(`[COMBAT] ⚔️ ACERTO!`);
     console.log(`[COMBAT]   Player ${userId} acertou inimigo ${targetEnemy.id}`);
