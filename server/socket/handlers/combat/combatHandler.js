@@ -5,6 +5,7 @@ const { getRuntime } = require("../../../state/runtimeStore");
 const { getEnemiesForInstance } = require("../../../state/enemies/enemiesRuntimeStore");
 const { executeAttack, loadPlayerCombatStats, loadEnemyCombatStats } = require("../../../service/combatSystem");
 const { createLootContainerForEnemy } = require("../../../service/lootService");
+const { COMBAT_BASE_COOLDOWN_MS } = require("../../../config/combatConstants");
 
 /**
  * =====================================================================
@@ -89,7 +90,7 @@ async function onCombatAttack(socket, io, payload) {
 
     const nowMs = Date.now();
     const lastAttackMs = attackerRuntime._lastAttackAtMs ?? 0;
-    const cooldownMs = 1000 / (attackerStats.attackSpeed || 1);
+    const cooldownMs = COMBAT_BASE_COOLDOWN_MS / (attackerStats.attackSpeed || 1);
     const timeSinceLastAttack = nowMs - lastAttackMs;
 
     console.log(`[COMBAT]   Último ataque: ${lastAttackMs}`);
@@ -210,7 +211,15 @@ async function onCombatAttack(socket, io, payload) {
     const dx = targetPos.x - attackerPos.x;
     const dz = targetPos.z - attackerPos.z;
     const distance = Math.sqrt(dx * dx + dz * dz);
-    const attackRange = attackerStats.attackRange || 1.2;
+    const attackRange = Number(attackerStats.attackRange);
+
+    if (!Number.isFinite(attackRange) || attackRange <= 0) {
+      console.warn(`[COMBAT] ❌ Range de ataque inválido para userId=${userId}`);
+      return socket.emit("combat:attack_result", {
+        ok: false,
+        error: "INVALID_ATTACK_RANGE"
+      });
+    }
 
     console.log(`[COMBAT]   Distância: ${distance.toFixed(2)}`);
     console.log(`[COMBAT]   Range: ${attackRange}`);
@@ -322,7 +331,7 @@ async function onCombatAttack(socket, io, payload) {
       targetHPAfter: combatResult.targetHPAfter,
       targetHPMax: combatResult.targetHPMax,
       targetDied: combatResult.targetDied,
-      cooldownMs: 1000 / (attackerStats.attackSpeed || 1)
+      cooldownMs: COMBAT_BASE_COOLDOWN_MS / (attackerStats.attackSpeed || 1)
     });
 
     console.log(`[COMBAT] ✅ Dano broadcast enviado`);

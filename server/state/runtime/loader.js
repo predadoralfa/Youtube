@@ -1,7 +1,7 @@
 // server/state/runtime/loader.js
 const db = require("../../models");
 
-const { DEFAULT_SPEED, CONNECTION } = require("./constants");
+const { CONNECTION } = require("./constants");
 const { computeChunk } = require("./chunk");
 const { getRuntime, setRuntime, hasRuntime } = require("./store");
 const { markStatsDirty } = require("./dirty");
@@ -30,14 +30,14 @@ async function loadSpeedFromStats(userId) {
 }
 
 function applyCombatStatsToRuntime(runtime, combatStats) {
-  const hpCurrent = toNum(combatStats?.hpCurrent, 100);
-  const hpMax = toNum(combatStats?.hpMax, 100);
-  const staminaCurrent = toNum(combatStats?.staminaCurrent, 100);
-  const staminaMax = toNum(combatStats?.staminaMax, 100);
-  const attackPower = toNum(combatStats?.attackPower, 10);
-  const defense = toNum(combatStats?.defense, 0);
-  const attackSpeed = toNum(combatStats?.attackSpeed, 1);
-  const attackRange = toNum(combatStats?.attackRange, 1.2);
+  const hpCurrent = combatStats?.hpCurrent;
+  const hpMax = combatStats?.hpMax;
+  const staminaCurrent = combatStats?.staminaCurrent;
+  const staminaMax = combatStats?.staminaMax;
+  const attackPower = combatStats?.attackPower;
+  const defense = combatStats?.defense;
+  const attackSpeed = combatStats?.attackSpeed;
+  const attackRange = combatStats?.attackRange;
 
   runtime.combat = {
     hpCurrent,
@@ -149,6 +149,12 @@ async function ensureRuntimeLoaded(userId) {
   const speedFromStats = await loadSpeedFromStats(userId);
   const combatStats = await loadPlayerCombatStats(userId);
 
+  if (speedFromStats == null) {
+    throw new Error(
+      `move_speed ausente ou inválido para userId=${userId}; runtime não pode ser carregado sem velocidade autoritativa`
+    );
+  }
+
   const runtime = {
     // identidade
     userId: row.user_id,
@@ -163,18 +169,18 @@ async function ensureRuntimeLoaded(userId) {
     yaw: Number(row.yaw ?? 0),
 
     // estado replicável mínimo
-    hp: toNum(combatStats?.hpCurrent, 100), // compat temporária
-    hpCurrent: toNum(combatStats?.hpCurrent, 100),
-    hpMax: toNum(combatStats?.hpMax, 100),
-    staminaCurrent: toNum(combatStats?.staminaCurrent, 100),
-    staminaMax: toNum(combatStats?.staminaMax, 100),
+    hp: combatStats?.hpCurrent, // compat temporaria
+    hpCurrent: combatStats?.hpCurrent,
+    hpMax: combatStats?.hpMax,
+    staminaCurrent: combatStats?.staminaCurrent,
+    staminaMax: combatStats?.staminaMax,
     action: "idle",
     rev: 0,
     chunk: null, // { cx, cz } preenchido abaixo
 
     // stats cacheados no runtime
-    speed: speedFromStats ?? DEFAULT_SPEED,
-    _speedFallback: speedFromStats == null,
+    speed: speedFromStats,
+    _speedFallback: false,
 
     // conexão / presença (persistíveis)
     connectionState: row.connection_state || CONNECTION.OFFLINE,
@@ -202,7 +208,7 @@ async function ensureRuntimeLoaded(userId) {
     // Click-to-move state
     moveMode: "STOP", // "STOP" | "WASD" | "CLICK"
     moveTarget: null, // { x, z } | null
-    moveStopRadius: 0.45, // ajuste fino server-side
+    moveStopRadius: 0.75, // ajuste fino server-side
     moveTickAtMs: 0,
     wasdTickAtMs: 0, // last movement tick timestamp (server clock)
 
@@ -217,13 +223,14 @@ async function ensureRuntimeLoaded(userId) {
     // Combate
     // ==============================
     combat: {
-      hpCurrent: 100,
-      hpMax: 100,
-      staminaCurrent: 100,
-      staminaMax: 100,
-      attackPower: 10,
-      defense: 0,
-      attackSpeed: 1,
+      hpCurrent: combatStats?.hpCurrent,
+      hpMax: combatStats?.hpMax,
+      staminaCurrent: combatStats?.staminaCurrent,
+      staminaMax: combatStats?.staminaMax,
+      attackPower: combatStats?.attackPower,
+      defense: combatStats?.defense,
+      attackSpeed: combatStats?.attackSpeed,
+      attackRange: combatStats?.attackRange,
       lastAttackAtMs: 0,
       targetId: null,
       targetKind: null,
@@ -232,13 +239,14 @@ async function ensureRuntimeLoaded(userId) {
 
     // espelho agregado para serializers tolerantes
     stats: {
-      hpCurrent: toNum(combatStats?.hpCurrent, 100),
-      hpMax: toNum(combatStats?.hpMax, 100),
-      staminaCurrent: toNum(combatStats?.staminaCurrent, 100),
-      staminaMax: toNum(combatStats?.staminaMax, 100),
-      attackPower: toNum(combatStats?.attackPower, 10),
-      defense: toNum(combatStats?.defense, 0),
-      attackSpeed: toNum(combatStats?.attackSpeed, 1),
+      hpCurrent: combatStats?.hpCurrent,
+      hpMax: combatStats?.hpMax,
+      staminaCurrent: combatStats?.staminaCurrent,
+      staminaMax: combatStats?.staminaMax,
+      attackPower: combatStats?.attackPower,
+      defense: combatStats?.defense,
+      attackSpeed: combatStats?.attackSpeed,
+      attackRange: combatStats?.attackRange,
     },
   };
 
@@ -297,3 +305,4 @@ module.exports = {
     applyCombatStatsToRuntime,
   },
 };
+

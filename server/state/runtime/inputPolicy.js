@@ -1,5 +1,5 @@
 // server/state/runtime/inputPolicy.js
-const { INPUT_DIR_ACTIVE_MS } = require("./constants");
+const { INPUT_DIR_ACTIVE_MS } = require("../../config/worldConstants");
 
 /**
  * Regra única de "WASD ativo" (para click não cancelar WASD, e WASD cancelar click).

@@ -1,7 +1,6 @@
 // server/state/presence/config.js
 
-const CHUNK_SIZE = Number(process.env.CHUNK_SIZE ?? 256);
-const CHUNK_RADIUS = Number(process.env.CHUNK_RADIUS ?? 1); // 3x3 default
+const { CHUNK_SIZE, CHUNK_RADIUS } = require("../../config/worldConstants");
 
 module.exports = {
   CHUNK_SIZE,

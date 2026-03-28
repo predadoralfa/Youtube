@@ -1,5 +1,5 @@
 // server/state/runtime/chunk.js
-const { CHUNK_SIZE } = require("./constants");
+const { CHUNK_SIZE } = require("../../config/worldConstants");
 
 function computeChunk(pos) {
   const x = Number(pos?.x ?? 0);

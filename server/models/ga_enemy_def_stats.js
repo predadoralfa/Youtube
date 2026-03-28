@@ -28,10 +28,19 @@ module.exports = (sequelize, DataTypes) => {
           allowNull: false,
         },
 
+        defense: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: false,
+        },
+
+        attack_range: {
+          type: DataTypes.DECIMAL(10, 3),
+          allowNull: false,
+        },
+
         attack_power: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 5,
         },
       },
       {

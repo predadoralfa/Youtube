@@ -6,7 +6,9 @@ const { moveUserChunk, computeChunkFromPos } = require("../presenceIndex");
 const { getActiveSocket } = require("../../socket/sessionIndex");
 
 const { DT_MAX } = require("./config");
-const { computeDtSeconds, normalize2D, clampPosToBounds, readRuntimeSpeedStrict } = require("./math");
+const { COMBAT_BASE_COOLDOWN_MS } = require("../../config/combatConstants");
+const { computeDtSeconds, readRuntimeSpeedStrict } = require("./math");
+const { moveEntityTowardTarget } = require("./entityMotion");
 const { bumpRev, toDelta } = require("./entity");
 const { readHpCurrent, readHpMax } = require("../enemies/enemyEntity");
 const { emitDeltaToInterest } = require("./emit");
@@ -24,7 +26,7 @@ const { getEnemiesForInstance, getEnemy } = require("../enemies/enemiesRuntimeSt
 // ✨ NOVO: IA do inimigo (combate) + attacks tracking
 const { tickEnemyAI, getLastTickAttacks } = require("../enemies/enemyAI");
 const { loadPlayerCombatStats } = require("../runtime/combatLoader");
-const { loadEnemyCombatStats } = require("../../service/combatSystem");
+const { executeAttack, loadEnemyCombatStats } = require("../../service/combatSystem");
 
 /**
  * ✨ NOVO: Executa ataque automático do servidor
@@ -50,51 +52,46 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
   const dz = targetPos.z - attackerPos.z;
   const distance = Math.sqrt(dx * dx + dz * dz);
 
-  // Validar cooldown
-  if (!attackerRt.combat) attackerRt.combat = { lastAttackAtMs: 0 };
-  const lastAttackMs = attackerRt.combat.lastAttackAtMs ?? 0;
   const stats = await loadPlayerCombatStats(userId);
-  const cooldownMs = 1000 / (stats?.attackSpeed || 1);
-  const timeSinceLastAttack = nowMs - lastAttackMs;
-
-  if (timeSinceLastAttack < cooldownMs) {
-    return false;
-  }
-
-  // Validar distância
-  const attackRange = Number(attackerRt.combat?.attackRange ?? stats?.attackRange ?? 1.2);
-  if (distance > attackRange) {
-    return false;
-  }
-
-  // ===== EXECUTAR ATAQUE =====
   const enemyStats = await loadEnemyCombatStats(targetEnemy.id);
   const targetDefense = enemyStats?.defense || 0;
-  const damage = Math.max(0, (stats?.attackPower || 10) - targetDefense);
+  const attackRange = Number(attackerRt.combat?.attackRange ?? stats?.attackRange ?? 1.2);
+  const combatResult = await executeAttack({
+    attackerId: userId,
+    attackerKind: "PLAYER",
+    targetId: targetEnemy.id,
+    targetKind: "ENEMY",
+    attackerPos,
+    targetPos,
+    attackerAttackPower: stats?.attackPower,
+    attackerAttackSpeed: stats?.attackSpeed,
+    targetDefense,
+    attackRange,
+    lastAttackAtMs: Number(attackerRt.combat?.lastAttackAtMs ?? 0),
+    nowMs,
+  });
 
-  const targetHPBefore = readHpCurrent(targetEnemy) || 0;
-  const targetHPAfter = Math.max(0, targetHPBefore - damage);
-  const targetHPMax = readHpMax(targetEnemy) || 0;
-  const targetDied = targetHPAfter <= 0;
+  if (!combatResult.ok) {
+    return false;
+  }
 
   console.log(
-    `[COMBAT] 🤖 AUTO HIT player=${userId} enemy=${targetEnemy.id} attackPower=${stats?.attackPower} defense=${targetDefense} damage=${damage} hp=${targetHPBefore}->${targetHPAfter}/${targetHPMax}`
+    `[COMBAT] 🤖 AUTO HIT player=${userId} enemy=${targetEnemy.id} attackPower=${stats?.attackPower} defense=${targetDefense} damage=${combatResult.damage} hp=${combatResult.targetHPBefore}->${combatResult.targetHPAfter}/${combatResult.targetHPMax}`
   );
 
-  // Atualizar HP do inimigo
-  targetEnemy.hpCurrent = targetHPAfter;
-  targetEnemy.hp_current = targetHPAfter;
   if (!targetEnemy.stats) targetEnemy.stats = {};
-  targetEnemy.stats.hpCurrent = targetHPAfter;
-  targetEnemy.stats.hpMax = targetHPMax;
+  targetEnemy.hpCurrent = combatResult.targetHPAfter;
+  targetEnemy.hp_current = combatResult.targetHPAfter;
+  targetEnemy.stats.hpCurrent = combatResult.targetHPAfter;
+  targetEnemy.stats.hpMax = combatResult.targetHPMax;
   targetEnemy._hpChanged = true;
 
   try {
     const enemyStatsRow = await db.GaEnemyInstanceStats.findByPk(targetEnemy.id);
     if (enemyStatsRow) {
-      await enemyStatsRow.update({ hp_current: targetHPAfter, hp_max: targetHPMax });
+      await enemyStatsRow.update({ hp_current: combatResult.targetHPAfter, hp_max: combatResult.targetHPMax });
     }
-    if (targetDied) {
+    if (combatResult.targetDied) {
       await db.GaEnemyInstance.update(
         { status: "DEAD" },
         { where: { id: targetEnemy.id } }
@@ -104,11 +101,10 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
     console.error(`[COMBAT] Failed to persist enemy hp for enemy=${targetEnemy.id}:`, err);
   }
 
-  // Atualizar cooldown do player
+  if (!attackerRt.combat) attackerRt.combat = {};
   attackerRt.combat.lastAttackAtMs = nowMs;
   attackerRt._lastAttackAtMs = nowMs;
 
-  // ===== ATIVAR COMBATE DO INIMIGO (se não estava ativo) =====
   if (!targetEnemy._combatActive) {
     targetEnemy._combatActive = true;
     targetEnemy._combatMode = true;
@@ -117,7 +113,6 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
   }
   targetEnemy._combatTargetId = userId;
 
-  // ===== BROADCAST DO DANO =====
   const instanceId = attackerRt.instanceId;
   const combatEventId = `PLAYER:${userId}:ENEMY:${targetEnemy.id}:${nowMs}`;
   io.to(`inst:${instanceId}`).emit("combat:damage_taken", {
@@ -125,11 +120,11 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
     attackerId: userId,
     targetId: `enemy_${targetEnemy.id}`,
     targetKind: "ENEMY",
-    damage,
-    targetHPBefore,
-    targetHPAfter,
-    targetHPMax,
-    targetDied,
+    damage: combatResult.damage,
+    targetHPBefore: combatResult.targetHPBefore,
+    targetHPAfter: combatResult.targetHPAfter,
+    targetHPMax: combatResult.targetHPMax,
+    targetDied: combatResult.targetDied,
     timestamp: nowMs,
   });
 
@@ -138,17 +133,16 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
     activeSocket.emit("combat:attack_result", {
       ok: true,
       source: "AUTO",
-      damage,
-      targetHPAfter,
-      targetHPMax,
-      targetDied,
+      damage: combatResult.damage,
+      targetHPAfter: combatResult.targetHPAfter,
+      targetHPMax: combatResult.targetHPMax,
+      targetDied: combatResult.targetDied,
       attackPower: stats?.attackPower,
-      cooldownMs,
+      cooldownMs: combatResult.cooldownMs,
     });
   }
 
-  // ===== HANDLE MORTE =====
-  if (targetDied) {
+  if (combatResult.targetDied) {
     targetEnemy.status = "DEAD";
   }
 
@@ -201,9 +195,17 @@ async function processAutomaticCombat(io, rt, instanceId, nowMs) {
 
   // ===== COMBATE PERTO: ATACAR =====
   if (distance <= ATTACK_RANGE) {
-    const attackSpeed = Number(rt.combat?.attackSpeed ?? 1) || 1;
+    let stats;
+    try {
+      stats = await loadPlayerCombatStats(rt.userId);
+    } catch (err) {
+      console.error(`[COMBAT] Invalid player combat stats for user=${rt.userId}:`, err.message);
+      return;
+    }
+
+    const attackSpeed = Number(stats?.attackSpeed ?? rt.combat?.attackSpeed ?? 1) || 1;
     const lastAttackMs = Number(rt.combat?.lastAttackAtMs ?? 0);
-    const cooldownMs = 1000 / attackSpeed;
+    const cooldownMs = COMBAT_BASE_COOLDOWN_MS / attackSpeed;
     const elapsedMs = Number(nowMs ?? Date.now()) - lastAttackMs;
 
     if (elapsedMs < cooldownMs) {
@@ -216,6 +218,13 @@ async function processAutomaticCombat(io, rt, instanceId, nowMs) {
 
   // ===== COMBATE MÉDIO: PERSEGUIR =====
   // Sempre realinha o target para seguir o inimigo vivo
+  try {
+    await loadPlayerCombatStats(rt.userId);
+  } catch (err) {
+    console.error(`[COMBAT] Invalid player combat stats for user=${rt.userId}:`, err.message);
+    return;
+  }
+
   rt.moveMode = "CLICK";
   rt.moveTarget = { x: enemyPos.x, z: enemyPos.z };
   rt.moveStopRadius = APPROACH_STOP_RADIUS;
@@ -272,9 +281,8 @@ async function tickOnce(io, nowMsValue) {
     // bounds obrigatório
     if (!rt.bounds) continue;
 
-    const tx = Number(rt.moveTarget.x);
-    const tz = Number(rt.moveTarget.z);
-    if (!Number.isFinite(tx) || !Number.isFinite(tz)) {
+    const target = rt.moveTarget;
+    if (!Number.isFinite(Number(target?.x)) || !Number.isFinite(Number(target?.z))) {
       // target corrompido => corta
       rt.moveTarget = null;
       rt.moveMode = "STOP";
@@ -284,15 +292,22 @@ async function tickOnce(io, nowMsValue) {
       continue;
     }
 
-    const dx = tx - rt.pos.x;
-    const dz = tz - rt.pos.z;
-    const dist = Math.hypot(dx, dz);
+    const stopRadius = Number(rt.moveStopRadius ?? 0.75);
+    const stopR = Number.isFinite(stopRadius) && stopRadius > 0 ? stopRadius : 0.75;
 
-    const stopRadius = Number(rt.moveStopRadius ?? 0.45);
-    const stopR = Number.isFinite(stopRadius) && stopRadius > 0 ? stopRadius : 0.45;
+    const movement = moveEntityTowardTarget({
+      pos: rt.pos,
+      target,
+      speed,
+      dt,
+      bounds: rt.bounds,
+      stopRadius: stopR,
+    });
+
+    if (!movement.ok) continue;
 
     // chegou (server-side)
-    if (dist <= stopR) {
+    if (movement.reached) {
       // ================================================================
       // ✅ SE INTERACT ATIVO (HOLD-TO-COLLECT):
       // ✅ NÃO PARA O MOVIMENTO, CONTINUA PARA COLETAR EM LOOP
@@ -308,7 +323,7 @@ async function tickOnce(io, nowMsValue) {
           console.log("[COLLECT] Coletando (hold-to-collect)", {
             userId: rt.userId,
             actorId: rt.interact.id,
-            dist,
+            dist: movement.distance,
           });
 
           // Fire-and-forget: não bloqueia o tick loop
@@ -385,29 +400,14 @@ async function tickOnce(io, nowMsValue) {
       continue;
     }
 
-    // move em direção ao target
-    const dir = normalize2D(dx, dz);
-    if (dir.x === 0 && dir.z === 0) continue;
-
-    const desired = {
-      x: rt.pos.x + dir.x * speed * dt,
-      y: rt.pos.y,
-      z: rt.pos.z + dir.z * speed * dt,
-    };
-
-    const clampedPos = clampPosToBounds(desired, rt.bounds);
-    if (!clampedPos) continue;
-
-    const moved = (clampedPos.x !== rt.pos.x) || (clampedPos.z !== rt.pos.z);
-
-    // yaw autoritativo apontando para a direção do deslocamento
-    const newYaw = Math.atan2(dir.x, dir.z);
-    const yawChanged = rt.yaw !== newYaw;
+    const moved = movement.moved;
+    const newYaw = movement.yaw;
+    const yawChanged = newYaw != null && rt.yaw !== newYaw;
 
     if (!moved && !yawChanged) continue;
 
-    rt.pos = clampedPos;
-    rt.yaw = newYaw;
+    rt.pos = movement.pos;
+    if (newYaw != null) rt.yaw = newYaw;
     rt.action = "move";
 
     bumpRev(rt);
@@ -448,8 +448,8 @@ async function tickOnce(io, nowMsValue) {
         pos: rt.pos,
         yaw: rt.yaw,
         rev: rt.rev ?? 0,
-        chunk: rt.chunk ?? { cx, cz },
-      });
+      chunk: rt.chunk ?? { cx, cz },
+    });
     }
 
     if (rt.combat?.state === "ENGAGED" && rt.combat?.targetKind === "ENEMY") {

@@ -3,11 +3,12 @@
 const { getEnemiesForInstance } = require("./enemiesRuntimeStore");
 const { computeChunkFromPos, getUsersInChunks } = require("../presenceIndex");
 const { bumpRev, toDelta } = require("./enemyEntity");
+const { moveEntityTowardTarget } = require("../movement/entityMotion");
 
 /**
  * Gera posição aleatória em raio
  */
-function generateRandomPosInRadius(homeX, homeZ, radius = 5) {
+function generateRandomPosInRadius(homeX, homeZ, radius) {
   const angle = Math.random() * 2 * Math.PI;
   const dist = Math.random() * radius;
   return {
@@ -28,10 +29,28 @@ function updateEnemyMovement(enemy, nowMs, dt) {
     return false;
   }
 
-  const speed = Number(enemy.stats?.moveSpeed) || 3.5;
+  const speed = Number(enemy.stats?.moveSpeed);
+  if (!Number.isFinite(speed) || speed <= 0) {
+    console.warn(`[ENEMY_MOVE] Enemy ${enemy.id} sem moveSpeed válido`);
+    return false;
+  }
   const homeX = Number(enemy.homePos?.x) || 0;
   const homeZ = Number(enemy.homePos?.z) || 0;
-  const radius = 5; // raio de patrulha
+  const radius = Number(enemy.patrolRadius);
+  if (!Number.isFinite(radius) || radius <= 0) {
+    console.warn(`[ENEMY_MOVE] Enemy ${enemy.id} sem patrolRadius válido`);
+    return false;
+  }
+  const patrolWaitMs = Number(enemy.patrolWaitMs);
+  if (!Number.isFinite(patrolWaitMs) || patrolWaitMs < 0) {
+    console.warn(`[ENEMY_MOVE] Enemy ${enemy.id} sem patrolWaitMs válido`);
+    return false;
+  }
+  const patrolStopRadius = Number(enemy.patrolStopRadius);
+  if (!Number.isFinite(patrolStopRadius) || patrolStopRadius <= 0) {
+    console.warn(`[ENEMY_MOVE] Enemy ${enemy.id} sem patrolStopRadius válido`);
+    return false;
+  }
 
   // Se não tem target, sorteia novo
   if (!enemy._moveTarget || !enemy._moveTargetSetAt) {
@@ -39,46 +58,48 @@ function updateEnemyMovement(enemy, nowMs, dt) {
     enemy._moveTargetSetAt = nowMs;
   }
 
-  const tx = Number(enemy._moveTarget.x);
-  const tz = Number(enemy._moveTarget.z);
+  const movement = moveEntityTowardTarget({
+    pos: enemy.pos,
+    target: enemy._moveTarget,
+    speed,
+    dt,
+    bounds: null,
+    stopRadius: patrolStopRadius,
+  });
 
-  const dx = tx - enemy.pos.x;
-  const dz = tz - enemy.pos.z;
-  const dist = Math.hypot(dx, dz);
+  if (!movement.ok) {
+    console.warn(`[ENEMY_MOVE] Enemy ${enemy.id} target inválido`);
+    return false;
+  }
 
-  // Chegou no target (raio de parada: 0.5)
-  const stopRadius = 0.5;
-  if (dist <= stopRadius) {
+  // Chegou no target (raio de parada configurado no spawn point)
+  if (movement.reached) {
+    if (!enemy._moveWaitUntilMs) {
+      enemy._moveWaitUntilMs = nowMs + patrolWaitMs;
+    }
+
+    if (nowMs < enemy._moveWaitUntilMs) {
+      enemy.action = "idle";
+      return false;
+    }
+
     // Sorteia novo target
     enemy._moveTarget = generateRandomPosInRadius(homeX, homeZ, radius);
     enemy._moveTargetSetAt = nowMs;
+    enemy._moveWaitUntilMs = null;
     enemy.action = "idle";
     return false;
   }
 
-  // Move em direção ao target
-  const dirLen = Math.hypot(dx, dz);
-  if (dirLen <= 0.00001) return false;
-
-  const dirX = dx / dirLen;
-  const dirZ = dz / dirLen;
-
-  // Atualiza posição
-  const newPosX = enemy.pos.x + dirX * speed * dt;
-  const newPosZ = enemy.pos.z + dirZ * speed * dt;
-
-  // Atualiza yaw (apontando para direção do movimento)
-  const newYaw = Math.atan2(dirX, dirZ);
-
-  // Verificar se mudou
-  const posChanged = (newPosX !== enemy.pos.x) || (newPosZ !== enemy.pos.z);
-  const yawChanged = enemy.yaw !== newYaw;
+  const newYaw = movement.yaw;
+  const posChanged = movement.moved;
+  const yawChanged = newYaw != null && enemy.yaw !== newYaw;
 
   if (!posChanged && !yawChanged) return false;
 
   // Aplica mudanças
-  enemy.pos = { x: newPosX, z: newPosZ };
-  enemy.yaw = newYaw;
+  enemy.pos = movement.pos;
+  if (newYaw != null) enemy.yaw = newYaw;
   enemy.action = "move";
 
   bumpRev(enemy);

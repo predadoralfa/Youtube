@@ -20,6 +20,8 @@
 
 const db = require("../models");
 const { getRuntime, markStatsDirty } = require("../state/runtimeStore");
+const { loadPlayerCombatStats: loadStrictPlayerCombatStats } = require("../state/runtime/combatLoader");
+const { COMBAT_BASE_COOLDOWN_MS } = require("../config/combatConstants");
 
 /**
  * =====================================================================
@@ -27,34 +29,7 @@ const { getRuntime, markStatsDirty } = require("../state/runtimeStore");
  * =====================================================================
  */
 async function loadPlayerCombatStats(userId) {
-  try {
-    const stats = await db.GaUserStats.findByPk(userId, {
-      attributes: [
-        "hp_current",
-        "hp_max",
-        "attack_power",
-        "defense",
-        "attack_speed",
-        "move_speed",
-        "attack_range"  // ✨ NOVO CAMPO (ver se existe no banco)
-      ]
-    });
-
-    if (!stats) return null;
-
-    return {
-      hpCurrent: Number(stats.hp_current),
-      hpMax: Number(stats.hp_max),
-      attackPower: Number(stats.attack_power),
-      defense: Number(stats.defense),
-      attackSpeed: Number(stats.attack_speed),
-      moveSpeed: Number(stats.move_speed),
-      attackRange: Number(stats.attack_range || 2.5)  // Default 2.5 se não tiver
-    };
-  } catch (err) {
-    console.error(`[COMBAT] Error loading player stats for ${userId}:`, err);
-    return null;
-  }
+  return loadStrictPlayerCombatStats(userId);
 }
 
 /**
@@ -64,23 +39,52 @@ async function loadPlayerCombatStats(userId) {
  */
 async function loadEnemyCombatStats(enemyInstanceId) {
   try {
-    const stats = await db.GaEnemyInstanceStats.findByPk(enemyInstanceId, {
-      attributes: [
-        "hp_current",
-        "hp_max",
-        "attack_speed",
-        "move_speed"
-      ]
+    const enemyInstance = await db.GaEnemyInstance.findByPk(enemyInstanceId, {
+      include: [
+        {
+          association: "stats",
+          required: true,
+          attributes: [
+            "hp_current",
+            "hp_max",
+            "attack_speed",
+            "move_speed",
+          ],
+        },
+        {
+          association: "enemyDef",
+          required: true,
+          attributes: ["id"],
+          include: [
+            {
+              association: "baseStats",
+              required: true,
+              attributes: [
+                "hp_max",
+                "move_speed",
+                "attack_speed",
+                "attack_power",
+                "defense",
+                "attack_range",
+              ],
+            },
+          ],
+        },
+      ],
     });
 
-    if (!stats) return null;
+    const stats = enemyInstance?.stats;
+    const baseStats = enemyInstance?.enemyDef?.baseStats;
+    if (!stats || !baseStats) return null;
 
     return {
       hpCurrent: Number(stats.hp_current),
       hpMax: Number(stats.hp_max),
-      defense: 0,
       attackSpeed: Number(stats.attack_speed),
       moveSpeed: Number(stats.move_speed),
+      attackPower: Number(baseStats.attack_power),
+      defense: Number(baseStats.defense),
+      attackRange: Number(baseStats.attack_range),
     };
   } catch (err) {
     console.error(`[COMBAT] Error loading enemy stats for ${enemyInstanceId}:`, err);
@@ -149,9 +153,9 @@ async function executeAttack(params) {
   // 2. VALIDAR COOLDOWN (attack_speed)
   // ===================================================================
 
-  // attack_speed = 1.0 significa 1 ataque por segundo
-  // cooldown em ms = 1000 / attack_speed
-  const cooldownMs = 1000 / attackerAttackSpeed;
+  // attack_speed = 1.0 significa 1 ataque a cada 5 segundos nesta escala
+  // cooldown em ms = COMBAT_BASE_COOLDOWN_MS / attack_speed
+  const cooldownMs = COMBAT_BASE_COOLDOWN_MS / attackerAttackSpeed;
   const timeSinceLastAttack = nowMs - lastAttackAtMs;
 
   if (timeSinceLastAttack < cooldownMs) {
@@ -167,8 +171,8 @@ async function executeAttack(params) {
   // 3. CALCULAR DANO (SIMPLES POR ENQUANTO)
   // ===================================================================
 
-  // Damage = attack_power - defense (min 1)
-  const baseDamage = Math.max(1, attackerAttackPower - targetDefense);
+  // Damage = attack_power - defense (min 0)
+  const baseDamage = Math.max(0, attackerAttackPower - targetDefense);
 
   // TODO: Adicionar crítico, buff, debuff, etc aqui depois
   const damage = baseDamage;
@@ -227,7 +231,6 @@ async function executeAttack(params) {
 
         markStatsDirty(targetId);
 
-        console.log(`[COMBAT] Player ${targetId} took ${damage} damage (${targetHPBefore} -> ${targetHPAfter})`);
       } else {
         // Fallback legado: persiste direto quando runtime não estiver carregado.
         const stats = await db.GaUserStats.findByPk(targetId);
@@ -241,7 +244,6 @@ async function executeAttack(params) {
 
           await stats.update({ hp_current: newHP });
 
-          console.log(`[COMBAT] Player ${targetId} took ${damage} damage (${targetHPBefore} -> ${targetHPAfter})`);
         }
       }
     } else if (targetKind === "ENEMY") {

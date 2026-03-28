@@ -11,6 +11,7 @@ const {
 
 const { getActor } = require("../../state/actorsRuntimeStore");
 const { getEnemy, getEnemiesForInstance } = require("../../state/enemies/enemiesRuntimeStore");
+const { DEFAULT_STOP_RADIUS, DEFAULT_TIMEOUT_MS } = require("../../config/interactionConstants");
 
 function isFiniteNumber(n) {
   return typeof n === "number" && Number.isFinite(n);
@@ -19,9 +20,6 @@ function isFiniteNumber(n) {
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
-
-const DEFAULT_STOP_RADIUS = 1.25;
-const DEFAULT_TIMEOUT_MS = 8000;
 
 /**
  * Resolve a posição autoritativa do alvo.

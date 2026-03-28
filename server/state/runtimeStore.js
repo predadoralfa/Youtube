@@ -19,12 +19,8 @@ const { markRuntimeDirty, markStatsDirty, setConnectionState } = require("./runt
 const { isWASDActive } = require("./runtime/inputPolicy");
 
 // constants
-const {
-  DEFAULT_SPEED,
-  CONNECTION,
-  INPUT_DIR_ACTIVE_MS,
-  CHUNK_SIZE,
-} = require("./runtime/constants");
+const { CONNECTION } = require("./runtime/constants");
+const { INPUT_DIR_ACTIVE_MS, CHUNK_SIZE } = require("../config/worldConstants");
 
 // chunk helpers
 const { computeChunk } = require("./runtime/chunk");
@@ -51,7 +47,6 @@ module.exports = {
   refreshRuntimeStats,
 
   // constants
-  DEFAULT_SPEED,
   CONNECTION,
 
   // chunk helpers (Etapa 1)

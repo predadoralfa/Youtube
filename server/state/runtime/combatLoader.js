@@ -1,15 +1,11 @@
 // server/state/runtime/combatLoader.js
 const db = require("../../models");
 
-function toUInt(value, fallback = 0) {
+function readStrictNumber(value, fieldName, userId) {
   const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return fallback;
-  return Math.floor(n);
-}
-
-function toPositiveNumber(value, fallback = 1) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error(`Stat de combate inválido ou ausente: ${fieldName} para userId=${userId}`);
+  }
   return n;
 }
 
@@ -37,32 +33,27 @@ async function loadPlayerCombatStats(userId) {
   });
 
   if (!stats) {
-    return {
-      hpCurrent: 100,
-      hpMax: 100,
-      staminaCurrent: 100,
-      staminaMax: 100,
-      attackPower: 10,
-      defense: 0,
-      attackSpeed: 1,
-      attackRange: 1.2,
-    };
+    throw new Error(`Stats de combate ausentes para userId=${userId}`);
   }
 
-  const hpMax = toUInt(stats.hp_max, 100);
-  const hpCurrentRaw = toUInt(stats.hp_current, hpMax);
-  const staminaMax = toUInt(stats.stamina_max, 100);
-  const staminaCurrentRaw = toUInt(stats.stamina_current, staminaMax);
+  const hpMax = readStrictNumber(stats.hp_max, "hp_max", userId);
+  const hpCurrent = readStrictNumber(stats.hp_current, "hp_current", userId);
+  const staminaMax = readStrictNumber(stats.stamina_max, "stamina_max", userId);
+  const staminaCurrent = readStrictNumber(stats.stamina_current, "stamina_current", userId);
+  const attackPower = readStrictNumber(stats.attack_power, "attack_power", userId);
+  const defense = readStrictNumber(stats.defense, "defense", userId);
+  const attackSpeed = readStrictNumber(stats.attack_speed, "attack_speed", userId);
+  const attackRange = readStrictNumber(stats.attack_range, "attack_range", userId);
 
   return {
-    hpCurrent: Math.min(hpCurrentRaw, hpMax),
     hpMax,
-    staminaCurrent: Math.min(staminaCurrentRaw, staminaMax),
+    hpCurrent: Math.min(hpCurrent, hpMax),
     staminaMax,
-    attackPower: toUInt(stats.attack_power, 10),
-    defense: toUInt(stats.defense, 0),
-    attackSpeed: toPositiveNumber(stats.attack_speed, 1),
-    attackRange: toPositiveNumber(stats.attack_range, 1.2),
+    staminaCurrent: Math.min(staminaCurrent, staminaMax),
+    attackPower,
+    defense,
+    attackSpeed,
+    attackRange,
   };
 }
 
@@ -70,7 +61,6 @@ module.exports = {
   loadPlayerCombatStats,
 
   _internal: {
-    toUInt,
-    toPositiveNumber,
+    readStrictNumber,
   },
 };

@@ -2,8 +2,6 @@
 // ✨ COM LOGS EXTENSOS PARA DEBUG
 
 const {
-  GaUser,
-  GaUserStats,
   GaUserRuntime,
   GaInstance,
   GaLocal,
@@ -13,10 +11,15 @@ const {
   GaMeshTemplate,
   GaRenderMaterial,
 } = require("../models");
+const { loadPlayerCombatStats } = require("../state/runtime/combatLoader");
 
 // INVENTORY (privado, autoritativo)
 const { ensureInventoryLoaded } = require("../state/inventory/loader");
 const { buildInventoryFull } = require("../state/inventory/fullPayload");
+const {
+  DEFAULT_LOCAL_VISUAL_VERSION,
+  DEFAULT_GROUND_COLOR,
+} = require("../config/worldVisualConstants");
 
 // ACTORS
 const { loadActorsForInstance } = require("./actorLoader");
@@ -31,11 +34,6 @@ const {
   addEnemy,
   clearInstance: clearEnemiesInstance,
 } = require("../state/enemies/enemiesRuntimeStore");
-
-function toNum(value, fallback = 0) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 const bootstrap = async (req, res) => {
   try {
@@ -68,33 +66,12 @@ const bootstrap = async (req, res) => {
     console.log(`[BOOTSTRAP] ✅ Runtime carregado: instanceId=${runtime.instance_id} pos=(${runtime.pos_x}, ${runtime.pos_y}, ${runtime.pos_z})`);
 
     // 1.1) Stats autoritativos do player (HUD)
-    const user = await GaUser.findByPk(userId, {
-      attributes: ["id"],
-      include: [
-        {
-          model: GaUserStats,
-          as: "stats",
-          attributes: [
-            "hp_current",
-            "hp_max",
-            "stamina_current",
-            "stamina_max",
-            "attack_power",
-            "defense",
-            "move_speed",
-            "attack_speed",
-          ],
-          required: false,
-        },
-      ],
-    });
+    const combatStats = await loadPlayerCombatStats(userId);
 
-    const userStats = user?.stats ?? null;
-
-    const hpCurrent = toNum(userStats?.hp_current, 100);
-    const hpMax = toNum(userStats?.hp_max, 100);
-    const staminaCurrent = toNum(userStats?.stamina_current, 0);
-    const staminaMax = toNum(userStats?.stamina_max, 0);
+    const hpCurrent = combatStats.hpCurrent;
+    const hpMax = combatStats.hpMax;
+    const staminaCurrent = combatStats.staminaCurrent;
+    const staminaMax = combatStats.staminaMax;
 
     console.log(`[BOOTSTRAP] ✅ Stats: HP=${hpCurrent}/${hpMax} Stamina=${staminaCurrent}/${staminaMax}`);
 
@@ -179,16 +156,24 @@ const bootstrap = async (req, res) => {
       return res.status(500).json({ message: "Local inexistente (inconsistência)" });
     }
 
-    const sizeX = local.geometry?.size_x ?? 200;
-    const sizeZ = local.geometry?.size_z ?? 200;
+    const sizeX = Number(local.geometry?.size_x);
+    const sizeZ = Number(local.geometry?.size_z);
+    if (!Number.isFinite(sizeX) || sizeX <= 0 || !Number.isFinite(sizeZ) || sizeZ <= 0) {
+      console.error(
+        `[BOOTSTRAP] ❌ Geometria inválida para localId=${local.id} sizeX=${local.geometry?.size_x} sizeZ=${local.geometry?.size_z}`
+      );
+      return res.status(500).json({ message: "Geometria do local inválida (inconsistência)" });
+    }
 
-    const v = local.visual?.version ?? 1;
+    const v = Number.isFinite(Number(local.visual?.version))
+      ? Number(local.visual.version)
+      : DEFAULT_LOCAL_VISUAL_VERSION;
     const localTemplateVersion = `local:${local.id}:v${v}`;
 
     const groundMaterial = local.visual?.groundMaterial ?? null;
     const groundMesh = local.visual?.groundMesh ?? null;
     const groundRenderMaterial = local.visual?.groundRenderMaterial ?? null;
-    const groundColor = groundRenderMaterial?.base_color ?? "#711010";
+    const groundColor = groundRenderMaterial?.base_color ?? DEFAULT_GROUND_COLOR;
 
     console.log(`[BOOTSTRAP] ✅ Local: id=${local.id} code=${local.code} size=(${sizeX}, ${sizeZ})`);
 

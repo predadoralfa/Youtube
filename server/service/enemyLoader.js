@@ -1,11 +1,13 @@
 // server/service/enemyLoader.js
 
 const db = require("../models");
-const { readEnemyAttackPower } = require("./enemyCombatProfile");
 
-function toNum(v, fallback = 0) {
+function requireNum(v, label, enemyId) {
   const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
+  if (!Number.isFinite(n)) {
+    throw new Error(`Invalid enemy stat ${label} for enemyDefId=${enemyId}`);
+  }
+  return n;
 }
 
 /**
@@ -30,7 +32,7 @@ async function loadEnemiesForInstance(instanceId) {
       {
         association: "spawnPoint",
         required: true,
-        attributes: ["id", "instance_id"],
+        attributes: ["id", "instance_id", "patrol_radius", "patrol_wait_ms", "patrol_stop_radius"],
         where: {
           instance_id: Number(instanceId),
         },
@@ -40,18 +42,18 @@ async function loadEnemiesForInstance(instanceId) {
         required: false,
         attributes: ["id", "spawn_point_id", "enemy_def_id"],
       },
-      {
-        association: "enemyDef",
-        required: false,
-        attributes: ["id", "code", "name", "visual_kind", "collision_radius", "ai_profile_json"],
-        include: [
-          {
-            association: "baseStats",
-            required: false,
-            attributes: ["hp_max", "move_speed", "attack_speed", "attack_power"],
-          },
-        ],
-      },
+        {
+          association: "enemyDef",
+          required: false,
+          attributes: ["id", "code", "name", "visual_kind", "collision_radius", "ai_profile_json"],
+          include: [
+            {
+              association: "baseStats",
+              required: false,
+              attributes: ["hp_max", "move_speed", "attack_speed", "attack_power", "defense", "attack_range"],
+            },
+          ],
+        },
       {
         association: "stats",
         required: false,
@@ -70,48 +72,60 @@ async function loadEnemiesForInstance(instanceId) {
     const stats = row.stats;
     const enemyDef = row.enemyDef;
     const spawnEntry = row.spawnEntry;
+    const patrolRadius = requireNum(spawnPoint.patrol_radius, "patrol_radius", spawnPoint.id);
+    const patrolWaitMs = requireNum(spawnPoint.patrol_wait_ms, "patrol_wait_ms", spawnPoint.id);
+    const patrolStopRadius = requireNum(spawnPoint.patrol_stop_radius, "patrol_stop_radius", spawnPoint.id);
 
-    const attackPower = readEnemyAttackPower(
-      enemyDef?.baseStats ?? enemyDef?.ai_profile_json,
-      5
-    );
+    if (!enemyDef?.baseStats) {
+      throw new Error(`Missing ga_enemy_def_stats for enemyDefId=${enemyDef?.id ?? "unknown"}`);
+    }
+
+    const baseStats = enemyDef.baseStats;
+    const attackPower = requireNum(baseStats.attack_power, "attack_power", enemyDef.id);
+    const defense = requireNum(baseStats.defense, "defense", enemyDef.id);
+    const attackRange = requireNum(baseStats.attack_range, "attack_range", enemyDef.id);
 
     out.push({
       id: String(row.id),
       instanceId: String(spawnPoint.instance_id),
-      spawnPointId: toNum(row.spawn_point_id),
-      spawnEntryId: toNum(row.spawn_entry_id),
-      enemyDefId: toNum(row.enemy_def_id),
+      spawnPointId: Number(row.spawn_point_id),
+      spawnEntryId: Number(row.spawn_entry_id),
+      enemyDefId: Number(row.enemy_def_id),
 
       // útil para baseline/render sem nova ida ao banco
       enemyDefCode: enemyDef?.code ?? null,
       enemyDefName: enemyDef?.name ?? null,
       visualKind: enemyDef?.visual_kind ?? "DEFAULT",
-      collisionRadius: toNum(enemyDef?.collision_radius, 0.5),
+      collisionRadius: Number(enemyDef?.collision_radius),
 
       pos: {
-        x: toNum(row.pos_x, 0),
-        z: toNum(row.pos_z, 0),
+        x: Number(row.pos_x),
+        z: Number(row.pos_z),
       },
 
-      yaw: toNum(row.yaw, 0),
+      yaw: Number(row.yaw),
 
       homePos: {
-        x: toNum(row.home_x ?? row.pos_x, 0),
-        z: toNum(row.home_z ?? row.pos_z, 0),
+        x: Number(row.home_x ?? row.pos_x),
+        z: Number(row.home_z ?? row.pos_z),
       },
+      patrolRadius,
+      patrolWaitMs,
+      patrolStopRadius,
 
       status: row.status ?? "ALIVE",
 
       stats: {
-        hpCurrent: toNum(stats?.hp_current, 0),
-        hpMax: toNum(stats?.hp_max, 0),
-        moveSpeed: toNum(stats?.move_speed, 0),
-        attackSpeed: toNum(stats?.attack_speed, 0),
+        hpCurrent: requireNum(stats?.hp_current, "hp_current", enemyDef.id),
+        hpMax: requireNum(stats?.hp_max, "hp_max", enemyDef.id),
+        moveSpeed: requireNum(stats?.move_speed, "move_speed", enemyDef.id),
+        attackSpeed: requireNum(stats?.attack_speed, "attack_speed", enemyDef.id),
         attackPower,
+        defense,
+        attackRange,
       },
       _combatDebug: {
-        attackPowerSource: enemyDef?.ai_profile_json ?? null,
+        attackPowerSource: "ga_enemy_def_stats",
       },
 
       spawnedAt: row.spawned_at ?? null,
@@ -125,8 +139,8 @@ async function loadEnemiesForInstance(instanceId) {
 
       // opcionais para debug/uso futuro
       _db: {
-        spawnEntryEnemyDefId: toNum(spawnEntry?.enemy_def_id, 0),
-        spawnEntrySpawnPointId: toNum(spawnEntry?.spawn_point_id, 0),
+        spawnEntryEnemyDefId: Number(spawnEntry?.enemy_def_id),
+        spawnEntrySpawnPointId: Number(spawnEntry?.spawn_point_id),
       },
     });
   }

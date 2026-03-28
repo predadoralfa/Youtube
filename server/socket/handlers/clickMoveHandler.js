@@ -6,6 +6,7 @@ const {
 } = require("../../state/runtimeStore");
 
 const { clearPlayerCombat } = require("./move/clearCombat");
+const { CLICK_MOVE_SPAM_MS } = require("../../config/movementConstants");
 
 function isFiniteNumber(n) {
   return typeof n === "number" && Number.isFinite(n);
@@ -41,7 +42,7 @@ function registerClickMoveHandler(socket) {
       }
 
       // anti-spam simples
-      if (rt.lastClickAtMs && (nowMs - rt.lastClickAtMs) < 100) {
+      if (rt.lastClickAtMs && (nowMs - rt.lastClickAtMs) < CLICK_MOVE_SPAM_MS) {
         // socket.emit("move:click:rejected", { reason: "SPAM", atMs: nowMs });
         return;
       }

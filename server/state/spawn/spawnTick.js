@@ -3,7 +3,21 @@
 const db = require("../../models");
 const { getAliveEnemiesForSpawnPoint, getAliveEnemiesForSpawnEntry, addEnemy } = require("../enemies/enemiesRuntimeStore");
 const { emitEnemySpawn } = require("../enemies/enemyEmit");
-const { readEnemyAttackPower } = require("../../service/enemyCombatProfile");
+const {
+  DEFAULT_SPAWN_SHAPE_KIND,
+  DEFAULT_SPAWN_RADIUS,
+  DEFAULT_SPAWN_MAX_ALIVE,
+  DEFAULT_SPAWN_QUANTITY_MIN,
+  DEFAULT_SPAWN_QUANTITY_MAX,
+} = require("./spawnConfig");
+
+function requireNum(value, label, enemyDefId) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    throw new Error(`Invalid enemy stat ${label} for enemyDefId=${enemyDefId}`);
+  }
+  return n;
+}
 
 /**
  * Utilities de posição
@@ -15,7 +29,7 @@ function generatePointPos(baseX, baseZ) {
 
 function generateCirclePos(baseX, baseZ, radius) {
   // CIRCLE: posição aleatória dentro do raio
-  const r = Number(radius) || 1;
+  const r = Number.isFinite(Number(radius)) && Number(radius) > 0 ? Number(radius) : DEFAULT_SPAWN_RADIUS;
   const angle = Math.random() * 2 * Math.PI;
   const dist = Math.random() * r;
   return {
@@ -30,25 +44,27 @@ function generateCirclePos(baseX, baseZ, radius) {
 function selectWeightedEntry(candidateEntries) {
   if (!candidateEntries || candidateEntries.length === 0) return null;
 
-  const totalWeight = candidateEntries.reduce((sum, e) => sum + (Number(e.weight) || 1), 0);
+  const totalWeight = candidateEntries.reduce((sum, e) => sum + requireNum(e.weight, "weight", e.id), 0);
   if (totalWeight <= 0) return null;
 
   let random = Math.random() * totalWeight;
   for (const entry of candidateEntries) {
-    const w = Number(entry.weight) || 1;
+    const w = requireNum(entry.weight, "weight", entry.id);
     if (random < w) return entry;
     random -= w;
   }
 
-  return candidateEntries[0]; // fallback
+  return null;
 }
 
 /**
  * Determina quantidade a spawnar
  */
 function determineSpawnQuantity(entry, remainingCapacity) {
-  const qMin = Number(entry.quantity_min) || 1;
-  const qMax = Number(entry.quantity_max) || 1;
+  const qMinRaw = Number(entry.quantity_min);
+  const qMaxRaw = Number(entry.quantity_max);
+  const qMin = Number.isFinite(qMinRaw) ? qMinRaw : DEFAULT_SPAWN_QUANTITY_MIN;
+  const qMax = Number.isFinite(qMaxRaw) ? qMaxRaw : DEFAULT_SPAWN_QUANTITY_MAX;
   const desired = Math.floor(Math.random() * (qMax - qMin + 1)) + qMin;
   return Math.min(desired, Math.max(0, remainingCapacity));
 }
@@ -118,7 +134,8 @@ async function processSpawner(spawner, nowMs, io = null) {
     return; // Não pode spawnar sem saber em qual instância
   }
 
-  const maxAlive = Number(spawner.max_alive) || 1;
+  const maxAliveRaw = Number(spawner.max_alive);
+  const maxAlive = Number.isFinite(maxAliveRaw) && maxAliveRaw > 0 ? maxAliveRaw : DEFAULT_SPAWN_MAX_ALIVE;
 
   // Conta vivos atuais (do runtime store)
   const aliveEnemies = getAliveEnemiesForSpawnPoint(spawnPointId);
@@ -191,7 +208,7 @@ async function processSpawner(spawner, nowMs, io = null) {
     include: [
       {
         association: "baseStats",
-        attributes: ["hp_max", "move_speed", "attack_speed"],
+        attributes: ["hp_max", "move_speed", "attack_speed", "attack_power", "defense", "attack_range"],
       },
     ],
   });
@@ -204,10 +221,20 @@ async function processSpawner(spawner, nowMs, io = null) {
   }
 
   const baseStats = enemyDef.baseStats;
-  const shapeKind = String(spawner.shape_kind || "POINT");
+  const hpMax = requireNum(baseStats.hp_max, "hp_max", enemyDef.id);
+  const moveSpeed = requireNum(baseStats.move_speed, "move_speed", enemyDef.id);
+  const attackSpeed = requireNum(baseStats.attack_speed, "attack_speed", enemyDef.id);
+  const attackPower = requireNum(baseStats.attack_power, "attack_power", enemyDef.id);
+  const defense = requireNum(baseStats.defense, "defense", enemyDef.id);
+  const attackRange = requireNum(baseStats.attack_range, "attack_range", enemyDef.id);
+  const shapeKind = String(spawner.shape_kind ?? DEFAULT_SPAWN_SHAPE_KIND);
   const spawnX = Number(spawner.pos_x);
   const spawnZ = Number(spawner.pos_z);
-  const radius = Number(spawner.radius) || 1;
+  const radiusRaw = Number(spawner.radius);
+  const radius = Number.isFinite(radiusRaw) && radiusRaw > 0 ? radiusRaw : DEFAULT_SPAWN_RADIUS;
+  const patrolRadius = requireNum(spawner.patrol_radius, "patrol_radius", spawner.id);
+  const patrolWaitMs = requireNum(spawner.patrol_wait_ms, "patrol_wait_ms", spawner.id);
+  const patrolStopRadius = requireNum(spawner.patrol_stop_radius, "patrol_stop_radius", spawner.id);
 
   console.log(`[SPAWN] spawner=${spawnPointId} criando ${spawnCount} inimigos do tipo ${enemyDef.code}`);
 
@@ -243,10 +270,10 @@ async function processSpawner(spawner, nowMs, io = null) {
       // Cria ga_enemy_instance_stats
       await db.GaEnemyInstanceStats.create({
         enemy_instance_id: enemyInstance.id,
-        hp_current: Number(baseStats.hp_max),
-        hp_max: Number(baseStats.hp_max),
-        move_speed: Number(baseStats.move_speed),
-        attack_speed: Number(baseStats.attack_speed),
+        hp_current: hpMax,
+        hp_max: hpMax,
+        move_speed: moveSpeed,
+        attack_speed: attackSpeed,
       });
 
       // ✨ CORRIGIDO: Usar instanceId correto do spawner
@@ -269,14 +296,17 @@ async function processSpawner(spawner, nowMs, io = null) {
         },
         status: "ALIVE",
         stats: {
-          hpCurrent: Number(baseStats.hp_max),
-          hpMax: Number(baseStats.hp_max),
-          moveSpeed: Number(baseStats.move_speed),
-          attackSpeed: Number(baseStats.attack_speed),
-          attackPower: Number(baseStats.attack_power) > 0
-            ? Number(baseStats.attack_power)
-            : readEnemyAttackPower(enemyDef.ai_profile_json, 5),
+          hpCurrent: hpMax,
+          hpMax: hpMax,
+          moveSpeed: moveSpeed,
+          attackSpeed: attackSpeed,
+          attackPower: attackPower,
+          defense: defense,
+          attackRange: attackRange,
         },
+        patrolRadius,
+        patrolWaitMs,
+        patrolStopRadius,
         rev: 0,
         dirty: false,
       };

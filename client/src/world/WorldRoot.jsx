@@ -11,15 +11,17 @@ export function WorldRoot() {
     setHasToken(!!token);
   }, []);
 
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    socket.emit("world:resync");
+  }, [hasToken]);
+
   const handleLogin = (token) => {
     localStorage.setItem("token", token);
     setHasToken(true);
   };
-  
-  const socket = getSocket();
-  if (socket) {
-    socket.emit("world:resync");
-  }
   
   if (!hasToken) {
     return <AuthPage onLoggedIn={handleLogin} />;

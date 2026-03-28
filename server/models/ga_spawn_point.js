@@ -51,7 +51,25 @@ module.exports = (sequelize, DataTypes) => {
           type: DataTypes.DECIMAL(10, 3),
           allowNull: true,
         },
-  
+
+        patrol_radius: {
+          type: DataTypes.DECIMAL(10, 3),
+          allowNull: false,
+          defaultValue: 5,
+        },
+
+        patrol_wait_ms: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: false,
+          defaultValue: 10000,
+        },
+
+        patrol_stop_radius: {
+          type: DataTypes.DECIMAL(10, 3),
+          allowNull: false,
+          defaultValue: 0.5,
+        },
+
         max_alive: {
           type: DataTypes.INTEGER,
           allowNull: false,

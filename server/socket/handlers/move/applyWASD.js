@@ -4,10 +4,10 @@ const { DT_MAX } = require("./config");
 
 const {
   normalize2D,
-  clampPosToBounds,
   readRuntimeSpeedStrict,
   computeDtSeconds,
 } = require("../../../state/movement/math");
+const { moveEntityByDirection } = require("../../../state/movement/entityMotion");
 
 const { isFiniteNumber } = require("./validate");
 const { clearPlayerCombat } = require("./clearCombat");
@@ -106,17 +106,18 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
       };
     }
 
-    const desired = {
-      x: runtime.pos.x + d.x * speed * dt,
-      y: runtime.pos.y,
-      z: runtime.pos.z + d.z * speed * dt,
-    };
+    const movedResult = moveEntityByDirection({
+      pos: runtime.pos,
+      dir: d,
+      speed,
+      dt,
+      bounds: runtime.bounds,
+    });
 
-    const clampedPos = clampPosToBounds(desired, runtime.bounds);
-    if (!clampedPos) {
+    if (!movedResult.ok) {
       return {
         ok: false,
-        reason: "invalid_bounds",
+        reason: movedResult.reason ?? "invalid_bounds",
         yawChanged,
         moved: false,
         modeOrActionChanged,
@@ -125,8 +126,8 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
       };
     }
 
-    if (clampedPos.x !== runtime.pos.x || clampedPos.z !== runtime.pos.z) {
-      runtime.pos = clampedPos;
+    if (movedResult.moved) {
+      runtime.pos = movedResult.pos;
       moved = true;
     }
   }
