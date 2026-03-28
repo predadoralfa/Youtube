@@ -11,6 +11,7 @@ const { bumpRev, toDelta } = require("./entity");
 const { readHpCurrent, readHpMax } = require("../enemies/enemyEntity");
 const { emitDeltaToInterest } = require("./emit");
 const { handleChunkTransition } = require("./chunkTransition");
+const db = require("../../models");
 
 // ✅ EXISTENTE: coleta de actors
 const { attemptCollectFromActor } = require("../../service/actorCollectService");
@@ -76,6 +77,10 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
   const targetHPMax = readHpMax(targetEnemy) || 0;
   const targetDied = targetHPAfter <= 0;
 
+  console.log(
+    `[COMBAT] 🤖 AUTO HIT player=${userId} enemy=${targetEnemy.id} attackPower=${stats?.attackPower} defense=${targetDefense} damage=${damage} hp=${targetHPBefore}->${targetHPAfter}/${targetHPMax}`
+  );
+
   // Atualizar HP do inimigo
   targetEnemy.hpCurrent = targetHPAfter;
   targetEnemy.hp_current = targetHPAfter;
@@ -83,6 +88,21 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
   targetEnemy.stats.hpCurrent = targetHPAfter;
   targetEnemy.stats.hpMax = targetHPMax;
   targetEnemy._hpChanged = true;
+
+  try {
+    const enemyStatsRow = await db.GaEnemyInstanceStats.findByPk(targetEnemy.id);
+    if (enemyStatsRow) {
+      await enemyStatsRow.update({ hp_current: targetHPAfter, hp_max: targetHPMax });
+    }
+    if (targetDied) {
+      await db.GaEnemyInstance.update(
+        { status: "DEAD" },
+        { where: { id: targetEnemy.id } }
+      );
+    }
+  } catch (err) {
+    console.error(`[COMBAT] Failed to persist enemy hp for enemy=${targetEnemy.id}:`, err);
+  }
 
   // Atualizar cooldown do player
   attackerRt.combat.lastAttackAtMs = nowMs;
@@ -122,6 +142,7 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
       targetHPAfter,
       targetHPMax,
       targetDied,
+      attackPower: stats?.attackPower,
       cooldownMs,
     });
   }
@@ -501,6 +522,7 @@ async function tickOnce(io, nowMsValue) {
           enemyId: `enemy_${attack.enemyId}`,
           targetId: attack.targetId,
           targetKind: "PLAYER",
+          attackPower: attack.attackPower,
           damage: attack.damage,
           targetHPBefore: attack.targetHPBefore,
           targetHPAfter: attack.targetHPAfter,

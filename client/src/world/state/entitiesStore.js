@@ -175,7 +175,29 @@ export function createEntitiesStore() {
     instanceId: null,
     chunk: null, // {cx,cz}
     t: 0,
+    version: 0,
+    listeners: new Set(),
   };
+
+  function emitChange() {
+    state.version += 1;
+    for (const listener of state.listeners) {
+      try {
+        listener();
+      } catch (err) {
+        console.error("[ENTITIES_STORE] listener error:", err);
+      }
+    }
+  }
+
+  function subscribe(listener) {
+    if (typeof listener !== "function") return () => {};
+
+    state.listeners.add(listener);
+    return () => {
+      state.listeners.delete(listener);
+    };
+  }
 
   function clear() {
     state.entities.clear();
@@ -183,6 +205,7 @@ export function createEntitiesStore() {
     state.instanceId = null;
     state.chunk = null;
     state.t = 0;
+    emitChange();
   }
 
   function applyBaseline(payload) {
@@ -275,6 +298,7 @@ export function createEntitiesStore() {
 
     console.log("[ENTITIES_STORE] ✅ applyBaseline COMPLETO. state.selfId:", state.selfId);
     console.log("[ENTITIES_STORE] Entidades no mapa:", Array.from(state.entities.keys()));
+    emitChange();
   }
 
   function applySpawn(entityRaw) {
@@ -297,6 +321,7 @@ export function createEntitiesStore() {
     if (!cur || e.rev > curRev) {
       console.log("[ENTITIES_STORE] ✅ applySpawn ADICIONANDO:", e.entityId);
       state.entities.set(e.entityId, e);
+      emitChange();
     } else {
       console.log("[ENTITIES_STORE] ⏭️ applySpawn IGNORANDO (rev old):", e.entityId, "cur.rev:", curRev, "e.rev:", e.rev);
     }
@@ -315,6 +340,7 @@ export function createEntitiesStore() {
 
     console.log("[ENTITIES_STORE] ✅ applyDespawn REMOVENDO:", entityId);
     state.entities.delete(entityId);
+    emitChange();
   }
 
   function applyDelta(delta) {
@@ -373,6 +399,7 @@ export function createEntitiesStore() {
     };
 
     state.entities.set(entityId, next);
+    emitChange();
   }
 
   function getSnapshot() {
@@ -395,6 +422,9 @@ export function createEntitiesStore() {
     get t() {
       return state.t;
     },
+    get version() {
+      return state.version;
+    },
 
     // mutações
     clear,
@@ -402,6 +432,7 @@ export function createEntitiesStore() {
     applySpawn,
     applyDespawn,
     applyDelta,
+    subscribe,
 
     // leitura
     getSnapshot,

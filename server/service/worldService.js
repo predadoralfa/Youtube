@@ -234,7 +234,9 @@ const bootstrap = async (req, res) => {
     clearEnemiesInstance(runtime.instance_id);
     for (const enemy of enemies) {
       const ePos = enemy.pos || { x: 0, z: 0 };
-      console.log(`[BOOTSTRAP] ℹ️ Enemy: id=${enemy.id} displayName=${enemy.displayName} pos=(${ePos.x}, ${ePos.z}) status=${enemy.status}`);
+      console.log(
+        `[BOOTSTRAP] ℹ️ Enemy: id=${enemy.id} displayName=${enemy.displayName} pos=(${ePos.x}, ${ePos.z}) status=${enemy.status} attackPower=${enemy.stats?.attackPower ?? "null"}`
+      );
       addEnemy(enemy);
     }
 

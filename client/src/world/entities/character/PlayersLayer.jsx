@@ -10,16 +10,17 @@
  * Props:
  * - worldStoreRef: referência ao store de entidades
  */
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { createPlayerMesh } from "./player";
 
 export function PlayersLayer({ worldStoreRef }) {
   const store = worldStoreRef?.current;
-  const entities = useMemo(() => {
-    return store?.getSnapshot?.() ?? [];
-  }, [store]);
+  const subscribe = store?.subscribe ?? (() => () => {});
+  const getVersionSnapshot = () => store?.version ?? 0;
 
-  const selfId = useMemo(() => store?.selfId ?? null, [store]);
+  const version = useSyncExternalStore(subscribe, getVersionSnapshot, getVersionSnapshot);
+  const entities = useMemo(() => store?.getSnapshot?.() ?? [], [store, version]);
+  const selfId = store?.selfId ?? null;
 
   return (
     <group name="players-layer">

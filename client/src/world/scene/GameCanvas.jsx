@@ -223,6 +223,7 @@ export function GameCanvas({
   const templateRef = useRef(null);
   const versionRef = useRef(null);
   const actorsRef = useRef([]);
+  const cameraRef = useRef(null);
 
   const meshByEntityIdRef = useRef(new Map());
   const meshByActorIdRef = useRef(new Map());
@@ -238,6 +239,7 @@ export function GameCanvas({
   const [targetHpBar, setTargetHpBar] = useState(null);
 
   const entityVitalsRef = useRef(new Map());
+  const entityPositionsRef = useRef(new Map());
   const seenDamageEventIdsRef = useRef(new Set());
 
   // ✨ LOG SNAPSHOT
@@ -280,27 +282,42 @@ export function GameCanvas({
       const exactDamage = Number(damage);
       const exactDamageText = Number.isFinite(exactDamage) ? exactDamage : 0;
 
+      const targetKey = String(targetId);
+      const worldPos = entityPositionsRef.current.get(targetKey);
+      let screenX = 0;
+      let screenY = 0;
+      if (worldPos && containerRef.current && cameraRef.current) {
+        const screenPos = projectWorldToScreenPx(
+          new THREE.Vector3(worldPos.x, worldPos.y + 1.2, worldPos.z),
+          cameraRef.current,
+          containerRef.current
+        );
+        if (screenPos) {
+          screenX = screenPos.x;
+          screenY = screenPos.y;
+        }
+      }
+
       setFloatingDamages((prev) => [
         ...prev,
         {
           id: String(eventId ?? `${String(targetId)}:${Date.now()}:${Math.random()}`),
-          targetId: String(targetId),
+          targetId: targetKey,
           damage: exactDamageText,
-          screenX: 0,
-          screenY: 0,
+          screenX,
+          screenY,
           isCrit: false,
         },
       ]);
 
-      const key = String(targetId);
-      const current = entityVitalsRef.current.get(key) ?? {
+      const current = entityVitalsRef.current.get(targetKey) ?? {
         hpCurrent: 0,
         hpMax: 0,
         staminaCurrent: 0,
         staminaMax: 0,
       };
 
-      entityVitalsRef.current.set(key, {
+      entityVitalsRef.current.set(targetKey, {
         ...current,
         hpCurrent:
           Number.isFinite(Number(targetHPAfter))
@@ -374,6 +391,7 @@ export function GameCanvas({
 
     const { camera, update, applyOrbit, applyZoom, onResize, setBounds, getYaw } =
       setupCamera(container);
+    cameraRef.current = camera;
 
     setupLight(scene);
 
@@ -571,7 +589,8 @@ export function GameCanvas({
     let markerAccum = 0;
     const tmpWorld = new THREE.Vector3();
 
-    const entityPositions = new Map();
+      const entityPositions = entityPositionsRef.current;
+      entityPositions.clear();
 
     // ✨ LOG: Debug frame count
     let frameCount = 0;
@@ -991,7 +1010,9 @@ export function GameCanvas({
       selectedTargetRef.current = null;
       selectedObjectRef.current = null;
       entityVitalsRef.current.clear();
+      entityPositionsRef.current.clear();
       seenDamageEventIdsRef.current.clear();
+      cameraRef.current = null;
 
       setMarker({ visible: false, x: 0, y: 0 });
       setTargetHpBar(null);

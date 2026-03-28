@@ -9,19 +9,20 @@
  * Props:
  * - worldStoreRef: referência ao store de entidades
  */
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 export function EnemiesLayer({ worldStoreRef }) {
   const store = worldStoreRef?.current;
-  
-  const entities = useMemo(() => {
-    return store?.getSnapshot?.() ?? [];
-  }, [store]);
+  const subscribe = store?.subscribe ?? (() => () => {});
+  const getVersionSnapshot = () => store?.version ?? 0;
+
+  const version = useSyncExternalStore(subscribe, getVersionSnapshot, getVersionSnapshot);
+  const entities = useMemo(() => store?.getSnapshot?.() ?? [], [store, version]);
 
   console.log("[ENEMIES_LAYER] entities total:", entities.length);
   console.log("[ENEMIES_LAYER] first 3:", entities.slice(0, 3));
 
-  const selfId = useMemo(() => store?.selfId ?? null, [store]);
+  const selfId = store?.selfId ?? null;
 
   // Filtra só inimigos (exclui self e players)
   // Inimigos têm IDs numéricos, players têm IDs de usuário

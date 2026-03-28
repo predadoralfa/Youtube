@@ -27,6 +27,12 @@ module.exports = (sequelize, DataTypes) => {
           type: DataTypes.DECIMAL(10, 3),
           allowNull: false,
         },
+
+        attack_power: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: false,
+          defaultValue: 5,
+        },
       },
       {
         tableName: "ga_enemy_def_stats",

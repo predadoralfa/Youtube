@@ -2,6 +2,7 @@
 // ✨ FINAL: Compatível com tickOnce.js - Função tickEnemyAI
 
 const { getRuntime } = require("../runtimeStore");
+const db = require("../../models");
 
 const COMBAT_RANGE_LIMIT = 15; // Perseguir até 15 unidades
 const ENEMY_ATTACK_COOLDOWN_MS = 1500; // 1.5s entre ataques
@@ -163,7 +164,7 @@ function updateSingleEnemyAI(enemy, nowMs) {
  * ✨ Processar ataques automáticos de um inimigo
  * Retorna: null ou { enemyId, targetId, damage, ... }
  */
-function updateSingleEnemyAttack(enemy, nowMs) {
+async function updateSingleEnemyAttack(enemy, nowMs) {
   if (!enemy) return null;
   if (!enemy._combatActive) return null;
   if (!enemy._combatTargetId) return null;
@@ -209,7 +210,9 @@ function updateSingleEnemyAttack(enemy, nowMs) {
   const playerDefense = targetRt._defense || 0;
   const damage = Math.max(1, enemyAttackPower - playerDefense);
 
-  console.log(`[ENEMY_AI] 🔥 Enemy ${enemy.id} ataca player ${targetId} com ${damage} dano`);
+  console.log(
+    `[ENEMY_AI] 🔥 Enemy ${enemy.id} ataca player ${targetId} com ${damage} dano (attackPower=${enemyAttackPower})`
+  );
 
   // Aplicar dano ao player
   if (!targetRt.vitals) {
@@ -224,6 +227,15 @@ function updateSingleEnemyAttack(enemy, nowMs) {
   const hpAfter = targetRt.vitals.hp.current;
   const hpMax = targetRt.vitals.hp.max;
 
+  try {
+    const playerStatsRow = await db.GaUserStats.findByPk(Number(targetId));
+    if (playerStatsRow) {
+      await playerStatsRow.update({ hp_current: hpAfter, hp_max: hpMax });
+    }
+  } catch (err) {
+    console.error(`[ENEMY_AI] Failed to persist player hp for player=${targetId}:`, err);
+  }
+
   // Atualizar cooldown
   enemy._lastAttackAtMs = nowMs;
 
@@ -231,6 +243,7 @@ function updateSingleEnemyAttack(enemy, nowMs) {
   return {
     enemyId: enemy.id,
     targetId: String(targetId),
+    attackPower: enemyAttackPower,
     damage,
     targetHPBefore: hpBefore,
     targetHPAfter: hpAfter,
@@ -249,7 +262,7 @@ function updateSingleEnemyAttack(enemy, nowMs) {
  * 
  * @returns {Array} Lista de inimigos que mudaram
  */
-function tickEnemyAI(enemies, t, dt) {
+async function tickEnemyAI(enemies, t, dt) {
   if (!enemies || !Array.isArray(enemies)) {
     return [];
   }
@@ -269,7 +282,7 @@ function tickEnemyAI(enemies, t, dt) {
     }
 
     // Processar ataques
-    const attackResult = updateSingleEnemyAttack(enemy, t);
+    const attackResult = await updateSingleEnemyAttack(enemy, t);
     if (attackResult) {
       attacks.push(attackResult);
       // Inimigo que atacou também mudou

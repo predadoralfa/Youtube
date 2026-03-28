@@ -63,52 +63,23 @@ async function loadPlayerCombatStats(userId) {
  */
 async function loadEnemyCombatStats(enemyInstanceId) {
   try {
-    // Buscar stats da instância do inimigo
     const stats = await db.GaEnemyInstanceStats.findByPk(enemyInstanceId, {
       attributes: [
         "hp_current",
         "hp_max",
         "attack_speed",
         "move_speed"
-      ],
-      include: [
-        {
-          association: "enemyInstance",
-          attributes: ["enemy_def_id"],
-          include: [
-            {
-              association: "enemyDef",
-              attributes: ["id", "ai_profile_json"],
-              include: [
-                {
-                  association: "baseStats",
-                  attributes: ["hp_max"]
-                }
-              ]
-            }
-          ]
-        }
       ]
     });
 
     if (!stats) return null;
 
-    const attackPower = Number(
-      stats?.enemyInstance?.enemyDef?.baseStats?.attack_power ??
-      stats?.enemyInstance?.enemyDef?.ai_profile_json?.attackPower ??
-      5
-    );
-    const attackRange = 1.2; // Default por enquanto
-    const defense = 0;
-
     return {
       hpCurrent: Number(stats.hp_current),
       hpMax: Number(stats.hp_max),
-      attackPower: attackPower,
-      defense: defense,
+      defense: 0,
       attackSpeed: Number(stats.attack_speed),
       moveSpeed: Number(stats.move_speed),
-      attackRange: attackRange
     };
   } catch (err) {
     console.error(`[COMBAT] Error loading enemy stats for ${enemyInstanceId}:`, err);

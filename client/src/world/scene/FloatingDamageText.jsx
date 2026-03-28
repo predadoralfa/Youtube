@@ -22,14 +22,18 @@
  * - Não decide se o texto deve ser vermelho (deixa para GameCanvas)
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export function FloatingDamageText({ damages }) {
   const [floatingTexts, setFloatingTexts] = useState([]);
   const seenDamageIdsRef = useRef(new Set());
 
-  useEffect(() => {
-    if (!damages || damages.length === 0) return;
+  useLayoutEffect(() => {
+    if (!damages || damages.length === 0) {
+      setFloatingTexts([]);
+      seenDamageIdsRef.current.clear();
+      return;
+    }
 
     const seen = seenDamageIdsRef.current;
     const newTexts = [];

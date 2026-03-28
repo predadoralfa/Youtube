@@ -1,6 +1,7 @@
 // server/service/enemyLoader.js
 
 const db = require("../models");
+const { readEnemyAttackPower } = require("./enemyCombatProfile");
 
 function toNum(v, fallback = 0) {
   const n = Number(v);
@@ -42,7 +43,14 @@ async function loadEnemiesForInstance(instanceId) {
       {
         association: "enemyDef",
         required: false,
-        attributes: ["id", "code", "name", "visual_kind", "collision_radius"],
+        attributes: ["id", "code", "name", "visual_kind", "collision_radius", "ai_profile_json"],
+        include: [
+          {
+            association: "baseStats",
+            required: false,
+            attributes: ["hp_max", "move_speed", "attack_speed", "attack_power"],
+          },
+        ],
       },
       {
         association: "stats",
@@ -62,6 +70,11 @@ async function loadEnemiesForInstance(instanceId) {
     const stats = row.stats;
     const enemyDef = row.enemyDef;
     const spawnEntry = row.spawnEntry;
+
+    const attackPower = readEnemyAttackPower(
+      enemyDef?.baseStats ?? enemyDef?.ai_profile_json,
+      5
+    );
 
     out.push({
       id: String(row.id),
@@ -95,6 +108,10 @@ async function loadEnemiesForInstance(instanceId) {
         hpMax: toNum(stats?.hp_max, 0),
         moveSpeed: toNum(stats?.move_speed, 0),
         attackSpeed: toNum(stats?.attack_speed, 0),
+        attackPower,
+      },
+      _combatDebug: {
+        attackPowerSource: enemyDef?.ai_profile_json ?? null,
       },
 
       spawnedAt: row.spawned_at ?? null,
