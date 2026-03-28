@@ -17,34 +17,6 @@ export function FloatingDamageText({ damages }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (typeof document === "undefined") return undefined;
-
-    const testNode = document.createElement("div");
-    testNode.setAttribute("data-floating-damage-test", "true");
-    testNode.textContent = "TEST_RENDER";
-    Object.assign(testNode.style, {
-      position: "fixed",
-      left: "24px",
-      top: "24px",
-      zIndex: "2147483647",
-      pointerEvents: "none",
-      padding: "6px 10px",
-      borderRadius: "6px",
-      background: "rgba(255, 0, 0, 0.95)",
-      color: "#fff",
-      fontSize: "14px",
-      fontWeight: "700",
-      boxShadow: "0 0 8px rgba(0,0,0,0.4)",
-    });
-
-    document.body.appendChild(testNode);
-
-    return () => {
-      testNode.remove();
-    };
-  }, []);
-
-  useEffect(() => {
     const interval = setInterval(() => {
       setNow(Date.now());
     }, 50);
@@ -58,28 +30,6 @@ export function FloatingDamageText({ damages }) {
 
   const content = (
     <>
-      <div
-        style={{
-          position: "fixed",
-          left: "24px",
-          top: "64px",
-          zIndex: 2147483647,
-          pointerEvents: "none",
-          padding: "6px 10px",
-          borderRadius: "6px",
-          background: "rgba(0, 0, 0, 0.85)",
-          color: "#00ff88",
-          fontSize: "12px",
-          fontWeight: 700,
-          boxShadow: "0 0 8px rgba(0,0,0,0.4)",
-        }}
-      >
-        DAMAGE_COUNT={damages.length} FIRST=
-        {Number.isFinite(Number(damages[0]?.screenX ?? damages[0]?.x)) && Number.isFinite(Number(damages[0]?.screenY ?? damages[0]?.y))
-          ? `${Number(damages[0].screenX ?? damages[0].x).toFixed(1)},${Number(damages[0].screenY ?? damages[0].y).toFixed(1)}`
-          : "invalid"}
-      </div>
-
       {damages.map((text) => {
         const screenX = Number(text?.screenX ?? text?.x);
         const screenY = Number(text?.screenY ?? text?.y);
