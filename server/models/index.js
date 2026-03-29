@@ -39,6 +39,10 @@ const defineGaItemDef = require("./ga_item_def");
 const defineGaItemDefComponent = require("./ga_item_def_component");
 const defineGaItemInstance = require("./ga_item_instance");
 
+// NOVOS (EQUIPMENT)
+const defineGaEquipmentSlotDef = require("./ga_equipment_slot_def");
+const defineGaEquippedItem = require("./ga_equipped_item");
+
 // NOVOS (INVENTORY)
 const defineGaContainerDef = require("./ga_container_def");
 const defineGaContainer = require("./ga_container");
@@ -86,6 +90,10 @@ const GaMeshTemplate = defineGaMeshTemplate(sequelize, DataTypes);
 const GaItemDef = defineGaItemDef(sequelize, DataTypes);
 const GaItemDefComponent = defineGaItemDefComponent(sequelize, DataTypes);
 const GaItemInstance = defineGaItemInstance(sequelize, DataTypes);
+
+// EQUIPMENT
+const GaEquipmentSlotDef = defineGaEquipmentSlotDef(sequelize, DataTypes);
+const GaEquippedItem = defineGaEquippedItem(sequelize, DataTypes);
 
 //CONTEINERS
 const GaContainerDef = defineGaContainerDef(sequelize, DataTypes);
@@ -141,6 +149,10 @@ const models = {
   GaItemDef,
   GaItemDefComponent,
   GaItemInstance,
+
+  // EQUIPMENT
+  GaEquipmentSlotDef,
+  GaEquippedItem,
 
   // CONTAINER
   GaContainerDef,

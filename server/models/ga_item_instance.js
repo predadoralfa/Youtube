@@ -76,6 +76,13 @@ module.exports = (sequelize, DataTypes) => {
       onUpdate: "CASCADE",
       onDelete: "SET NULL",
     });
+
+    GaItemInstance.hasOne(models.GaEquippedItem, {
+      foreignKey: "item_instance_id",
+      as: "equippedItem",
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
+    });
   };
 
   return GaItemInstance;

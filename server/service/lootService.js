@@ -15,6 +15,26 @@
 
 const db = require("../models");
 
+async function resolveLootContainerDef() {
+  const preferredCodes = ["Stone Container", "LOOT_CONTAINER", "CHEST_10"];
+
+  for (const code of preferredCodes) {
+    const lootContainerDef = await db.GaContainerDef.findOne({
+      where: { code }
+    });
+
+    if (lootContainerDef) {
+      if (code !== "LOOT_CONTAINER") {
+        console.warn(`[LOOT] Falling back to container def "${code}"`);
+      }
+
+      return lootContainerDef;
+    }
+  }
+
+  return null;
+}
+
 /**
  * =====================================================================
  * Criar container de loot para inimigo morto
@@ -39,12 +59,10 @@ async function createLootContainerForEnemy(enemyInstanceId, enemyDefId, position
     // Por enquanto, vamos usar um container padrão "loot_container"
     // TODO: Adicionar relação enemy_def -> loot_container_def no banco
 
-    const lootContainerDef = await db.GaContainerDef.findOne({
-      where: { code: "LOOT_CONTAINER" }
-    });
+    const lootContainerDef = await resolveLootContainerDef();
 
     if (!lootContainerDef) {
-      console.warn(`[LOOT] No loot container def found for code "LOOT_CONTAINER"`);
+      console.warn(`[LOOT] No loot container def found for code "LOOT_CONTAINER" or fallback "CHEST_10"`);
       return null;
     }
 

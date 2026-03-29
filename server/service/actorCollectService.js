@@ -264,7 +264,7 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
 
       const newInstance = await db.GaItemInstance.create(
         {
-          user_id: userId,
+          owner_user_id: userId,
           item_def_id: Number(srcItem.item_def_id),
           bind_state: srcItem.bind_state || "NONE",
           props_json: srcItem.props_json || null,

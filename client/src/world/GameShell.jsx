@@ -147,6 +147,9 @@ export function GameShell() {
 
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [inventorySnapshot, setInventorySnapshot] = useState(null);
+  const [equipmentSnapshot, setEquipmentSnapshot] = useState(null);
+  const [inventoryMessage, setInventoryMessage] = useState(null);
+  const [equipmentMessage, setEquipmentMessage] = useState(null);
 
   const socketRef = useRef(null);
   const joinedRef = useRef(false);
@@ -172,6 +175,73 @@ export function GameShell() {
     s.emit("inv:request_full", { reason: "ui_open" });
     return true;
   }, []);
+
+  const emitEquipmentAction = useCallback((eventName, payload) => {
+    const s = socketRef.current;
+    if (!s) return false;
+    if (!joinedRef.current) return false;
+
+    s.emit(eventName, payload, (ack) => {
+      if (ack?.ok === true && ack?.equipment?.ok === true) {
+        setEquipmentSnapshot(ack.equipment);
+        setEquipmentMessage(null);
+        return;
+      }
+
+      if (ack?.ok === true) {
+        setEquipmentMessage(null);
+        return;
+      }
+
+      setEquipmentMessage(ack?.message || ack?.code || "Falha ao atualizar equipment");
+    });
+
+    return true;
+  }, []);
+
+  const emitInventoryDrop = useCallback((itemInstanceId) => {
+    const s = socketRef.current;
+    if (!s) return false;
+    if (!joinedRef.current) return false;
+
+    setInventoryMessage(null);
+
+    s.emit("inv:drop", { itemInstanceId: String(itemInstanceId) }, (ack) => {
+      if (ack?.ok === true && ack?.inventory?.ok === true) {
+        setInventorySnapshot(ack.inventory);
+        if (ack.inventory?.equipment?.ok === true) {
+          setEquipmentSnapshot(ack.inventory.equipment);
+        }
+        setInventoryMessage(null);
+        return;
+      }
+
+      if (ack?.ok === false) {
+        setInventoryMessage(ack?.message || ack?.code || "Falha ao dropar item");
+      }
+    });
+
+    return true;
+  }, []);
+
+  const onEquipItemToSlot = useCallback(
+    ({ itemInstanceId, slotCode }) => {
+      return emitEquipmentAction("equipment:equip", {
+        itemInstanceId: String(itemInstanceId),
+        slotCode: String(slotCode),
+      });
+    },
+    [emitEquipmentAction]
+  );
+
+  const onUnequipItemFromSlot = useCallback(
+    ({ slotCode }) => {
+      return emitEquipmentAction("equipment:unequip", {
+        slotCode: String(slotCode),
+      });
+    },
+    [emitEquipmentAction]
+  );
 
   const emitInteractStart = useCallback(() => {
     const s = socketRef.current;
@@ -338,6 +408,8 @@ export function GameShell() {
     let onSessionReplaced = null;
     let onConnectError = null;
     let onEnemyAttack = null;
+    let onWorldObjectSpawn = null;
+    let onEquipmentFull = null;
 
     const token = localStorage.getItem("token");
 
@@ -355,6 +427,13 @@ export function GameShell() {
         logInventory("BOOTSTRAP_HTTP", data?.inventory);
         if (data?.inventory?.ok === true) {
           setInventorySnapshot(data.inventory);
+          if (data.inventory?.equipment?.ok === true) {
+            setEquipmentSnapshot(data.inventory.equipment);
+          }
+        }
+
+        if (data?.equipment?.ok === true) {
+          setEquipmentSnapshot(data.equipment);
         }
 
         if (!data || data?.error) {
@@ -383,7 +462,47 @@ export function GameShell() {
 
           if (inv?.ok === true) {
             setInventorySnapshot(inv);
+            if (inv?.equipment?.ok === true) {
+              setEquipmentSnapshot(inv.equipment);
+            }
           }
+        };
+
+        onEquipmentFull = (payload) => {
+          const equipment = payload?.ok === true ? payload : payload ?? { ok: false };
+          if (equipment?.ok === true) {
+            setEquipmentSnapshot(equipment);
+            setEquipmentMessage(null);
+          }
+        };
+
+        onWorldObjectSpawn = (payload) => {
+          const actor = payload?.actor ?? payload?.object ?? payload ?? null;
+          const actorId = toId(actor?.id ?? actor?.actorId ?? actor?.actor_id ?? null);
+          if (!actorId) return;
+
+          const normalizedActor = {
+            ...actor,
+            id: actorId,
+            actorType: actor?.actorType ?? actor?.actor_type ?? "CHEST",
+            instanceId: Number(actor?.instanceId ?? actor?.instance_id ?? store.instanceId ?? 0),
+            pos: {
+              x: Number(actor?.pos?.x ?? actor?.position?.x ?? 0),
+              y: Number(actor?.pos?.y ?? actor?.position?.y ?? 0),
+              z: Number(actor?.pos?.z ?? actor?.position?.z ?? 0),
+            },
+          };
+
+          setSnapshot((prev) => {
+            if (!prev) return prev;
+            const actors = Array.isArray(prev.actors) ? prev.actors : [];
+            if (actors.some((a) => String(a.id) === String(actorId))) return prev;
+
+            return {
+              ...prev,
+              actors: [...actors, normalizedActor],
+            };
+          });
         };
 
         onSocketReady = (payload) => {
@@ -654,6 +773,8 @@ export function GameShell() {
         socket.on("connect_error", onConnectError);
 
         socket.on("inv:full", onInvFull);
+        socket.on("equipment:full", onEquipmentFull);
+        socket.on("world:object_spawn", onWorldObjectSpawn);
         socket.on("combat:enemy_attack", onEnemyAttack);
       } catch (err) {
         if (!mounted) return;
@@ -684,6 +805,8 @@ export function GameShell() {
         if (onConnectError) s.off("connect_error", onConnectError);
 
         if (onInvFull) s.off("inv:full", onInvFull);
+        if (onEquipmentFull) s.off("equipment:full", onEquipmentFull);
+        if (onWorldObjectSpawn) s.off("world:object_spawn", onWorldObjectSpawn);
         if (onEnemyAttack) s.off("combat:enemy_attack", onEnemyAttack);
       }
 
@@ -716,11 +839,17 @@ export function GameShell() {
         onTargetClear={onTargetClear}
       />
 
-      <InventoryModal
-        open={inventoryOpen}
-        snapshot={inventorySnapshot}
-        onClose={closeInventory}
-      />
+        <InventoryModal
+          open={inventoryOpen}
+          snapshot={inventorySnapshot}
+          equipmentSnapshot={equipmentSnapshot}
+          inventoryMessage={inventoryMessage}
+          equipmentMessage={equipmentMessage}
+          onClose={closeInventory}
+          onEquipItemToSlot={onEquipItemToSlot}
+          onUnequipItemFromSlot={onUnequipItemFromSlot}
+          onDropItemToWorld={emitInventoryDrop}
+        />
     </>
   );
 }

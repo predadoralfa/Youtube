@@ -17,6 +17,7 @@ import { DefaultActor } from "./DefaultActor";
  */
 export function getActorComponent(actorType) {
   const typeMap = {
+    BAU: ChestActor,
     CHEST: ChestActor,
     TREE: TreeActor,
     NPC: NPCActor,
@@ -31,6 +32,12 @@ export function getActorComponent(actorType) {
  */
 export const ACTOR_CONFIG = {
   CHEST: {
+    scale: 1,
+    interactive: true,
+    label: "Baú",
+    color: 0x8b4513,
+  },
+  BAU: {
     scale: 1,
     interactive: true,
     label: "Baú",

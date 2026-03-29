@@ -104,6 +104,19 @@ async function loadItemDefs(itemDefIds) {
   });
 }
 
+async function loadItemDefComponents(itemDefIds) {
+  if (!itemDefIds.length) return [];
+  const GaItemDefComponent = db.GaItemDefComponent;
+
+  return GaItemDefComponent.findAll({
+    where: { item_def_id: itemDefIds },
+    order: [
+      ["item_def_id", "ASC"],
+      ["id", "ASC"],
+    ],
+  });
+}
+
 // =======================
 // normalize
 // =======================
@@ -189,6 +202,19 @@ function normalizeItemDefRow(row) {
     category: plain.categoria ?? plain.category ?? null,
     weight: plain.peso == null ? null : Number(plain.peso),
     stackMax: asInt(plain.stack_max ?? plain.stackMax, 1),
+    components: [],
+  };
+}
+
+function normalizeItemDefComponentRow(row) {
+  const plain = row.get ? row.get({ plain: true }) : row;
+
+  return {
+    id: String(plain.id),
+    itemDefId: String(plain.item_def_id),
+    componentType: plain.component_type ?? null,
+    dataJson: plain.data_json ?? null,
+    version: asInt(plain.version, 1),
   };
 }
 
@@ -298,6 +324,20 @@ async function loadInventoryRuntime(userIdRaw) {
   for (const row of itemDefRows) {
     const d = normalizeItemDefRow(row);
     itemDefsById.set(String(d.id), d);
+  }
+
+  const itemDefComponentRows = await loadItemDefComponents(itemDefIds);
+  const itemDefComponentsById = new Map();
+  for (const row of itemDefComponentRows) {
+    const c = normalizeItemDefComponentRow(row);
+    const key = String(c.itemDefId);
+    const list = itemDefComponentsById.get(key) || [];
+    list.push(c);
+    itemDefComponentsById.set(key, list);
+  }
+
+  for (const [id, def] of itemDefsById.entries()) {
+    def.components = itemDefComponentsById.get(String(id)) || [];
   }
 
   return {

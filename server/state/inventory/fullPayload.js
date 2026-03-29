@@ -1,6 +1,8 @@
 // server/state/inventory/fullPayload.js
 "use strict";
 
+const { buildEquipmentFull } = require("../equipment/fullPayload");
+
 function uniq(arr) {
   return Array.from(new Set(arr));
 }
@@ -15,6 +17,29 @@ function stableSortBy(arr, pick) {
   });
 }
 
+function buildItemDefPayload(def) {
+  return {
+    id: String(def.id),
+    code: def.code,
+    name: def.name,
+    category: def.category ?? null,
+    weight: def.weight ?? null,
+    stackMax: def.stackMax ?? 1,
+    components: Array.isArray(def.components)
+      ? stableSortBy(def.components, (c) => String(c.id)).map((c) => ({
+          id: String(c.id),
+          componentType: c.componentType ?? c.component_type ?? null,
+          dataJson: c.dataJson ?? c.data_json ?? null,
+          version: c.version ?? 1,
+        }))
+      : [],
+  };
+}
+
+function isLegacyHandRole(slotRole) {
+  return slotRole === "HAND_L" || slotRole === "HAND_R";
+}
+
 /**
  * buildInventoryFull(invRt)
  * Converte runtime em payload autoritativo "inv:full"
@@ -24,15 +49,17 @@ function stableSortBy(arr, pick) {
  * - inclui apenas defs referenciadas por essas instâncias
  * - não despeja catálogo inteiro
  */
-function buildInventoryFull(invRt) {
+function buildInventoryFull(invRt, equipmentRt = null) {
   if (!invRt || !invRt.userId) {
     return { ok: false, error: "INVENTORY_NOT_LOADED" };
   }
 
   const containers = invRt.containers ?? [];
+  const inventoryContainers = containers.filter((c) => !isLegacyHandRole(c.slotRole));
+  const legacyHandContainers = containers.filter((c) => isLegacyHandRole(c.slotRole));
 
   // 1) containers + slots (sempre)
-  const containersPayload = containers.map((c) => ({
+  const containersPayload = inventoryContainers.map((c) => ({
     id: c.id,
     slotRole: c.slotRole,
     state: c.state,
@@ -56,7 +83,7 @@ function buildInventoryFull(invRt) {
 
   // 2) itemInstances referenciadas
   const referencedInstanceIds = uniq(
-    containers
+    [...inventoryContainers, ...legacyHandContainers]
       .flatMap((c) => c.slots ?? [])
       .map((s) => s.itemInstanceId)
       .filter((id) => id != null)
@@ -93,19 +120,17 @@ function buildInventoryFull(invRt) {
     .filter(Boolean);
 
   const itemDefsPayload = stableSortBy(itemDefs, (d) => String(d.id)).map((d) => ({
-    id: String(d.id),
-    code: d.code,
-    name: d.name,
-    category: d.category ?? null,
-    weight: d.weight ?? null,
-    stackMax: d.stackMax ?? 1,
+    ...buildItemDefPayload(d),
   }));
+
+  const equipment = equipmentRt && equipmentRt.userId ? buildEquipmentFull(equipmentRt, invRt) : null;
 
   return {
     ok: true,
     containers: containersPayload,
     itemInstances: itemInstancesPayload,
     itemDefs: itemDefsPayload,
+    equipment,
   };
 }
 

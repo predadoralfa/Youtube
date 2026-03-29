@@ -43,7 +43,9 @@ async function createActorWithContainer(params) {
   if (status !== "ACTIVE" && status !== "DISABLED")
     throw new Error("createActorWithContainer: status invalid");
 
-  return await db.sequelize.transaction(async (tx) => {
+  const run = async (tx) => {
+    const now = new Date();
+
     // 1) valida instance existe
     const inst = await db.GaInstance.findByPk(instanceId, { transaction: tx });
     if (!inst) throw new Error(`createActorWithContainer: ga_instance not found id=${instanceId}`);
@@ -74,8 +76,11 @@ async function createActorWithContainer(params) {
     const container = await db.GaContainer.create(
       {
         container_def_id: containerDefId,
+        slot_role: slotRole,
         state: "ACTIVE",
         rev: 1,
+        created_at: now,
+        updated_at: now,
       },
       { transaction: tx }
     );
@@ -103,7 +108,13 @@ async function createActorWithContainer(params) {
     await db.GaContainerSlot.bulkCreate(slots, { transaction: tx });
 
     return { actor, container, owner };
-  });
+  };
+
+  if (params?.transaction) {
+    return await run(params.transaction);
+  }
+
+  return await db.sequelize.transaction(async (tx) => run(tx));
 }
 
 module.exports = {

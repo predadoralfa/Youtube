@@ -16,6 +16,7 @@ const { loadPlayerCombatStats } = require("../state/runtime/combatLoader");
 // INVENTORY (privado, autoritativo)
 const { ensureInventoryLoaded } = require("../state/inventory/loader");
 const { buildInventoryFull } = require("../state/inventory/fullPayload");
+const { ensureEquipmentLoaded } = require("../state/equipment/loader");
 const {
   DEFAULT_LOCAL_VISUAL_VERSION,
   DEFAULT_GROUND_COLOR,
@@ -72,8 +73,6 @@ const bootstrap = async (req, res) => {
     const hpMax = combatStats.hpMax;
     const staminaCurrent = combatStats.staminaCurrent;
     const staminaMax = combatStats.staminaMax;
-
-    console.log(`[BOOTSTRAP] ✅ Stats: HP=${hpCurrent}/${hpMax} Stamina=${staminaCurrent}/${staminaMax}`);
 
     // 2) Instância + Local template (geometry + visual + materiais/mesh)
     const instance = await GaInstance.findByPk(runtime.instance_id, {
@@ -181,7 +180,9 @@ const bootstrap = async (req, res) => {
     // INVENTORY
     // =====================================
     const invRt = await ensureInventoryLoaded(userId);
-    const inventory = buildInventoryFull(invRt);
+    const eqRt = await ensureEquipmentLoaded(userId);
+    const inventory = buildInventoryFull(invRt, eqRt);
+    const equipment = inventory.equipment;
     console.log(`[BOOTSTRAP] ✅ Inventory: ${inventory?.containers?.length ?? 0} containers`);
 
     // =====================================
@@ -338,6 +339,7 @@ const bootstrap = async (req, res) => {
       },
 
       inventory,
+      equipment,
     };
 
     console.log(`[BOOTSTRAP] ✅ COMPLETO para userId=${userId}`);

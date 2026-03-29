@@ -13,11 +13,6 @@ const { isFiniteNumber } = require("./validate");
 const { clearPlayerCombat } = require("./clearCombat");
 const { applyStaminaTick } = require("../../../state/movement/stamina");
 
-function logStamina(event, payload) {
-  if (process.env.STAMINA_LOG === "0") return;
-  console.log(`[STAMINA] ${event}`, payload);
-}
-
 /**
  * Aplica um intent WASD no runtime.
  * - NÃO emite nada.
@@ -140,22 +135,6 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
         movedReal: true,
       });
       staminaChanged = !!staminaResult.changed;
-
-      logStamina("wasd_move_confirmed", {
-        userId: runtime.userId,
-        dt: Number(dt.toFixed(4)),
-        staminaChanged,
-        hpCurrent: Number(runtime.hpCurrent ?? 0),
-        hpMax: Number(runtime.hpMax ?? 0),
-        staminaCurrent: Number(runtime.staminaCurrent ?? 0),
-        staminaMax: Number(runtime.staminaMax ?? 0),
-        hpRegen: Number(staminaResult.hpRegen ?? 0),
-        pos: {
-          x: Number(runtime.pos?.x ?? 0),
-          y: Number(runtime.pos?.y ?? 0),
-          z: Number(runtime.pos?.z ?? 0),
-        },
-      });
     }
   }
 

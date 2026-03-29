@@ -4,6 +4,7 @@ const { registerMoveHandler } = require("../handlers/moveHandler");
 const { registerWorldHandler } = require("../handlers/worldHandler");
 const { registerClickMoveHandler } = require("../handlers/clickMoveHandler");
 const { registerInventoryHandler } = require("../handlers/inventoryHandler");
+const { registerEquipmentHandler } = require("../handlers/equipmentHandler");
 
 // ✅ NOVO: aproximação/interação (space hold)
 const { registerInteractHandler } = require("../handlers/interactHandler");
@@ -23,6 +24,9 @@ function registerGameHandlers(io, socket) {
 
   // Inventário (privado, autoritativo)
   registerInventoryHandler(io, socket);
+
+  // Equipment corporal simples
+  registerEquipmentHandler(io, socket);
 }
 
 module.exports = {

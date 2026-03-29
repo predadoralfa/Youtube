@@ -29,11 +29,6 @@ const { tickEnemyAI, getLastTickAttacks } = require("../enemies/enemyAI");
 const { loadPlayerCombatStats } = require("../runtime/combatLoader");
 const { executeAttack, loadEnemyCombatStats } = require("../../service/combatSystem");
 
-function logStamina(event, payload) {
-  if (process.env.STAMINA_LOG === "0") return;
-  console.log(`[STAMINA] ${event}`, payload);
-}
-
 /**
  * ✨ NOVO: Executa ataque automático do servidor
  * Chamado quando player está em ENGAGED e dentro do range
@@ -326,19 +321,20 @@ async function tickOnce(io, nowMsValue) {
         // Respeita cooldown de 1seg entre coletas
         if (t >= lastCollect + collectCooldown) {
           rt.lastActorCollectAtMs = t;
+          const interactActorId = rt.interact?.id ?? null;
 
           console.log("[COLLECT] Coletando (hold-to-collect)", {
             userId: rt.userId,
-            actorId: rt.interact.id,
+            actorId: interactActorId,
             dist: movement.distance,
           });
 
           // Fire-and-forget: não bloqueia o tick loop
-          attemptCollectFromActor(rt.userId, rt.interact.id)
+          attemptCollectFromActor(rt.userId, interactActorId)
             .then((result) => {
               if (!result?.ok) {
                 console.warn(
-                  `[COLLECT] Erro ao coletar: userId=${rt.userId} actorId=${rt.interact.id} error=${result?.error}`
+                  `[COLLECT] Erro ao coletar: userId=${rt.userId} actorId=${interactActorId} error=${result?.error}`
                 );
                 return;
               }
@@ -347,7 +343,7 @@ async function tickOnce(io, nowMsValue) {
               const activeSocket = getActiveSocket(rt.userId);
               if (activeSocket) {
                 activeSocket.emit("actor:collected", {
-                  actorId: String(rt.interact.id),
+                  actorId: String(interactActorId),
                   actorDisabled: result.actorDisabled,
                   inventory: result.inventoryFull,
                 });
@@ -355,7 +351,7 @@ async function tickOnce(io, nowMsValue) {
             })
             .catch((err) => {
               console.error(
-                `[COLLECT] Erro ao coletar: userId=${rt.userId} actorId=${rt.interact.id}`,
+                `[COLLECT] Erro ao coletar: userId=${rt.userId} actorId=${interactActorId}`,
                 err
               );
             });
@@ -422,18 +418,6 @@ async function tickOnce(io, nowMsValue) {
     rt.action = "move";
 
     if (staminaResult.changed) {
-      logStamina("click_move_or_idle_tick", {
-        userId: rt.userId,
-        movedReal: moved,
-        dt: Number(staminaResult.dt?.toFixed?.(4) ?? staminaResult.dt ?? 0),
-        hpCurrent: Number(staminaResult.hpCurrent ?? 0),
-        hpMax: Number(staminaResult.hpMax ?? 0),
-        hpRegen: Number(staminaResult.hpRegen ?? 0),
-        regen: Number(staminaResult.regen?.toFixed?.(4) ?? staminaResult.regen ?? 0),
-        drain: Number(staminaResult.drain?.toFixed?.(4) ?? staminaResult.drain ?? 0),
-        staminaCurrent: Number(rt.staminaCurrent ?? 0),
-        staminaMax: Number(rt.staminaMax ?? 0),
-      });
     }
 
     bumpRev(rt);
@@ -502,19 +486,6 @@ async function tickOnce(io, nowMsValue) {
     });
 
     if (!staminaResult.changed) continue;
-
-    logStamina("regen_tick", {
-      userId: rt.userId,
-      movedReal: false,
-      dt: Number(staminaResult.dt?.toFixed?.(4) ?? staminaResult.dt ?? 0),
-      hpCurrent: Number(staminaResult.hpCurrent ?? 0),
-      hpMax: Number(staminaResult.hpMax ?? 0),
-      hpRegen: Number(staminaResult.hpRegen ?? 0),
-      regen: Number(staminaResult.regen?.toFixed?.(4) ?? staminaResult.regen ?? 0),
-      drain: Number(staminaResult.drain?.toFixed?.(4) ?? staminaResult.drain ?? 0),
-      staminaCurrent: Number(rt.staminaCurrent ?? 0),
-      staminaMax: Number(rt.staminaMax ?? 0),
-    });
 
     bumpRev(rt);
     markRuntimeDirty(rt.userId, t);

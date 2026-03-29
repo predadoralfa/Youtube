@@ -8,7 +8,6 @@ const HP_BASE_REGEN_PER_SEC = 0.5;
 const DEFAULT_TERRAIN_DRAIN_MULTIPLIER = 1.0;
 const DEFAULT_STAMINA_REGEN_MULTIPLIER = 1.0;
 const DEFAULT_HP_REGEN_MULTIPLIER = 1.0;
-const STAMINA_LOG_ENABLED = process.env.STAMINA_LOG !== "0";
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -17,11 +16,6 @@ function clamp(n, min, max) {
 function toFiniteNumber(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
-}
-
-function logStamina(event, payload) {
-  if (!STAMINA_LOG_ENABLED) return;
-  console.log(`[STAMINA] ${event}`, payload);
 }
 
 function readRuntimeStaminaCurrent(rt) {
@@ -161,24 +155,6 @@ function applyVitalsTick(
   const hpChanged = Math.abs(nextHpCurrent - hpCurrent) > 1e-9;
   const staminaChanged = Math.abs(nextCurrent - current) > 1e-9;
   const changed = hpChanged || staminaChanged;
-
-  logStamina("tick", {
-    userId: rt.userId ?? rt.user_id ?? null,
-    source: rt.moveMode === "CLICK" ? "click-move" : "wasd/idle",
-    movedReal,
-    dt: Number(dt.toFixed(4)),
-    hpCurrent: Number(hpCurrent.toFixed(4)),
-    hpRegen: Number(hpRegen.toFixed(4)),
-    nextHpCurrent: Number(nextHpCurrent.toFixed(4)),
-    hpMax: Number(hpMax.toFixed(4)),
-    current: Number(current.toFixed(4)),
-    regen: Number(regen.toFixed(4)),
-    drain: Number(drain.toFixed(4)),
-    nextCurrent: Number(nextCurrent.toFixed(4)),
-    max: Number(max.toFixed(4)),
-    hpChanged,
-    staminaChanged,
-  });
 
   if (hpChanged || hpMax !== readRuntimeHpMax(rt)) {
     syncRuntimeHp(rt, nextHpCurrent, hpMax);
