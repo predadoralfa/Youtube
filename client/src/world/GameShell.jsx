@@ -204,8 +204,14 @@ export function GameShell() {
   }, []);
 
   const closeInventory = useCallback(() => {
+    if (combatTargetRef.current != null) {
+      emitInteractStop();
+    }
+
+    selectedTargetRef.current = null;
+    combatTargetRef.current = null;
     setInventoryOpen(false);
-  }, []);
+  }, [emitInteractStop]);
 
   const onTargetSelect = useCallback((target) => {
     if (!target?.kind || target?.id == null) return;
@@ -245,6 +251,11 @@ export function GameShell() {
 
           return next;
         });
+        return;
+      }
+
+      if (intent.type === IntentType.UI_CANCEL) {
+        closeInventory();
         return;
       }
 

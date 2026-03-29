@@ -48,6 +48,7 @@ function VitalRow({
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <div
         style={{
+          position: "relative",
           width,
           height,
           backgroundColor,
@@ -66,23 +67,30 @@ function VitalRow({
             borderRadius: Math.max(3, Math.floor(height / 2) - 1),
           }}
         />
+
+        {showText ? (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize,
+              color: textColor,
+              fontWeight: "bold",
+              textShadow: "0 0 4px rgba(0,0,0,0.9)",
+              lineHeight: 1,
+              pointerEvents: "none",
+              userSelect: "none",
+            }}
+          >
+            {label ? `${label} ` : ""}
+            {Math.floor(safeCurrent)} / {Math.floor(safeMax)}
+          </div>
+        ) : null}
       </div>
 
-      {showText ? (
-        <div
-          style={{
-            fontSize,
-            color: textColor,
-            textAlign: "center",
-            fontWeight: "bold",
-            textShadow: "0 0 4px rgba(0,0,0,0.9)",
-            lineHeight: 1,
-          }}
-        >
-          {label ? `${label} ` : ""}
-          {Math.floor(safeCurrent)} / {Math.floor(safeMax)}
-        </div>
-      ) : null}
     </div>
   );
 }

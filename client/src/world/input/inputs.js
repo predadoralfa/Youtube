@@ -6,6 +6,7 @@ import {
   intentMoveDirection,
   intentClickPrimary,
   intentUiToggleInventory,
+  intentUiCancel,
   intentInteractPress,
   intentInteractRelease,
 } from "./intents";
@@ -139,6 +140,13 @@ export function bindInputs(domElement, bus) {
     // I = inventário
     if (k === "i") {
       bus.emit(intentUiToggleInventory());
+      e.preventDefault();
+      return;
+    }
+
+    // ESC = cancelar/fechar janelas
+    if (k === "escape") {
+      bus.emit(intentUiCancel());
       e.preventDefault();
       return;
     }

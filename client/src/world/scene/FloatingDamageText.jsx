@@ -11,7 +11,6 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 
 export function FloatingDamageText({ damages }) {
   const [now, setNow] = useState(() => Date.now());
@@ -50,7 +49,7 @@ export function FloatingDamageText({ damages }) {
           <div
             key={text.id}
             style={{
-              position: "fixed",
+              position: "absolute",
               left: `${screenX}px`,
               top: `${screenY - offsetY}px`,
               transform: "translate(-50%, -50%)",
@@ -82,9 +81,5 @@ export function FloatingDamageText({ damages }) {
     </>
   );
 
-  if (typeof document === "undefined") {
-    return content;
-  }
-
-  return createPortal(content, document.body);
+  return content;
 }

@@ -1153,6 +1153,17 @@ export function GameCanvas({
     >
       <div
         style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 1090,
+          pointerEvents: "none",
+        }}
+      >
+        <FloatingDamageText damages={floatingDamages} />
+      </div>
+
+      <div
+        style={{
           position: "absolute",
           inset: 0,
           zIndex: 10,
@@ -1160,8 +1171,6 @@ export function GameCanvas({
         }}
       >
         <TargetMarker visible={marker.visible} x={marker.x} y={marker.y} />
-
-        <FloatingDamageText damages={floatingDamages} />
 
         {selfHpBar ? (
           <div

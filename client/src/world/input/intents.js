@@ -10,6 +10,7 @@ export const IntentType = {
 
   // UI
   UI_TOGGLE_INVENTORY: "UI_TOGGLE_INVENTORY",
+  UI_CANCEL: "UI_CANCEL",
 
   // Gameplay: interação canônica
   INTERACT_PRESS: "INTERACT_PRESS",
@@ -63,6 +64,13 @@ export function intentClickPrimary(clientX, clientY) {
 export function intentUiToggleInventory() {
   return {
     type: IntentType.UI_TOGGLE_INVENTORY,
+    ts: performance.now(),
+  };
+}
+
+export function intentUiCancel() {
+  return {
+    type: IntentType.UI_CANCEL,
     ts: performance.now(),
   };
 }
