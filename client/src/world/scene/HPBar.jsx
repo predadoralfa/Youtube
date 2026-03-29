@@ -123,9 +123,9 @@ export function HPBar({
   showStamina = false,
 
   // cores
-  hpColorHigh = "#4ade80",
-  hpColorLow = "#ef4444",
-  staminaColor = "#38bdf8",
+  hpColorHigh = "#ef4444",
+  hpColorLow = "#b91c1c",
+  staminaColor = "#facc15",
   trackColor = "#1a1a1a",
   borderColor = "#444",
   textColor = "#ffffff",
