@@ -39,7 +39,7 @@
  *
  * =====================================================================
  */
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { GameCanvas } from "./scene/GameCanvas";
 import { bootstrapWorld } from "@/services/World";
 import { LoadingOverlay } from "@/components/overlays/LoadingOverlay";
@@ -48,7 +48,6 @@ import { createEntitiesStore } from "./state/entitiesStore";
 import { logInventory } from "@/inventory/inventoryProbe";
 import { IntentType } from "./input/intents";
 import { InventoryModal } from "@/components/models/inventory/InventoryModal";
-import { HPBar } from "./scene/HPBar";
 
 const DEBUG_IDS = false;
 
@@ -57,6 +56,12 @@ const toId = (raw) => (raw == null ? null : String(raw));
 function toNum(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function toDisplayInt(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.floor(n));
 }
 
 function debugIds(...args) {
@@ -106,27 +111,27 @@ function normalizeVitals(raw) {
 
   return {
     hp: {
-      current: toNum(hpCurrent, 0),
-      max: toNum(hpMax, 0),
+      current: toDisplayInt(hpCurrent, 0),
+      max: toDisplayInt(hpMax, 0),
     },
     stamina: {
-      current: toNum(staminaCurrent, 0),
-      max: toNum(staminaMax, 0),
+      current: toDisplayInt(staminaCurrent, 0),
+      max: toDisplayInt(staminaMax, 0),
     },
   };
 }
 
 function pickBestSelfVitals(snapshot, selfEntity) {
-  if (snapshot?.ui?.self?.vitals) {
-    return normalizeVitals(snapshot.ui.self);
+  if (snapshot?.runtime?.vitals) {
+    return normalizeVitals(snapshot.runtime);
   }
 
   if (selfEntity?.vitals) {
     return normalizeVitals(selfEntity);
   }
 
-  if (snapshot?.runtime?.vitals) {
-    return normalizeVitals(snapshot.runtime);
+  if (snapshot?.ui?.self?.vitals) {
+    return normalizeVitals(snapshot.ui.self);
   }
 
   return {
@@ -399,11 +404,7 @@ export function GameShell() {
           setSnapshot((prev) => {
             if (!prev || !prev.runtime) return prev;
 
-            const preservedVitals = prev?.ui?.self?.vitals
-              ? normalizeVitals(prev.ui.self)
-              : null;
-            const nextVitals = preservedVitals ?? normalizeVitals(self);
-
+            const nextVitals = normalizeVitals(self);
             return {
               ...prev,
               runtime: {
@@ -420,6 +421,7 @@ export function GameShell() {
                 ...(prev.ui ?? {}),
                 self: {
                   ...((prev.ui && prev.ui.self) ?? {}),
+                  ...nextVitals,
                   vitals: nextVitals,
                 },
               },
@@ -474,10 +476,7 @@ export function GameShell() {
           setSnapshot((prev) => {
             if (!prev || !prev.runtime) return prev;
 
-            const preservedVitals = prev?.ui?.self?.vitals
-              ? normalizeVitals(prev.ui.self)
-              : null;
-            const nextVitals = preservedVitals ?? normalizeVitals(self);
+            const nextVitals = normalizeVitals(self);
 
             return {
               ...prev,
@@ -495,6 +494,7 @@ export function GameShell() {
                 ...(prev.ui ?? {}),
                 self: {
                   ...((prev.ui && prev.ui.self) ?? {}),
+                  ...nextVitals,
                   vitals: nextVitals,
                 },
               },
@@ -520,6 +520,9 @@ export function GameShell() {
                   y: y ?? prev.runtime.pos?.y ?? 0,
                   z: z ?? prev.runtime.pos?.z ?? 0,
                 },
+                vitals: payload?.vitals
+                  ? normalizeVitals({ vitals: payload.vitals })
+                  : prev.runtime.vitals,
               },
             };
           });
@@ -683,15 +686,6 @@ export function GameShell() {
     };
   }, [requestInventoryFull]);
 
-  const selfVitals = useMemo(() => {
-    return pickBestSelfVitals(snapshot, (() => {
-      const store = worldStoreRef.current;
-      const selfId = store?.selfId ? String(store.selfId) : null;
-      if (!selfId) return null;
-      return store.entities.get(selfId) ?? null;
-    })());
-  }, [snapshot]);
-
   if (sessionReplaced) {
     return (
       <LoadingOverlay message="Sessão substituída: você entrou em outro lugar. Recarregue para continuar." />
@@ -710,34 +704,6 @@ export function GameShell() {
         onTargetSelect={onTargetSelect}
         onTargetClear={onTargetClear}
       />
-
-      <div
-        style={{
-          position: "fixed",
-          left: 16,
-          bottom: 16,
-          zIndex: 1100,
-          pointerEvents: "none",
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-        }}
-      >
-        <HPBar
-          visible={true}
-          mode="hud"
-          width={220}
-          hpHeight={18}
-          staminaHeight={12}
-          hpCurrent={selfVitals.hp.current}
-          hpMax={selfVitals.hp.max}
-          staminaCurrent={selfVitals.stamina.current}
-          staminaMax={selfVitals.stamina.max}
-          showHpText={true}
-          showStamina={true}
-          showStaminaText={true}
-        />
-      </div>
 
       <InventoryModal
         open={inventoryOpen}

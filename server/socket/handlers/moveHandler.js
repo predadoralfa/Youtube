@@ -70,7 +70,13 @@ function registerMoveHandler(socket) {
       }
 
       // Se nada mudou, não replica
-      if (!result.moved && !result.yawChanged && !result.modeOrActionChanged) return;
+      if (
+        !result.moved &&
+        !result.yawChanged &&
+        !result.modeOrActionChanged &&
+        !result.staminaChanged
+      )
+        return;
 
       broadcastWASDResult({ socket, userId, runtime, nowMs });
     } catch (e) {

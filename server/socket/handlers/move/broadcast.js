@@ -70,6 +70,7 @@ function broadcastWASDResult({ socket, userId, runtime, nowMs }) {
     yaw: runtime.yaw,
     rev: runtime.rev ?? 0,
     chunk: runtime.chunk ?? { cx, cz },
+    vitals: delta.vitals,
   });
 }
 

@@ -10,6 +10,7 @@ const { COMBAT_BASE_COOLDOWN_MS } = require("../../config/combatConstants");
 const { computeDtSeconds, readRuntimeSpeedStrict } = require("./math");
 const { moveEntityTowardTarget } = require("./entityMotion");
 const { bumpRev, toDelta } = require("./entity");
+const { applyStaminaTick } = require("./stamina");
 const { readHpCurrent, readHpMax } = require("../enemies/enemyEntity");
 const { emitDeltaToInterest } = require("./emit");
 const { handleChunkTransition } = require("./chunkTransition");
@@ -27,6 +28,11 @@ const { getEnemiesForInstance, getEnemy } = require("../enemies/enemiesRuntimeSt
 const { tickEnemyAI, getLastTickAttacks } = require("../enemies/enemyAI");
 const { loadPlayerCombatStats } = require("../runtime/combatLoader");
 const { executeAttack, loadEnemyCombatStats } = require("../../service/combatSystem");
+
+function logStamina(event, payload) {
+  if (process.env.STAMINA_LOG === "0") return;
+  console.log(`[STAMINA] ${event}`, payload);
+}
 
 /**
  * ✨ NOVO: Executa ataque automático do servidor
@@ -236,13 +242,14 @@ async function processAutomaticCombat(io, rt, instanceId, nowMs) {
  */
 async function tickOnce(io, nowMsValue) {
   const t = nowMsValue;
+  const allRuntimes = Array.from(getAllRuntimes());
 
   // ========================================
   // ETAPA 0: COMBATE AUTOMÁTICO DOS PLAYERS
   // Roda independente do movimento para manter
   // a checagem de range/ataque em loop.
   // ========================================
-  for (const rt of getAllRuntimes()) {
+  for (const rt of allRuntimes) {
     if (!rt) continue;
     if (rt.connectionState === "DISCONNECTED_PENDING" || rt.connectionState === "OFFLINE") {
       continue;
@@ -258,7 +265,7 @@ async function tickOnce(io, nowMsValue) {
   // (código original abaixo, SEM MUDANÇAS)
   // ========================================
 
-  for (const rt of getAllRuntimes()) {
+  for (const rt of allRuntimes) {
     if (!rt) continue;
 
     // ignora grace/offline: não "anda durante o pending"
@@ -387,6 +394,7 @@ async function tickOnce(io, nowMsValue) {
           pos: rt.pos,
           yaw: rt.yaw,
           rev: rt.rev ?? 0,
+          vitals: delta.vitals,
           chunk: rt.chunk ?? computeChunkFromPos(rt.pos),
         });
       }
@@ -403,12 +411,30 @@ async function tickOnce(io, nowMsValue) {
     const moved = movement.moved;
     const newYaw = movement.yaw;
     const yawChanged = newYaw != null && rt.yaw !== newYaw;
+    const staminaResult = applyStaminaTick(rt, t, {
+      movedReal: moved,
+    });
 
-    if (!moved && !yawChanged) continue;
+    if (!moved && !yawChanged && !staminaResult.changed) continue;
 
     rt.pos = movement.pos;
     if (newYaw != null) rt.yaw = newYaw;
     rt.action = "move";
+
+    if (staminaResult.changed) {
+      logStamina("click_move_or_idle_tick", {
+        userId: rt.userId,
+        movedReal: moved,
+        dt: Number(staminaResult.dt?.toFixed?.(4) ?? staminaResult.dt ?? 0),
+        hpCurrent: Number(staminaResult.hpCurrent ?? 0),
+        hpMax: Number(staminaResult.hpMax ?? 0),
+        hpRegen: Number(staminaResult.hpRegen ?? 0),
+        regen: Number(staminaResult.regen?.toFixed?.(4) ?? staminaResult.regen ?? 0),
+        drain: Number(staminaResult.drain?.toFixed?.(4) ?? staminaResult.drain ?? 0),
+        staminaCurrent: Number(rt.staminaCurrent ?? 0),
+        staminaMax: Number(rt.staminaMax ?? 0),
+      });
+    }
 
     bumpRev(rt);
     markRuntimeDirty(rt.userId, t);
@@ -448,8 +474,9 @@ async function tickOnce(io, nowMsValue) {
         pos: rt.pos,
         yaw: rt.yaw,
         rev: rt.rev ?? 0,
-      chunk: rt.chunk ?? { cx, cz },
-    });
+        vitals: delta.vitals,
+        chunk: rt.chunk ?? computeChunkFromPos(rt.pos),
+      });
     }
 
     if (rt.combat?.state === "ENGAGED" && rt.combat?.targetKind === "ENEMY") {
@@ -463,7 +490,51 @@ async function tickOnce(io, nowMsValue) {
   // Processa movimento aleatório de inimigos
   // de todas as instâncias ativas
 
-  const allRuntimes = getAllRuntimes();
+  for (const rt of allRuntimes) {
+    if (!rt) continue;
+
+    if (rt.connectionState === "DISCONNECTED_PENDING" || rt.connectionState === "OFFLINE") {
+      continue;
+    }
+
+    const staminaResult = applyStaminaTick(rt, t, {
+      movedReal: false,
+    });
+
+    if (!staminaResult.changed) continue;
+
+    logStamina("regen_tick", {
+      userId: rt.userId,
+      movedReal: false,
+      dt: Number(staminaResult.dt?.toFixed?.(4) ?? staminaResult.dt ?? 0),
+      hpCurrent: Number(staminaResult.hpCurrent ?? 0),
+      hpMax: Number(staminaResult.hpMax ?? 0),
+      hpRegen: Number(staminaResult.hpRegen ?? 0),
+      regen: Number(staminaResult.regen?.toFixed?.(4) ?? staminaResult.regen ?? 0),
+      drain: Number(staminaResult.drain?.toFixed?.(4) ?? staminaResult.drain ?? 0),
+      staminaCurrent: Number(rt.staminaCurrent ?? 0),
+      staminaMax: Number(rt.staminaMax ?? 0),
+    });
+
+    bumpRev(rt);
+    markRuntimeDirty(rt.userId, t);
+
+    const socket = getActiveSocket(rt.userId);
+    const delta = toDelta(rt);
+    emitDeltaToInterest(io, socket, rt.userId, delta);
+
+    if (socket) {
+      socket.emit("move:state", {
+        entityId: String(rt.userId),
+        pos: rt.pos,
+        yaw: rt.yaw,
+        rev: rt.rev ?? 0,
+        chunk: rt.chunk ?? computeChunkFromPos(rt.pos),
+        vitals: delta.vitals,
+      });
+    }
+  }
+
   const uniqueInstanceIds = new Set();
 
   // Coletar IDs únicos de instâncias

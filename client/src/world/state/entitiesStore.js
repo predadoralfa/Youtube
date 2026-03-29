@@ -20,6 +20,12 @@ function toNum(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function toDisplayInt(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.floor(n));
+}
+
 function normalizeVitals(raw) {
   const vitals = raw?.vitals ?? null;
   const stats = raw?.stats ?? null;
@@ -43,12 +49,12 @@ function normalizeVitals(raw) {
 
   return {
     hp: {
-      current: toNum(hpCurrent, 0),
-      max: toNum(hpMax, 0),
+      current: toDisplayInt(hpCurrent, 0),
+      max: toDisplayInt(hpMax, 0),
     },
     stamina: {
-      current: toNum(staminaCurrent, 0),
-      max: toNum(staminaMax, 0),
+      current: toDisplayInt(staminaCurrent, 0),
+      max: toDisplayInt(staminaMax, 0),
     },
   };
 }
@@ -151,12 +157,12 @@ function mergeVitals(baseVitals, rawDelta, nextHpCompat) {
 
   return {
     hp: {
-      current: toNum(hpCurrent, 0),
-      max: toNum(hpMax, 0),
+      current: toDisplayInt(hpCurrent, 0),
+      max: toDisplayInt(hpMax, 0),
     },
     stamina: {
-      current: toNum(staminaCurrent, 0),
-      max: toNum(staminaMax, 0),
+      current: toDisplayInt(staminaCurrent, 0),
+      max: toDisplayInt(staminaMax, 0),
     },
   };
 }

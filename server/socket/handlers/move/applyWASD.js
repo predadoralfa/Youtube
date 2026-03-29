@@ -11,6 +11,12 @@ const { moveEntityByDirection } = require("../../../state/movement/entityMotion"
 
 const { isFiniteNumber } = require("./validate");
 const { clearPlayerCombat } = require("./clearCombat");
+const { applyStaminaTick } = require("../../../state/movement/stamina");
+
+function logStamina(event, payload) {
+  if (process.env.STAMINA_LOG === "0") return;
+  console.log(`[STAMINA] ${event}`, payload);
+}
 
 /**
  * Aplica um intent WASD no runtime.
@@ -91,6 +97,7 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
   }
 
   let moved = false;
+  let staminaChanged = false;
 
   // Só tenta mover se houver direção não-nula
   if (!(d.x === 0 && d.z === 0)) {
@@ -129,6 +136,26 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
     if (movedResult.moved) {
       runtime.pos = movedResult.pos;
       moved = true;
+      const staminaResult = applyStaminaTick(runtime, nowMs, {
+        movedReal: true,
+      });
+      staminaChanged = !!staminaResult.changed;
+
+      logStamina("wasd_move_confirmed", {
+        userId: runtime.userId,
+        dt: Number(dt.toFixed(4)),
+        staminaChanged,
+        hpCurrent: Number(runtime.hpCurrent ?? 0),
+        hpMax: Number(runtime.hpMax ?? 0),
+        staminaCurrent: Number(runtime.staminaCurrent ?? 0),
+        staminaMax: Number(runtime.staminaMax ?? 0),
+        hpRegen: Number(staminaResult.hpRegen ?? 0),
+        pos: {
+          x: Number(runtime.pos?.x ?? 0),
+          y: Number(runtime.pos?.y ?? 0),
+          z: Number(runtime.pos?.z ?? 0),
+        },
+      });
     }
   }
 
@@ -139,6 +166,7 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
     moved,
     modeOrActionChanged,
     combatCancelled,
+    staminaChanged,
     dir: d,
   };
 }

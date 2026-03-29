@@ -37,6 +37,12 @@ function toNum(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function toDisplayInt(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.floor(n));
+}
+
 function getEnemyColor(displayName) {
   if (!displayName) return ENEMY_COLORS.DEFAULT;
 
@@ -100,10 +106,10 @@ function readEntityVitals(entity) {
     0;
 
   return {
-    hpCurrent: toNum(hpCurrent, 0),
-    hpMax: toNum(hpMax, 0),
-    staminaCurrent: toNum(staminaCurrent, 0),
-    staminaMax: toNum(staminaMax, 0),
+    hpCurrent: toDisplayInt(hpCurrent, 0),
+    hpMax: toDisplayInt(hpMax, 0),
+    staminaCurrent: toDisplayInt(staminaCurrent, 0),
+    staminaMax: toDisplayInt(staminaMax, 0),
   };
 }
 
@@ -237,6 +243,7 @@ export function GameCanvas({
   const [marker, setMarker] = useState({ visible: false, x: 0, y: 0 });
   const [floatingDamages, setFloatingDamages] = useState([]);
   const [targetHpBar, setTargetHpBar] = useState(null);
+  const [selfHpBar, setSelfHpBar] = useState(null);
 
   const entityVitalsRef = useRef(new Map());
   const entityPositionsRef = useRef(new Map());
@@ -386,6 +393,33 @@ export function GameCanvas({
       socket.off("combat:attack_result", onAttackResult);
     };
   }, []);
+
+  useEffect(() => {
+    const store = worldStoreRef?.current ?? null;
+    if (!store?.subscribe) return undefined;
+
+    return store.subscribe(() => {
+      const selfId = store?.selfId ? String(store.selfId) : null;
+      if (!selfId) {
+        setSelfHpBar(null);
+        return;
+      }
+
+      const self = store.entities.get(selfId) ?? null;
+      if (!self) {
+        setSelfHpBar(null);
+        return;
+      }
+
+      const vitals = readEntityVitals(self);
+      setSelfHpBar({
+        hpCurrent: vitals.hpCurrent,
+        hpMax: vitals.hpMax,
+        staminaCurrent: vitals.staminaCurrent,
+        staminaMax: vitals.staminaMax,
+      });
+    });
+  }, [worldStoreRef]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -820,6 +854,32 @@ export function GameCanvas({
           lastSelfIdRef.current = selfKey;
         }
 
+        if (selfKey) {
+          const selfEntity = entities.find((e) => String(e?.entityId ?? "") === selfKey) ?? null;
+          if (selfEntity) {
+            const vitals = readEntityVitals(selfEntity);
+            const nextSelfHpBar = {
+              hpCurrent: vitals.hpCurrent,
+              hpMax: vitals.hpMax,
+              staminaCurrent: vitals.staminaCurrent,
+              staminaMax: vitals.staminaMax,
+            };
+
+            setSelfHpBar((prev) => {
+              if (
+                prev &&
+                prev.hpCurrent === nextSelfHpBar.hpCurrent &&
+                prev.hpMax === nextSelfHpBar.hpMax &&
+                prev.staminaCurrent === nextSelfHpBar.staminaCurrent &&
+                prev.staminaMax === nextSelfHpBar.staminaMax
+              ) {
+                return prev;
+              }
+              return nextSelfHpBar;
+            });
+          }
+        }
+
         const nextIds = new Set();
 
         for (const e of entities) {
@@ -1076,6 +1136,7 @@ export function GameCanvas({
 
       setMarker({ visible: false, x: 0, y: 0 });
       setTargetHpBar(null);
+      setSelfHpBar(null);
     };
   }, [onInputIntent, onTargetSelect, onTargetClear, worldStoreRef]);
 
@@ -1101,6 +1162,36 @@ export function GameCanvas({
         <TargetMarker visible={marker.visible} x={marker.x} y={marker.y} />
 
         <FloatingDamageText damages={floatingDamages} />
+
+        {selfHpBar ? (
+          <div
+            style={{
+              position: "fixed",
+              left: 16,
+              top: 16,
+              zIndex: 1100,
+              pointerEvents: "none",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            <HPBar
+              visible={true}
+              mode="hud"
+              width={220}
+              hpHeight={18}
+              staminaHeight={12}
+              hpCurrent={selfHpBar.hpCurrent}
+              hpMax={selfHpBar.hpMax}
+              staminaCurrent={selfHpBar.staminaCurrent}
+              staminaMax={selfHpBar.staminaMax}
+              showHpText={true}
+              showStamina={true}
+              showStaminaText={true}
+            />
+          </div>
+        ) : null}
 
         {targetHpBar ? (
           <HPBar

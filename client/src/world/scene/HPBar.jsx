@@ -80,7 +80,7 @@ function VitalRow({
           }}
         >
           {label ? `${label} ` : ""}
-          {Math.ceil(safeCurrent)} / {safeMax}
+          {Math.floor(safeCurrent)} / {Math.floor(safeMax)}
         </div>
       ) : null}
     </div>

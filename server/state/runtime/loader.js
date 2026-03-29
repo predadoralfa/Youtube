@@ -181,6 +181,7 @@ async function ensureRuntimeLoaded(userId) {
     // stats cacheados no runtime
     speed: speedFromStats,
     _speedFallback: false,
+    staminaTickAtMs: Date.now(),
 
     // conexão / presença (persistíveis)
     connectionState: row.connection_state || CONNECTION.OFFLINE,
