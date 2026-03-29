@@ -350,12 +350,29 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     );
 
     if (actorDisabled) {
+      const lootContainer = lootOwner.container;
       await db.GaActor.update(
         { status: "DISABLED" },
         { where: { id: actorId }, transaction: tx }
       );
 
+      await db.GaActor.destroy({
+        where: { id: actorId },
+        transaction: tx,
+      });
+
+      if (lootContainer?.id != null) {
+        await db.GaContainer.destroy({
+          where: { id: lootContainer.id },
+          transaction: tx,
+        });
+      }
+
       console.log("[COLLECT] Actor desabilitado (vazio)");
+      console.log("[COLLECT] Actor removido do DB", {
+        actorId,
+        lootContainerId,
+      });
     }
 
     // ================================================================

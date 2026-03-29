@@ -410,6 +410,7 @@ export function GameShell() {
     let onEnemyAttack = null;
     let onWorldObjectSpawn = null;
     let onEquipmentFull = null;
+    let onActorCollected = null;
 
     const token = localStorage.getItem("token");
 
@@ -501,6 +502,23 @@ export function GameShell() {
             return {
               ...prev,
               actors: [...actors, normalizedActor],
+            };
+          });
+        };
+
+        onActorCollected = (payload) => {
+          const actorId = toId(payload?.actorId ?? null);
+          const actorDisabled = Boolean(payload?.actorDisabled);
+          if (!actorId || !actorDisabled) return;
+
+          setSnapshot((prev) => {
+            if (!prev) return prev;
+            const actors = Array.isArray(prev.actors) ? prev.actors : [];
+            if (!actors.some((a) => String(a.id) === String(actorId))) return prev;
+
+            return {
+              ...prev,
+              actors: actors.filter((a) => String(a.id) !== String(actorId)),
             };
           });
         };
@@ -775,6 +793,7 @@ export function GameShell() {
         socket.on("inv:full", onInvFull);
         socket.on("equipment:full", onEquipmentFull);
         socket.on("world:object_spawn", onWorldObjectSpawn);
+        socket.on("actor:collected", onActorCollected);
         socket.on("combat:enemy_attack", onEnemyAttack);
       } catch (err) {
         if (!mounted) return;
@@ -807,6 +826,7 @@ export function GameShell() {
         if (onInvFull) s.off("inv:full", onInvFull);
         if (onEquipmentFull) s.off("equipment:full", onEquipmentFull);
         if (onWorldObjectSpawn) s.off("world:object_spawn", onWorldObjectSpawn);
+        if (onActorCollected) s.off("actor:collected", onActorCollected);
         if (onEnemyAttack) s.off("combat:enemy_attack", onEnemyAttack);
       }
 

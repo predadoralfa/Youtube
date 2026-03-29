@@ -330,9 +330,25 @@ async function tickOnce(io, nowMsValue) {
           });
 
           // Fire-and-forget: não bloqueia o tick loop
-          attemptCollectFromActor(rt.userId, interactActorId)
+            attemptCollectFromActor(rt.userId, interactActorId)
             .then((result) => {
               if (!result?.ok) {
+                if (result?.error === "ACTOR_NOT_FOUND") {
+                  rt.interact = null;
+                  rt.moveTarget = null;
+                  rt.moveMode = "STOP";
+                  rt.action = "idle";
+
+                  const activeSocket = getActiveSocket(rt.userId);
+                  if (activeSocket) {
+                    activeSocket.emit("actor:collected", {
+                      actorId: String(interactActorId),
+                      actorDisabled: true,
+                      inventory: null,
+                    });
+                  }
+                }
+
                 console.warn(
                   `[COLLECT] Erro ao coletar: userId=${rt.userId} actorId=${interactActorId} error=${result?.error}`
                 );
@@ -340,6 +356,13 @@ async function tickOnce(io, nowMsValue) {
               }
 
               // ✅ Coleta bem-sucedida: emitir eventos para client
+              if (result.actorDisabled) {
+                rt.interact = null;
+                rt.moveTarget = null;
+                rt.moveMode = "STOP";
+                rt.action = "idle";
+              }
+
               const activeSocket = getActiveSocket(rt.userId);
               if (activeSocket) {
                 activeSocket.emit("actor:collected", {
