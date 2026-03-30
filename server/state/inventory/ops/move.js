@@ -7,6 +7,10 @@ function getContainerByRole(invRt, role) {
 }
 
 function move(invRt, intent) {
+  if (invRt?.heldState) {
+    throw invError(INV_ERR.HELD_STATE_ACTIVE, "cannot move while holding an item");
+  }
+
   const fromRole = intent?.from?.role;
   const fromSlot = Number(intent?.from?.slot);
   const toRole = intent?.to?.role;

@@ -195,6 +195,7 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     });
 
     let dstSlot = null;
+    let createdInstance = null;
 
     // ================================================================
     // 6) PROCURAR SLOT DE DESTINO
@@ -272,6 +273,7 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
         { transaction: tx }
       );
 
+      createdInstance = newInstance;
       dstSlot.item_instance_id = newInstance.id;
       dstSlot.qty = qtyToMove;
 
@@ -376,9 +378,47 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     }
 
     // ================================================================
-    // 11) RECONSTRUIR INVENTÁRIO COMPLETO DO PLAYER
+    // 11) SINCRONIZAR RUNTIME EM MEMÓRIA COM O QUE FOI PERSISTIDO
     // ================================================================
     const invRt = await ensureInventoryLoaded(userId);
+    if (invRt?.heldState) {
+      return { ok: false, error: "HELD_STATE_ACTIVE" };
+    }
+
+    const runtimeContainerById = invRt.containersById || new Map();
+    const syncRuntimeSlot = (containerId, slotIndex, itemInstanceId, qty) => {
+      const container = runtimeContainerById.get(String(containerId));
+      if (!container || !Array.isArray(container.slots)) return;
+      const slot = container.slots.find((s) => Number(s.slotIndex) === Number(slotIndex));
+      if (!slot) return;
+      slot.itemInstanceId = itemInstanceId == null ? null : String(itemInstanceId);
+      slot.qty = Number(qty || 0);
+    };
+
+    syncRuntimeSlot(srcSlot.container_id, srcSlot.slot_index, srcSlot.item_instance_id, srcSlot.qty);
+    syncRuntimeSlot(dstSlot.container_id, dstSlot.slot_index, dstSlot.item_instance_id, dstSlot.qty);
+
+    if (createdInstance) {
+      invRt.itemInstanceById.set(String(createdInstance.id), {
+        id: String(createdInstance.id),
+        userId: String(userId),
+        itemDefId: String(createdInstance.item_def_id),
+        props: createdInstance.props_json ?? null,
+        durability: createdInstance.durability ?? null,
+      });
+    } else if (dstSlot.item_instance_id != null && dstSlot.item_instance_id !== srcSlot.item_instance_id) {
+      const existingInstance = playerInstancesById.get(Number(dstSlot.item_instance_id));
+      if (existingInstance) {
+        invRt.itemInstanceById.set(String(existingInstance.id), {
+          id: String(existingInstance.id),
+          userId: String(userId),
+          itemDefId: String(existingInstance.item_def_id),
+          props: existingInstance.props_json ?? null,
+          durability: existingInstance.durability ?? null,
+        });
+      }
+    }
+
     const inventoryFull = buildInventoryFull(invRt);
 
     console.log("[COLLECT] ✅ Coleta bem-sucedida!", {

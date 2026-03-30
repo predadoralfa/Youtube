@@ -42,6 +42,7 @@ function buildEquipmentFull(eqRt, invRt = null) {
     const equipped = equippedBySlotCode[slotDef.code] ?? null;
     const legacyContainer = invRt?.containersByRole?.get?.(slotDef.code) ?? null;
     const legacySlot = legacyContainer?.slots?.find((slot) => slot?.itemInstanceId != null) ?? null;
+    const legacyDefaultSlot = legacyContainer?.slots?.[0] ?? null;
     const legacyItemInstanceId = legacySlot?.itemInstanceId ?? null;
     const qty = legacySlot ? Number(legacySlot.qty ?? 0) : equipped ? 1 : 0;
     const summary = buildItemSummary({ ...equipped, slotCode: slotDef.code }, invRt);
@@ -53,6 +54,14 @@ function buildEquipmentFull(eqRt, invRt = null) {
       itemInstanceId: equipped?.itemInstanceId ?? legacyItemInstanceId ?? null,
       qty,
       item: summary,
+      sourceContainerId: legacyContainer?.id != null ? String(legacyContainer.id) : null,
+      sourceSlotIndex:
+        legacySlot?.slotIndex != null
+          ? Number(legacySlot.slotIndex)
+          : legacyDefaultSlot?.slotIndex != null
+            ? Number(legacyDefaultSlot.slotIndex)
+            : null,
+      sourceRole: slotDef.code ?? null,
     };
   });
 

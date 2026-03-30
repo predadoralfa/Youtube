@@ -181,7 +181,19 @@ export function GameShell() {
     if (!s) return false;
     if (!joinedRef.current) return false;
 
+    console.log("[EQUIP][CLIENT] emit", {
+      eventName,
+      payload,
+      joined: joinedRef.current,
+      socketId: s?.id ?? null,
+    });
+
     s.emit(eventName, payload, (ack) => {
+      console.log("[EQUIP][CLIENT] ack", {
+        eventName,
+        ack,
+      });
+
       if (ack?.ok === true && ack?.equipment?.ok === true) {
         setEquipmentSnapshot(ack.equipment);
         setEquipmentMessage(null);
@@ -204,9 +216,20 @@ export function GameShell() {
     if (!s) return false;
     if (!joinedRef.current) return false;
 
+    console.log("[INV][CLIENT] drop emit", {
+      itemInstanceId,
+      joined: joinedRef.current,
+      socketId: s?.id ?? null,
+    });
+
     setInventoryMessage(null);
 
     s.emit("inv:drop", { itemInstanceId: String(itemInstanceId) }, (ack) => {
+      console.log("[INV][CLIENT] drop ack", {
+        itemInstanceId,
+        ack,
+      });
+
       if (ack?.ok === true && ack?.inventory?.ok === true) {
         setInventorySnapshot(ack.inventory);
         if (ack.inventory?.equipment?.ok === true) {
@@ -224,6 +247,107 @@ export function GameShell() {
     return true;
   }, []);
 
+  const emitInventoryAction = useCallback((eventName, payload) => {
+    const s = socketRef.current;
+    if (!s) return false;
+    if (!joinedRef.current) return false;
+
+    console.log("[INV][CLIENT] emit", {
+      eventName,
+      payload,
+      joined: joinedRef.current,
+      socketId: s?.id ?? null,
+    });
+
+    setInventoryMessage(null);
+
+    s.emit(eventName, payload, (ack) => {
+      console.log("[INV][CLIENT] ack", {
+        eventName,
+        ack,
+      });
+
+      if (ack?.ok === true && ack?.inventory?.ok === true) {
+        setInventorySnapshot(ack.inventory);
+        if (ack.inventory?.equipment?.ok === true) {
+          setEquipmentSnapshot(ack.inventory.equipment);
+        }
+        setInventoryMessage(null);
+        return;
+      }
+
+      if (ack?.ok === false) {
+        setInventoryMessage(ack?.message || ack?.code || "Falha ao atualizar inventário");
+      }
+    });
+
+    return true;
+  }, []);
+
+  const onPickupInventoryItem = useCallback(
+    ({ containerId, slotIndex }) => {
+      console.log("[INV][CLIENT] onPickupInventoryItem", { containerId, slotIndex });
+      return emitInventoryAction("inv:pickup", {
+        containerId: String(containerId),
+        slotIndex: Number(slotIndex),
+      });
+    },
+    [emitInventoryAction]
+  );
+
+  const onPlaceHeldItem = useCallback(
+    ({ containerId, slotIndex }) => {
+      console.log("[INV][CLIENT] onPlaceHeldItem", { containerId, slotIndex });
+      return emitInventoryAction("inv:place", {
+        containerId: String(containerId),
+        slotIndex: Number(slotIndex),
+      });
+    },
+    [emitInventoryAction]
+  );
+
+  const onSplitInventoryItem = useCallback(
+    ({ containerId, slotIndex, qty }) => {
+      console.log("[INV][CLIENT] onSplitInventoryItem", { containerId, slotIndex, qty });
+      return emitInventoryAction("inv:split", {
+        containerId: String(containerId),
+        slotIndex: Number(slotIndex),
+        qty: Number(qty),
+      });
+    },
+    [emitInventoryAction]
+  );
+
+  const onMoveInventoryItem = useCallback(
+    ({ fromRole, fromSlotIndex, toRole, toSlotIndex, qty }) => {
+      console.log("[INV][CLIENT] onMoveInventoryItem", {
+        fromRole,
+        fromSlotIndex,
+        toRole,
+        toSlotIndex,
+        qty,
+      });
+      return emitInventoryAction("inv:move", {
+        from: {
+          role: String(fromRole),
+          slot: Number(fromSlotIndex),
+          slotIndex: Number(fromSlotIndex),
+        },
+        to: {
+          role: String(toRole),
+          slot: Number(toSlotIndex),
+          slotIndex: Number(toSlotIndex),
+        },
+        qty: qty == null ? 1 : Number(qty),
+      });
+    },
+    [emitInventoryAction]
+  );
+
+  const onCancelHeldState = useCallback(() => {
+    return emitInventoryAction("inv:cancel", {});
+  }, [emitInventoryAction]);
+
   const onEquipItemToSlot = useCallback(
     ({ itemInstanceId, slotCode }) => {
       return emitEquipmentAction("equipment:equip", {
@@ -238,6 +362,16 @@ export function GameShell() {
     ({ slotCode }) => {
       return emitEquipmentAction("equipment:unequip", {
         slotCode: String(slotCode),
+      });
+    },
+    [emitEquipmentAction]
+  );
+
+  const onSwapEquipmentSlots = useCallback(
+    ({ fromSlotCode, toSlotCode }) => {
+      return emitEquipmentAction("equipment:swap", {
+        fromSlotCode: String(fromSlotCode),
+        toSlotCode: String(toSlotCode),
       });
     },
     [emitEquipmentAction]
@@ -325,6 +459,10 @@ export function GameShell() {
       }
 
       if (intent.type === IntentType.UI_CANCEL) {
+        if (inventoryOpen) {
+          return;
+        }
+
         closeInventory();
         return;
       }
@@ -391,7 +529,7 @@ export function GameShell() {
         return;
       }
     },
-    [requestInventoryFull, emitInteractStart, emitInteractStop]
+    [requestInventoryFull, emitInteractStart, emitInteractStop, inventoryOpen, closeInventory]
   );
 
   useEffect(() => {
@@ -509,7 +647,16 @@ export function GameShell() {
         onActorCollected = (payload) => {
           const actorId = toId(payload?.actorId ?? null);
           const actorDisabled = Boolean(payload?.actorDisabled);
+          const inventoryFull = payload?.inventory ?? payload?.inventoryFull ?? null;
           if (!actorId || !actorDisabled) return;
+
+          if (inventoryFull?.ok === true) {
+            setInventorySnapshot(inventoryFull);
+            if (inventoryFull?.equipment?.ok === true) {
+              setEquipmentSnapshot(inventoryFull.equipment);
+            }
+            setInventoryMessage(null);
+          }
 
           setSnapshot((prev) => {
             if (!prev) return prev;
@@ -866,8 +1013,14 @@ export function GameShell() {
           inventoryMessage={inventoryMessage}
           equipmentMessage={equipmentMessage}
           onClose={closeInventory}
+          onCancelHeldState={onCancelHeldState}
+          onPickupInventoryItem={onPickupInventoryItem}
+          onPlaceHeldItem={onPlaceHeldItem}
+          onSplitInventoryItem={onSplitInventoryItem}
+          onMoveInventoryItem={onMoveInventoryItem}
           onEquipItemToSlot={onEquipItemToSlot}
           onUnequipItemFromSlot={onUnequipItemFromSlot}
+          onSwapEquipmentSlots={onSwapEquipmentSlots}
           onDropItemToWorld={emitInventoryDrop}
         />
     </>

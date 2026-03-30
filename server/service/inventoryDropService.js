@@ -116,6 +116,11 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
     return { ok: false, code: "INVENTORY_NOT_LOADED", message: "Inventory runtime not loaded" };
   }
 
+  if (invRt.heldState) {
+    console.warn("[DROP] held state active", { userId, itemInstanceId });
+    return { ok: false, code: "HELD_STATE_ACTIVE", message: "Finish or cancel the held item first" };
+  }
+
   const itemInstance = invRt.itemInstanceById.get(String(itemInstanceId));
   const eqRt = opts.eqRt ?? null;
 

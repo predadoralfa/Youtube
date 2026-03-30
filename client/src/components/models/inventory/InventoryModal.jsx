@@ -76,6 +76,12 @@ function buildEquipmentIndex(snapshot) {
   return slotMap;
 }
 
+function clampSplitQty(raw, maxQty) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(Math.max(1, Math.floor(n)), Math.max(1, maxQty));
+}
+
 export function InventoryModal({
   open,
   snapshot,
@@ -83,14 +89,26 @@ export function InventoryModal({
   inventoryMessage,
   equipmentMessage,
   onClose,
+  onCancelHeldState,
+  onPickupInventoryItem,
+  onPlaceHeldItem,
+  onSplitInventoryItem,
+  onMoveInventoryItem,
   onEquipItemToSlot,
   onUnequipItemFromSlot,
+  onSwapEquipmentSlots,
   onDropItemToWorld,
 }) {
   const ok = snapshot?.ok === true;
+  const heldState = snapshot?.heldState ?? null;
+  const heldStateActive = Boolean(heldState);
   const [dragItem, setDragItem] = useState(null);
+  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+  const [contextMenu, setContextMenu] = useState(null);
+  const [splitDraft, setSplitDraft] = useState(null);
   const [localNotice, setLocalNotice] = useState(null);
   const dropHandledRef = useRef(false);
+  const splitInputRef = useRef(null);
 
   const inventoryIndex = useMemo(() => buildInventoryIndex(snapshot), [snapshot]);
   const equipmentIndex = useMemo(() => buildEquipmentIndex(equipmentSnapshot), [equipmentSnapshot]);
@@ -105,6 +123,9 @@ export function InventoryModal({
         itemInstanceId: slot?.itemInstanceId ?? null,
         qty: Number(slot?.qty ?? 0),
         item: slot?.item ?? null,
+        sourceContainerId: slot?.sourceContainerId ?? null,
+        sourceSlotIndex: slot?.sourceSlotIndex ?? null,
+        sourceRole: slot?.sourceRole ?? slotCode,
       };
     });
 
@@ -152,30 +173,104 @@ export function InventoryModal({
 
     const handler = (e) => {
       const k = e.key;
-      if (k === "Escape" || k === "i" || k === "I") {
-        e.preventDefault?.();
-        e.stopPropagation?.();
-        e.stopImmediatePropagation?.();
-        onClose?.();
+      if (k !== "Escape" && k !== "i" && k !== "I") return;
+
+      e.preventDefault?.();
+      e.stopPropagation?.();
+      e.stopImmediatePropagation?.();
+
+      if (splitDraft) {
+        setSplitDraft(null);
+        return;
       }
+
+      if (contextMenu) {
+        setContextMenu(null);
+        return;
+      }
+
+      if (heldStateActive) {
+        onCancelHeldState?.();
+        return;
+      }
+
+      onClose?.();
     };
 
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true });
-  }, [open, onClose]);
+  }, [open, splitDraft, contextMenu, heldStateActive, onCancelHeldState, onClose]);
 
   useEffect(() => {
     if (!open) return;
     setDragItem(null);
+    setContextMenu(null);
+    setSplitDraft(null);
     setLocalNotice(null);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    const handleMove = (event) => {
+      setCursorPos({
+        x: Number(event.clientX ?? 0),
+        y: Number(event.clientY ?? 0),
+      });
+    };
+
+    window.addEventListener("mousemove", handleMove, { passive: true });
+    window.addEventListener("pointermove", handleMove, { passive: true });
+
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("pointermove", handleMove);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const blockContextMenu = (event) => {
+      event.preventDefault?.();
+      event.stopPropagation?.();
+    };
+
+    window.addEventListener("contextmenu", blockContextMenu, { capture: true });
+    return () => window.removeEventListener("contextmenu", blockContextMenu, { capture: true });
+  }, [open]);
+
+  useEffect(() => {
+    if (!splitDraft) return;
+    const timer = window.setTimeout(() => splitInputRef.current?.focus?.(), 0);
+    return () => window.clearTimeout(timer);
+  }, [splitDraft]);
+
   if (!open) return null;
+
+  const requestCloseInventory = () => {
+    if (splitDraft) {
+      setSplitDraft(null);
+      return;
+    }
+
+    if (contextMenu) {
+      setContextMenu(null);
+      return;
+    }
+
+    if (heldStateActive) {
+      onCancelHeldState?.();
+      return;
+    }
+
+    onClose?.();
+  };
 
   const closeFromBackdrop = (e) => {
     e.preventDefault?.();
     e.stopPropagation?.();
-    onClose?.();
+    requestCloseInventory();
   };
 
   const isSlotCompatible = (itemInstanceId, slotCode) => {
@@ -191,6 +286,14 @@ export function InventoryModal({
   };
 
   const handleDragStart = (itemInstanceId, slotCode) => (event) => {
+    if (heldStateActive) return;
+
+    console.log("[INV][UI] drag start", {
+      itemInstanceId,
+      slotCode,
+      heldStateActive,
+    });
+
     const inst = inventoryIndex.instanceMap.get(String(itemInstanceId));
     const defId = getDefIdFromInstance(inst);
     const def = defId != null ? inventoryIndex.defMap.get(String(defId)) : null;
@@ -199,6 +302,15 @@ export function InventoryModal({
     const payload = {
       itemInstanceId: String(itemInstanceId),
       fromSlotCode: String(slotCode),
+      sourceKind:
+        equipmentIndex.get(String(slotCode))?.sourceContainerId != null
+          ? "legacy-inventory"
+          : equipmentIndex.has(String(slotCode))
+            ? "equipment"
+            : "inventory",
+      sourceContainerId: equipmentIndex.get(String(slotCode))?.sourceContainerId ?? null,
+      sourceSlotIndex: equipmentIndex.get(String(slotCode))?.sourceSlotIndex ?? null,
+      sourceRole: equipmentIndex.get(String(slotCode))?.sourceRole ?? String(slotCode),
       allowedSlots,
     };
 
@@ -220,6 +332,10 @@ export function InventoryModal({
     event.preventDefault?.();
     event.stopPropagation?.();
     dropHandledRef.current = true;
+    console.log("[INV][UI] drop hint", {
+      slotCode,
+      dragItem,
+    });
     const raw = event.dataTransfer?.getData("application/json");
     if (!raw) return;
 
@@ -232,27 +348,65 @@ export function InventoryModal({
 
     if (!payload?.itemInstanceId) return;
 
+    console.log("[INV][UI] drop payload parsed", {
+      slotCode,
+      payload,
+    });
+
+    const sourceKind = payload.sourceKind || "inventory";
     const allowed = Array.isArray(payload.allowedSlots) ? payload.allowedSlots : [];
-    if (!allowed.includes(String(slotCode))) {
+    if (sourceKind === "inventory" && !allowed.includes(String(slotCode))) {
       setLocalNotice(`Item not allowed in ${slotCode}`);
       clearDrag();
       return;
     }
 
     const slot = equipmentIndex.get(String(slotCode)) ?? null;
-    if (slot?.itemInstanceId) {
-      setLocalNotice(`Slot ${slotCode} is occupied`);
-      clearDrag();
-      return;
-    }
+    const fromContainerId = payload.sourceContainerId ?? null;
+    const fromSlotIndex = payload.sourceSlotIndex ?? null;
+    const fromRole = payload.sourceRole ?? payload.fromSlotCode ?? null;
+    const toContainerId = slot?.sourceContainerId ?? null;
+    const toSlotIndex = slot?.sourceSlotIndex ?? null;
+    const toRole = slot?.sourceRole ?? slotCode;
+    const canLegacyMove =
+      sourceKind === "legacy-inventory" &&
+      fromRole != null &&
+      fromSlotIndex != null &&
+      toRole != null &&
+      toSlotIndex != null;
 
-    const ok = onEquipItemToSlot?.({
-      itemInstanceId: payload.itemInstanceId,
+    const ok = canLegacyMove
+      ? onMoveInventoryItem?.({
+          fromRole,
+          fromSlotIndex,
+          toRole,
+          toSlotIndex,
+          qty: 1,
+        })
+      : sourceKind === "equipment"
+        ? onSwapEquipmentSlots?.({
+            fromSlotCode: payload.fromSlotCode || payload.slotCode || null,
+            toSlotCode: slotCode,
+          })
+        : slot?.itemInstanceId
+          ? onSwapEquipmentSlots?.({
+              fromSlotCode: payload.fromSlotCode || payload.slotCode || null,
+              toSlotCode: slotCode,
+            })
+          : onEquipItemToSlot?.({
+              itemInstanceId: payload.itemInstanceId,
+              slotCode,
+            });
+
+    console.log("[INV][UI] equip drop action", {
       slotCode,
+      sourceKind,
+      occupied: Boolean(slot?.itemInstanceId),
+      ok,
     });
 
     if (!ok) {
-      setLocalNotice("Equipment action is not available right now");
+      setLocalNotice(slot?.itemInstanceId ? "Equipment swap is not available right now" : "Equipment action is not available right now");
     } else {
       setLocalNotice(null);
     }
@@ -264,6 +418,10 @@ export function InventoryModal({
     const pending = dragItem;
     dropHandledRef.current = true;
     clearDrag();
+
+    console.log("[INV][UI] drop to world", {
+      pending,
+    });
 
     if (!pending?.itemInstanceId) return;
 
@@ -279,6 +437,11 @@ export function InventoryModal({
     const pending = dragItem;
     clearDrag();
 
+    console.log("[INV][UI] drag end", {
+      pending,
+      dropHandled: dropHandledRef.current,
+    });
+
     if (!dropHandledRef.current && pending?.itemInstanceId) {
       const ok = onDropItemToWorld?.(pending.itemInstanceId);
       if (!ok) {
@@ -291,7 +454,12 @@ export function InventoryModal({
     dropHandledRef.current = false;
   };
 
-  const handleUnequip = (slotCode) => () => {
+  const handleUnequip = (slotCode) => (event) => {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+
+    console.log("[INV][UI] unequip click", { slotCode });
+
     const ok = onUnequipItemFromSlot?.({ slotCode });
     if (!ok) {
       setLocalNotice("Equipment action is not available right now");
@@ -301,13 +469,163 @@ export function InventoryModal({
     setLocalNotice(null);
   };
 
+  const handleEquipmentSlotMouseUp = (slot, occupied) => (event) => {
+    if (event.button != null && event.button !== 0) return;
+    event.preventDefault?.();
+    event.stopPropagation?.();
+
+    console.log("[INV][UI] equipment slot mouseup", {
+      slotCode: slot.slotCode,
+      occupied,
+      sourceContainerId: slot.sourceContainerId,
+      sourceSlotIndex: slot.sourceSlotIndex,
+      heldStateActive,
+      dragItem,
+    });
+
+    setCursorPos({
+      x: Number(event.clientX ?? 0),
+      y: Number(event.clientY ?? 0),
+    });
+
+    if (dragItem) {
+      return;
+    }
+
+    if (slot.sourceContainerId == null || slot.sourceSlotIndex == null) {
+      return;
+    }
+
+    if (heldStateActive) {
+      const ok = onPlaceHeldItem?.({
+        containerId: slot.sourceContainerId,
+        slotIndex: slot.sourceSlotIndex,
+      });
+      console.log("[INV][UI] equipment slot place", {
+        slotCode: slot.slotCode,
+        ok,
+      });
+      if (!ok) {
+        setLocalNotice("Place is not available right now");
+      } else {
+        setLocalNotice(null);
+      }
+      return;
+    }
+
+    if (!occupied) return;
+
+    const ok = onPickupInventoryItem?.({
+      containerId: slot.sourceContainerId,
+      slotIndex: slot.sourceSlotIndex,
+    });
+    console.log("[INV][UI] equipment slot pickup", {
+      slotCode: slot.slotCode,
+      ok,
+    });
+    if (!ok) {
+      setLocalNotice("Pickup is not available right now");
+    } else {
+      setLocalNotice(null);
+    }
+  };
+
+  const openContextMenu = (slotCtx, event) => {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+
+    console.log("[INV][UI] open context menu", {
+      slotCtx,
+      x: event.clientX,
+      y: event.clientY,
+      heldStateActive,
+    });
+
+    if (heldStateActive || !slotCtx?.itemInstanceId) return;
+
+    const maxX = window.innerWidth - 180;
+    const maxY = window.innerHeight - 140;
+
+    setContextMenu({
+      x: Math.max(12, Math.min(event.clientX, maxX)),
+      y: Math.max(12, Math.min(event.clientY, maxY)),
+      slot: slotCtx,
+    });
+    setSplitDraft(null);
+  };
+
+  const openSplitModal = () => {
+    if (!contextMenu?.slot) return;
+
+    const slot = contextMenu.slot;
+    const qty = Number(slot.qty ?? 0);
+    const defaultQty = qty > 2 ? Math.max(1, Math.floor(qty / 2)) : 1;
+
+    console.log("[INV][UI] open split modal", {
+      slot,
+      defaultQty,
+    });
+
+    setSplitDraft({
+      slot,
+      qtyText: String(defaultQty),
+      error: null,
+    });
+    setContextMenu(null);
+  };
+
+  const submitSplit = () => {
+    if (!splitDraft?.slot) return;
+
+    const slot = splitDraft.slot;
+    const qtyCurrent = Number(slot.qty ?? 0);
+    const rawQty = Number(splitDraft.qtyText);
+    const qty = Number.isFinite(rawQty) ? Math.floor(rawQty) : NaN;
+
+    console.log("[INV][UI] submit split", {
+      slot,
+      qtyCurrent,
+      qtyText: splitDraft.qtyText,
+      qty,
+    });
+
+    if (!Number.isInteger(qty) || qty < 1 || qty >= qtyCurrent) {
+      setSplitDraft((prev) => ({
+        ...prev,
+        error: `Split qty must be between 1 and ${Math.max(1, qtyCurrent - 1)}`,
+      }));
+      return;
+    }
+
+    const ok = onSplitInventoryItem?.({
+      containerId: slot.containerId,
+      slotIndex: slot.slotIndex,
+      qty,
+    });
+
+    if (!ok) {
+      setLocalNotice("Split is not available right now");
+      return;
+    }
+
+    setSplitDraft(null);
+    setLocalNotice(null);
+  };
+
+  const containers = snapshot.containers || [];
+  const equipmentNoticeText = inventoryMessage || equipmentMessage || localNotice;
+  const heldPreviewItem = heldState?.item ?? null;
+  const heldPreviewLabel =
+    heldPreviewItem?.name || heldPreviewItem?.code || heldState?.itemInstanceId || "Item";
+  const heldPreviewQty = Number(heldState?.qty ?? 0);
+
   if (!snapshot || !ok) {
     return (
-      <div className="inv-backdrop" onMouseDown={closeFromBackdrop}>
-        <div className="inv-modal" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="inv-backdrop" data-ui-block-game-input="true" onMouseDown={closeFromBackdrop}>
+        <div className="inv-modal" data-ui-block-game-input="true" onMouseDown={(e) => e.stopPropagation()}>
           <div className="inv-header">
             <h2>INVENTORY</h2>
-            <button onClick={() => onClose?.()}>X</button>
+            <button onClick={requestCloseInventory}>X</button>
           </div>
 
           <div className="inv-empty">
@@ -354,13 +672,15 @@ export function InventoryModal({
     );
   }
 
-  const containers = snapshot.containers || [];
-  const equipmentNoticeText = inventoryMessage || equipmentMessage || localNotice;
-
   return (
     <div
       className="inv-backdrop"
+      data-ui-block-game-input="true"
       onMouseDown={closeFromBackdrop}
+      onContextMenu={(e) => {
+        e.preventDefault?.();
+        e.stopPropagation?.();
+      }}
       onDragOver={(e) => {
         if (dragItem) e.preventDefault?.();
       }}
@@ -373,7 +693,12 @@ export function InventoryModal({
     >
       <div
         className="inv-modal inv-modal--equipment"
+        data-ui-block-game-input="true"
         onMouseDown={(e) => e.stopPropagation()}
+        onContextMenu={(e) => {
+          e.preventDefault?.();
+          e.stopPropagation?.();
+        }}
         onDragOver={(e) => {
           if (dragItem) e.preventDefault?.();
         }}
@@ -386,11 +711,15 @@ export function InventoryModal({
       >
         <div className="inv-header">
           <h2>INVENTORY</h2>
-          <button onClick={() => onClose?.()}>X</button>
+          <button onClick={requestCloseInventory}>X</button>
         </div>
 
         <div
           className="inv-body"
+          onContextMenu={(e) => {
+            e.preventDefault?.();
+            e.stopPropagation?.();
+          }}
           onDragOver={(e) => {
             if (dragItem) e.preventDefault?.();
           }}
@@ -402,6 +731,25 @@ export function InventoryModal({
           }}
         >
           {equipmentNoticeText ? <div className="inv-notice">{equipmentNoticeText}</div> : null}
+
+          {heldStateActive ? (
+            <div
+              className="inv-held-preview"
+              style={{
+                left: `${cursorPos.x + 18}px`,
+                top: `${cursorPos.y + 18}px`,
+              }}
+            >
+              <div className="inv-held-preview-kicker">Carrying</div>
+              <div className="inv-held-preview-card">
+                <div className="inv-held-preview-name">{heldPreviewLabel}</div>
+                <div className="inv-held-preview-meta">
+                  <span>{heldState.mode}</span>
+                  <span>x{heldPreviewQty}</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="inv-layout">
             <section className="inv-panel inv-panel--inventory">
@@ -418,43 +766,133 @@ export function InventoryModal({
                     <div className="inv-grid">
                       {slots.map((slot, sIndex) => {
                         const slotIndex = slot?.slotIndex ?? slot?.slot ?? sIndex;
+                        const containerId = container?.id ?? container?.containerId ?? cIndex;
                         const instanceId = slot?.itemInstanceId ?? slot?.item_instance_id ?? null;
                         const qty = Number(slot?.qty ?? 0);
 
                         let itemName = null;
                         let allowedSlots = [];
+                        let itemDef = null;
 
                         if (instanceId != null) {
                           const inst = inventoryIndex.instanceMap.get(String(instanceId));
                           if (inst) {
                             const defId = getDefIdFromInstance(inst);
-                            const def = defId != null ? inventoryIndex.defMap.get(String(defId)) : null;
-                            itemName = getItemLabel(inst, def);
-                            allowedSlots = getAllowedSlotsForDef(def);
+                            itemDef = defId != null ? inventoryIndex.defMap.get(String(defId)) : null;
+                            itemName = getItemLabel(inst, itemDef);
+                            allowedSlots = getAllowedSlotsForDef(itemDef);
                           } else {
                             itemName = `INSTANCE_${instanceId}`;
                           }
                         }
 
-                        const canDrag = Boolean(instanceId);
+                        const isHeldSource =
+                          heldStateActive &&
+                          String(heldState.sourceContainerId) === String(containerId) &&
+                          Number(heldState.sourceSlotIndex) === Number(slotIndex);
 
                         return (
                           <div
                             className={[
                               "inv-slot",
-                              canDrag ? "is-occupied" : "is-empty",
+                              instanceId ? "is-occupied" : "is-empty",
+                              isHeldSource ? "is-held-source" : "",
                             ]
                               .filter(Boolean)
                               .join(" ")}
                             key={`${cIndex}-${sIndex}`}
-                            draggable={canDrag}
-                            onDragStart={canDrag ? handleDragStart(instanceId, slotIndex) : undefined}
-                            onDragEnd={handleDragEnd}
+                            draggable={false}
+                            onDragStart={(event) => {
+                              event.preventDefault?.();
+                            }}
+                            onMouseUp={(event) => {
+                              if (event.button != null && event.button !== 0) return;
+                              event.preventDefault?.();
+                              event.stopPropagation?.();
+
+                              console.log("[INV][UI] slot mouseup", {
+                                containerId,
+                                slotIndex,
+                                heldStateActive,
+                                instanceId,
+                              });
+
+                              setCursorPos({
+                                x: Number(event.clientX ?? 0),
+                                y: Number(event.clientY ?? 0),
+                              });
+
+                              setContextMenu(null);
+                              setSplitDraft(null);
+
+                              if (heldStateActive) {
+                                console.log("[INV][UI] slot place intent", {
+                                  containerId,
+                                  slotIndex,
+                                });
+                                const ok = onPlaceHeldItem?.({
+                                  containerId,
+                                  slotIndex,
+                                });
+
+                                console.log("[INV][UI] slot place result", {
+                                  containerId,
+                                  slotIndex,
+                                  ok,
+                                });
+                                if (!ok) {
+                                  setLocalNotice("Place is not available right now");
+                                } else {
+                                  setLocalNotice(null);
+                                }
+                                return;
+                              }
+
+                              if (!instanceId) return;
+
+                              console.log("[INV][UI] slot pickup intent", {
+                                containerId,
+                                slotIndex,
+                                instanceId,
+                              });
+                              const ok = onPickupInventoryItem?.({
+                                containerId,
+                                slotIndex,
+                              });
+
+                              console.log("[INV][UI] slot pickup result", {
+                                containerId,
+                                slotIndex,
+                                ok,
+                              });
+                              if (!ok) {
+                                setLocalNotice("Pickup is not available right now");
+                              } else {
+                                setLocalNotice(null);
+                              }
+                            }}
+                            onContextMenu={(event) => {
+                              if (!instanceId) {
+                                event.preventDefault?.();
+                                return;
+                              }
+                              openContextMenu(
+                                {
+                                  containerId,
+                                  slotIndex,
+                                  itemInstanceId: instanceId,
+                                  qty,
+                                  itemName,
+                                  itemDef,
+                                },
+                                event
+                              );
+                            }}
                           >
                             <div className="inv-slot-index">{String(slotIndex).padStart(2, "0")}</div>
 
                             {itemName ? (
-                              <div className="inv-item-card">
+                              <div className="inv-item-card" draggable={false}>
                                 <div className="inv-item-name">{itemName}</div>
                                 {allowedSlots.length ? (
                                   <div className="inv-item-tags">
@@ -490,9 +928,10 @@ export function InventoryModal({
                     const compatible = dragItem
                       ? isSlotCompatible(dragItem.itemInstanceId, slot.slotCode)
                       : false;
+                    const canDrag = occupied && !heldStateActive;
 
                     return (
-                      <div
+      <div
                         className={[
                           "equip-slot",
                           occupied ? "is-occupied" : "is-empty",
@@ -501,13 +940,14 @@ export function InventoryModal({
                           .filter(Boolean)
                           .join(" ")}
                         key={slot.slotCode}
-                        draggable={occupied}
-                        onDragStart={occupied ? handleDragStart(slot.itemInstanceId, slot.slotCode) : undefined}
+                        draggable={canDrag}
+                        onDragStart={canDrag ? handleDragStart(slot.itemInstanceId, slot.slotCode) : undefined}
                         onDragEnd={handleDragEnd}
                         onDragOver={(e) => {
-                          if (dragItem && !occupied) e.preventDefault();
+                          if (dragItem) e.preventDefault();
                         }}
                         onDrop={handleInventoryDropHint(slot.slotCode)}
+                        onMouseUp={handleEquipmentSlotMouseUp(slot, occupied)}
                       >
                         <div className="equip-slot-head">
                           <span className="equip-slot-code">{slot.slotCode}</span>
@@ -547,6 +987,7 @@ export function InventoryModal({
                       const compatible = dragItem
                         ? isSlotCompatible(dragItem.itemInstanceId, slot.slotCode)
                         : false;
+                      const canDrag = occupied && !heldStateActive;
 
                       return (
                         <div
@@ -558,13 +999,14 @@ export function InventoryModal({
                             .filter(Boolean)
                             .join(" ")}
                           key={slot.slotCode}
-                          draggable={occupied}
-                          onDragStart={occupied ? handleDragStart(slot.itemInstanceId, slot.slotCode) : undefined}
+                          draggable={canDrag}
+                          onDragStart={canDrag ? handleDragStart(slot.itemInstanceId, slot.slotCode) : undefined}
                           onDragEnd={handleDragEnd}
                           onDragOver={(e) => {
-                            if (dragItem && !occupied) e.preventDefault();
+                            if (dragItem) e.preventDefault();
                           }}
                           onDrop={handleInventoryDropHint(slot.slotCode)}
+                          onMouseUp={handleEquipmentSlotMouseUp(slot, occupied)}
                         >
                           <div className="equip-slot-head">
                             <span className="equip-slot-code">{slot.slotCode}</span>
@@ -592,6 +1034,103 @@ export function InventoryModal({
           </div>
         </div>
       </div>
+
+      {contextMenu ? (
+        <div
+          className="inv-context-menu"
+          style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => {
+            e.preventDefault?.();
+            e.stopPropagation?.();
+          }}
+        >
+          <button
+            type="button"
+            className="inv-context-menu-item"
+            onClick={() => {
+              const slot = contextMenu.slot;
+              setContextMenu(null);
+              setSplitDraft(null);
+              const ok = onDropItemToWorld?.(slot.itemInstanceId);
+              if (!ok) {
+                setLocalNotice("Drop is not available right now");
+              } else {
+                setLocalNotice(null);
+              }
+            }}
+          >
+            Drop
+          </button>
+
+          {contextMenu.slot?.itemDef?.stackMax > 1 && Number(contextMenu.slot?.qty ?? 0) > 1 ? (
+            <button
+              type="button"
+              className="inv-context-menu-item"
+              onClick={openSplitModal}
+            >
+              Split
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {splitDraft ? (
+        <div
+          className="inv-split-modal"
+          onMouseDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => {
+            e.preventDefault?.();
+            e.stopPropagation?.();
+          }}
+        >
+          <div className="inv-split-card">
+            <div className="inv-split-title">Split stack</div>
+            <div className="inv-split-name">
+              {splitDraft.slot?.itemName || splitDraft.slot?.itemInstanceId || "Item"}
+            </div>
+            <div className="inv-split-qty">Current qty: {Number(splitDraft.slot?.qty ?? 0)}</div>
+
+            <label className="inv-split-label">
+              Quantity
+              <input
+                ref={splitInputRef}
+                className="inv-split-input"
+                type="number"
+                min="1"
+                max={Math.max(1, Number(splitDraft.slot?.qty ?? 0) - 1)}
+                value={splitDraft.qtyText}
+                onChange={(e) =>
+                  setSplitDraft((prev) =>
+                    prev ? { ...prev, qtyText: e.target.value, error: null } : prev
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitSplit();
+                  }
+                }}
+              />
+            </label>
+
+            {splitDraft.error ? <div className="inv-split-error">{splitDraft.error}</div> : null}
+
+            <div className="inv-split-actions">
+              <button type="button" className="inv-split-btn" onClick={submitSplit}>
+                OK
+              </button>
+              <button
+                type="button"
+                className="inv-split-btn inv-split-btn--ghost"
+                onClick={() => setSplitDraft(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

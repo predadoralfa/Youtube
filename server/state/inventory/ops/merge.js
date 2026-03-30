@@ -3,6 +3,10 @@ const { assertContainerActive, assertSlotIndex } = require("../validate/rules");
 const { INV_ERR, invError } = require("../validate/errors");
 
 function merge(invRt, intent) {
+  if (invRt?.heldState) {
+    throw invError(INV_ERR.HELD_STATE_ACTIVE, "cannot merge while holding an item");
+  }
+
   const fromRole = intent?.from?.role;
   const fromSlot = Number(intent?.from?.slot);
   const toRole = intent?.to?.role;

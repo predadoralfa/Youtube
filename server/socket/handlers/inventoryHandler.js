@@ -1,7 +1,7 @@
-// server/socket/handlers/inventoryHandler.js
+"use strict";
+
 const db = require("../../models");
-const { withInventoryLock, clearInventory } = require("../../state/inventory/store");
-const { clearEquipment } = require("../../state/equipment/store");
+const { withInventoryLock } = require("../../state/inventory/store");
 const { getRuntime } = require("../../state/runtimeStore");
 const { addActor } = require("../../state/actorsRuntimeStore");
 const { ensureInventoryLoaded } = require("../../state/inventory/loader");
@@ -9,13 +9,47 @@ const { buildInventoryFull } = require("../../state/inventory/fullPayload");
 const { ensureEquipmentLoaded } = require("../../state/equipment/loader");
 const { flush } = require("../../state/inventory/persist/flush");
 const { dropInventoryItemToGround } = require("../../service/inventoryDropService");
+const {
+  pickup: pickupInventoryItem,
+  place: placeInventoryItem,
+  split: splitInventoryItem,
+  cancel: cancelInventoryHeldState,
+} = require("../../state/inventory/authoritative");
 
 const { move } = require("../../state/inventory/ops/move");
-const { split } = require("../../state/inventory/ops/split");
 const { merge } = require("../../state/inventory/ops/merge");
 
 function safeAck(ack, payload) {
   if (typeof ack === "function") ack(payload);
+}
+
+function summarizeHeldState(heldState) {
+  if (!heldState) return null;
+  return {
+    mode: heldState.mode ?? null,
+    sourceContainerId: heldState.sourceContainerId ?? null,
+    sourceSlotIndex: heldState.sourceSlotIndex ?? null,
+    itemInstanceId: heldState.itemInstanceId ?? null,
+    itemDefId: heldState.itemDefId ?? null,
+    qty: heldState.qty ?? null,
+  };
+}
+
+function summarizeIntent(intent) {
+  if (!intent || typeof intent !== "object") return null;
+  return {
+    containerId: intent.containerId ?? intent?.from?.containerId ?? intent?.to?.containerId ?? null,
+    slotIndex: intent.slotIndex ?? intent?.from?.slotIndex ?? intent?.to?.slotIndex ?? null,
+    qty: intent.qty ?? null,
+    itemInstanceId: intent.itemInstanceId ?? null,
+    fromSlotCode: intent.fromSlotCode ?? null,
+    toSlotCode: intent.toSlotCode ?? null,
+  };
+}
+
+function logInv(level, message, data) {
+  const logger = level === "warn" ? console.warn : level === "error" ? console.error : console.log;
+  logger(`[INV] ${message}`, data || {});
 }
 
 function registerInventoryHandler(io, socket) {
@@ -25,31 +59,54 @@ function registerInventoryHandler(io, socket) {
     return userId;
   }
 
+  function resolveUserOrAck(ack) {
+    try {
+      return requireUser();
+    } catch (e) {
+      safeAck(ack, {
+        ok: false,
+        code: "NOT_AUTHENTICATED",
+        message: e.message,
+      });
+      return null;
+    }
+  }
+
+  function emitFullAndAck(invRt, eqRt, ack) {
+    const full = buildInventoryFull(invRt, eqRt);
+    socket.emit("inv:full", full);
+    safeAck(ack, { ok: true, inventory: full });
+  }
+
   socket.on("inv:request_full", (intent = {}, ack) => {
-    withInventoryLock(requireUser(), async () => {
+    const userId = resolveUserOrAck(ack);
+    if (!userId) return;
+
+    logInv("log", "event=inv:request_full received", {
+      userId,
+      socketId: socket.id,
+      intent: summarizeIntent(intent),
+    });
+
+    withInventoryLock(userId, async () => {
       try {
-        const userId = requireUser();
-
-        // ✅ força recarregar do DB (evita runtime velho após migrações/refactors)
-        clearInventory(userId);
-        clearEquipment(userId);
-
         const invRt = await ensureInventoryLoaded(userId);
         const eqRt = await ensureEquipmentLoaded(userId);
-        const full = buildInventoryFull(invRt, eqRt);
 
-        socket.emit("inv:full", full);
-        safeAck(ack, { ok: true });
+        emitFullAndAck(invRt, eqRt, ack);
 
-        console.log(
-          "[INV] intent=inv:request_full user=",
+        logInv("log", "event=inv:request_full ok", {
           userId,
-          "containers=",
-          full?.containers?.length,
-          "items=",
-          full?.itemInstances?.length
-        );
+          containers: invRt?.containers?.length ?? 0,
+          items: invRt?.itemInstanceById?.size ?? 0,
+          heldState: summarizeHeldState(invRt?.heldState),
+        });
       } catch (e) {
+        logInv("error", "event=inv:request_full failed", {
+          userId,
+          code: e.code || "INV_ERR",
+          message: e.message,
+        });
         safeAck(ack, {
           ok: false,
           code: e.code || "INV_ERR",
@@ -61,10 +118,18 @@ function registerInventoryHandler(io, socket) {
   });
 
   socket.on("inv:move", (intent, ack) => {
-    withInventoryLock(requireUser(), async () => {
+    const userId = resolveUserOrAck(ack);
+    if (!userId) return;
+
+    logInv("log", "event=inv:move received", {
+      userId,
+      socketId: socket.id,
+      intent: summarizeIntent(intent),
+    });
+
+    withInventoryLock(userId, async () => {
       const tx = await db.sequelize.transaction();
       try {
-        const userId = requireUser();
         const invRt = await ensureInventoryLoaded(userId);
         const eqRt = await ensureEquipmentLoaded(userId);
 
@@ -73,44 +138,79 @@ function registerInventoryHandler(io, socket) {
 
         await tx.commit();
 
-        const full = buildInventoryFull(invRt, eqRt);
-        socket.emit("inv:full", full);
-        safeAck(ack, { ok: true });
+        emitFullAndAck(invRt, eqRt, ack);
+        logInv("log", "event=inv:move ok", {
+          userId,
+          intent: summarizeIntent(intent),
+          touchedContainers: result?.touchedContainers ?? [],
+          touchedSlots: result?.touchedSlots?.length ?? 0,
+        });
       } catch (e) {
         await tx.rollback().catch(() => {});
+        logInv("warn", "event=inv:move failed", {
+          userId,
+          intent: summarizeIntent(intent),
+          code: e.code || "INV_ERR",
+          message: e.message,
+        });
         safeAck(ack, { ok: false, code: e.code || "INV_ERR", message: e.message, meta: e.meta });
       }
     });
   });
 
   socket.on("inv:split", (intent, ack) => {
-    withInventoryLock(requireUser(), async () => {
+    const userId = resolveUserOrAck(ack);
+    if (!userId) return;
+
+    logInv("log", "event=inv:split received", {
+      userId,
+      socketId: socket.id,
+      intent: summarizeIntent(intent),
+    });
+
+    withInventoryLock(userId, async () => {
       const tx = await db.sequelize.transaction();
       try {
-        const userId = requireUser();
         const invRt = await ensureInventoryLoaded(userId);
         const eqRt = await ensureEquipmentLoaded(userId);
 
-        const result = split(invRt, intent);
-        await flush(invRt, result, tx);
+        const result = await splitInventoryItem(invRt, intent, tx);
 
         await tx.commit();
 
-        const full = buildInventoryFull(invRt, eqRt);
-        socket.emit("inv:full", full);
-        safeAck(ack, { ok: true });
+        emitFullAndAck(invRt, eqRt, ack);
+        logInv("log", "event=inv:split ok", {
+          userId,
+          intent: summarizeIntent(intent),
+          heldState: summarizeHeldState(result?.heldState),
+          newItemInstanceId: result?.newItemInstanceId ?? null,
+        });
       } catch (e) {
         await tx.rollback().catch(() => {});
+        logInv("warn", "event=inv:split failed", {
+          userId,
+          intent: summarizeIntent(intent),
+          code: e.code || "INV_ERR",
+          message: e.message,
+        });
         safeAck(ack, { ok: false, code: e.code || "INV_ERR", message: e.message, meta: e.meta });
       }
     });
   });
 
   socket.on("inv:merge", (intent, ack) => {
-    withInventoryLock(requireUser(), async () => {
+    const userId = resolveUserOrAck(ack);
+    if (!userId) return;
+
+    logInv("log", "event=inv:merge received", {
+      userId,
+      socketId: socket.id,
+      intent: summarizeIntent(intent),
+    });
+
+    withInventoryLock(userId, async () => {
       const tx = await db.sequelize.transaction();
       try {
-        const userId = requireUser();
         const invRt = await ensureInventoryLoaded(userId);
         const eqRt = await ensureEquipmentLoaded(userId);
 
@@ -119,21 +219,157 @@ function registerInventoryHandler(io, socket) {
 
         await tx.commit();
 
-        const full = buildInventoryFull(invRt, eqRt);
-        socket.emit("inv:full", full);
-        safeAck(ack, { ok: true });
+        emitFullAndAck(invRt, eqRt, ack);
+        logInv("log", "event=inv:merge ok", {
+          userId,
+          intent: summarizeIntent(intent),
+          touchedContainers: result?.touchedContainers ?? [],
+          touchedSlots: result?.touchedSlots?.length ?? 0,
+        });
       } catch (e) {
         await tx.rollback().catch(() => {});
+        logInv("warn", "event=inv:merge failed", {
+          userId,
+          intent: summarizeIntent(intent),
+          code: e.code || "INV_ERR",
+          message: e.message,
+        });
+        safeAck(ack, { ok: false, code: e.code || "INV_ERR", message: e.message, meta: e.meta });
+      }
+    });
+  });
+
+  socket.on("inv:pickup", (intent, ack) => {
+    const userId = resolveUserOrAck(ack);
+    if (!userId) return;
+
+    logInv("log", "event=inv:pickup received", {
+      userId,
+      socketId: socket.id,
+      intent: summarizeIntent(intent),
+    });
+
+    withInventoryLock(userId, async () => {
+      const tx = await db.sequelize.transaction();
+      try {
+        const invRt = await ensureInventoryLoaded(userId);
+        const eqRt = await ensureEquipmentLoaded(userId);
+
+        const result = await pickupInventoryItem(invRt, intent, tx);
+
+        await tx.commit();
+
+        emitFullAndAck(invRt, eqRt, ack);
+        logInv("log", "event=inv:pickup ok", {
+          userId,
+          intent: summarizeIntent(intent),
+          heldState: summarizeHeldState(result?.heldState),
+          touchedContainers: result?.touchedContainers ?? [],
+        });
+      } catch (e) {
+        await tx.rollback().catch(() => {});
+        logInv("warn", "event=inv:pickup failed", {
+          userId,
+          intent: summarizeIntent(intent),
+          code: e.code || "INV_ERR",
+          message: e.message,
+        });
+        safeAck(ack, { ok: false, code: e.code || "INV_ERR", message: e.message, meta: e.meta });
+      }
+    });
+  });
+
+  socket.on("inv:place", (intent, ack) => {
+    const userId = resolveUserOrAck(ack);
+    if (!userId) return;
+
+    logInv("log", "event=inv:place received", {
+      userId,
+      socketId: socket.id,
+      intent: summarizeIntent(intent),
+    });
+
+    withInventoryLock(userId, async () => {
+      const tx = await db.sequelize.transaction();
+      try {
+        const invRt = await ensureInventoryLoaded(userId);
+        const eqRt = await ensureEquipmentLoaded(userId);
+
+        const result = await placeInventoryItem(invRt, intent, tx);
+
+        await tx.commit();
+
+        emitFullAndAck(invRt, eqRt, ack);
+        logInv("log", "event=inv:place ok", {
+          userId,
+          intent: summarizeIntent(intent),
+          heldState: summarizeHeldState(result?.heldState),
+          touchedContainers: result?.touchedContainers ?? [],
+        });
+      } catch (e) {
+        await tx.rollback().catch(() => {});
+        logInv("warn", "event=inv:place failed", {
+          userId,
+          intent: summarizeIntent(intent),
+          code: e.code || "INV_ERR",
+          message: e.message,
+        });
+        safeAck(ack, { ok: false, code: e.code || "INV_ERR", message: e.message, meta: e.meta });
+      }
+    });
+  });
+
+  socket.on("inv:cancel", (intent, ack) => {
+    const userId = resolveUserOrAck(ack);
+    if (!userId) return;
+
+    logInv("log", "event=inv:cancel received", {
+      userId,
+      socketId: socket.id,
+      intent: summarizeIntent(intent),
+    });
+
+    withInventoryLock(userId, async () => {
+      const tx = await db.sequelize.transaction();
+      try {
+        const invRt = await ensureInventoryLoaded(userId);
+        const eqRt = await ensureEquipmentLoaded(userId);
+
+        const result = await cancelInventoryHeldState(invRt, tx);
+
+        await tx.commit();
+
+        emitFullAndAck(invRt, eqRt, ack);
+        logInv("log", "event=inv:cancel ok", {
+          userId,
+          heldState: summarizeHeldState(invRt?.heldState),
+          touchedContainers: result?.touchedContainers ?? [],
+        });
+      } catch (e) {
+        await tx.rollback().catch(() => {});
+        logInv("warn", "event=inv:cancel failed", {
+          userId,
+          code: e.code || "INV_ERR",
+          message: e.message,
+        });
         safeAck(ack, { ok: false, code: e.code || "INV_ERR", message: e.message, meta: e.meta });
       }
     });
   });
 
   socket.on("inv:drop", (intent, ack) => {
-    withInventoryLock(requireUser(), async () => {
+    const userId = resolveUserOrAck(ack);
+    if (!userId) return;
+
+    logInv("log", "event=inv:drop received", {
+      userId,
+      socketId: socket.id,
+      intent: summarizeIntent(intent),
+    });
+
+    withInventoryLock(userId, async () => {
       const tx = await db.sequelize.transaction();
       try {
-        const userId = requireUser();
         const invRt = await ensureInventoryLoaded(userId);
         const eqRt = await ensureEquipmentLoaded(userId);
         const runtime = getRuntime(userId);
@@ -155,9 +391,9 @@ function registerInventoryHandler(io, socket) {
         });
 
         if (!result?.ok) {
-          console.warn("[DROP] inv:drop rejected", {
+          logInv("warn", "event=inv:drop rejected", {
             userId,
-            itemInstanceId: intent?.itemInstanceId ?? null,
+            intent: summarizeIntent(intent),
             code: result?.code || "INV_ERR",
             message: result?.message || "Drop failed",
           });
@@ -166,9 +402,9 @@ function registerInventoryHandler(io, socket) {
           return;
         }
 
-        console.log("[DROP] inv:drop prepared", {
+        logInv("log", "event=inv:drop prepared", {
           userId,
-          itemInstanceId: intent?.itemInstanceId ?? null,
+          intent: summarizeIntent(intent),
           actorId: result?.actor?.id ?? null,
           actorType: result?.actor?.actorType ?? null,
           containerId: result?.actor?.containers?.[0]?.containerId ?? null,
@@ -178,14 +414,11 @@ function registerInventoryHandler(io, socket) {
 
         const full = buildInventoryFull(invRt, eqRt);
         await tx.commit();
-        console.log("[DROP] inv:drop committed", {
-          userId,
-          itemInstanceId: intent?.itemInstanceId ?? null,
-        });
+        logInv("log", "event=inv:drop committed", { userId, intent: summarizeIntent(intent) });
 
         const actor = result.actor ?? null;
         if (actor) {
-          console.log("[DROP] emitting world:object_spawn", {
+          logInv("log", "event=inv:drop emitting world:object_spawn", {
             userId,
             actorId: actor.id,
             actorType: actor.actorType,

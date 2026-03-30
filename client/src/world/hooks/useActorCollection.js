@@ -30,7 +30,7 @@ export function useActorCollection({
 
       const actorId = String(payload?.actorId ?? "");
       const actorDisabled = Boolean(payload?.actorDisabled);
-      const inventoryFull = payload?.inventoryFull ?? null;
+      const inventoryFull = payload?.inventoryFull ?? payload?.inventory ?? null;
 
       console.log("[COLLECT] actor:collected", {
         actorId,

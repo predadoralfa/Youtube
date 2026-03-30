@@ -343,7 +343,9 @@ async function loadInventoryRuntime(userIdRaw) {
   return {
     userId,
     containersByRole,
+    containersById,
     itemInstanceById,
+    heldState: null,
 
     // usado pelo fullPayload
     containers,

@@ -82,6 +82,23 @@ async function pickupFromChestToHands(userIdRaw, actorIdRaw) {
 
     // 7) rebuild full inventory do player (baseline)
     const invRt = await ensureInventoryLoaded(userId); // se isso usa tx, passe tx (recomendado)
+    if (invRt?.heldState) {
+      return { ok: false, error: { code: "HELD_STATE_ACTIVE" } };
+    }
+
+    const runtimeContainerById = invRt.containersById || new Map();
+    const syncRuntimeSlot = (containerId, slotIndex, itemInstanceId, qty) => {
+      const container = runtimeContainerById.get(String(containerId));
+      if (!container || !Array.isArray(container.slots)) return;
+      const slot = container.slots.find((s) => Number(s.slotIndex) === Number(slotIndex));
+      if (!slot) return;
+      slot.itemInstanceId = itemInstanceId == null ? null : String(itemInstanceId);
+      slot.qty = Number(qty || 0);
+    };
+
+    syncRuntimeSlot(lootContainerId, src.slot_index, src.item_instance_id, src.qty);
+    syncRuntimeSlot(dst.container_id, dst.slot_index, dst.item_instance_id, dst.qty);
+
     const inventoryFull = buildInventoryFull(invRt);
 
     return { ok: true, inventoryFull };

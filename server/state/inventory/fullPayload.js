@@ -36,6 +36,26 @@ function buildItemDefPayload(def) {
   };
 }
 
+function buildItemInstanceSummary(invRt, itemInstanceId) {
+  if (!itemInstanceId) return null;
+
+  const instanceMap = invRt.itemInstanceById || invRt.itemInstancesById;
+  const inst = instanceMap?.get(String(itemInstanceId)) || instanceMap?.get(Number(itemInstanceId)) || null;
+  if (!inst) return null;
+
+  const def = invRt.itemDefsById?.get(String(inst.itemDefId)) || invRt.itemDefsById?.get(Number(inst.itemDefId)) || null;
+
+  return {
+    itemInstanceId: String(inst.id),
+    itemDefId: String(inst.itemDefId),
+    code: def?.code ?? null,
+    name: def?.name ?? null,
+    category: def?.category ?? null,
+    stackMax: def?.stackMax ?? 1,
+    durability: inst.durability ?? null,
+  };
+}
+
 function isLegacyHandRole(slotRole) {
   return slotRole === "HAND_L" || slotRole === "HAND_R";
 }
@@ -90,11 +110,18 @@ function buildInventoryFull(invRt, equipmentRt = null) {
       .map((id) => String(id))
   );
 
+  const heldState = invRt.heldState ?? null;
+  if (heldState?.itemInstanceId != null) {
+    referencedInstanceIds.push(String(heldState.itemInstanceId));
+  }
+
+  const normalizedReferencedInstanceIds = uniq(referencedInstanceIds);
+
   // Fonte primária: novo runtime (singular)
   // Fallback: legado (plural)
   const instanceMap = invRt.itemInstanceById || invRt.itemInstancesById;
 
-  const itemInstances = referencedInstanceIds
+  const itemInstances = normalizedReferencedInstanceIds
     .map((id) => instanceMap?.get(id) || instanceMap?.get(Number(id)))
     .filter(Boolean);
 
@@ -123,6 +150,27 @@ function buildInventoryFull(invRt, equipmentRt = null) {
     ...buildItemDefPayload(d),
   }));
 
+  const heldStatePayload = heldState
+    ? {
+        mode: heldState.mode ?? "PICK",
+        sourceContainerId: heldState.sourceContainerId != null ? String(heldState.sourceContainerId) : null,
+        sourceSlotIndex:
+          heldState.sourceSlotIndex != null ? Number(heldState.sourceSlotIndex) : null,
+        sourceItemInstanceId:
+          heldState.sourceItemInstanceId != null ? String(heldState.sourceItemInstanceId) : null,
+        sourceQtyBefore:
+          heldState.sourceQtyBefore != null ? Number(heldState.sourceQtyBefore) : null,
+        sourceQtyAfter:
+          heldState.sourceQtyAfter != null ? Number(heldState.sourceQtyAfter) : null,
+        itemInstanceId:
+          heldState.itemInstanceId != null ? String(heldState.itemInstanceId) : null,
+        itemDefId: heldState.itemDefId != null ? String(heldState.itemDefId) : null,
+        qty: heldState.qty != null ? Number(heldState.qty) : 0,
+        createdAtMs: heldState.createdAtMs ?? null,
+        item: buildItemInstanceSummary(invRt, heldState.itemInstanceId),
+      }
+    : null;
+
   const equipment = equipmentRt && equipmentRt.userId ? buildEquipmentFull(equipmentRt, invRt) : null;
 
   return {
@@ -130,6 +178,7 @@ function buildInventoryFull(invRt, equipmentRt = null) {
     containers: containersPayload,
     itemInstances: itemInstancesPayload,
     itemDefs: itemDefsPayload,
+    heldState: heldStatePayload,
     equipment,
   };
 }

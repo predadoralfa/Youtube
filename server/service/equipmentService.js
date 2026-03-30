@@ -23,6 +23,15 @@ function extractEquipData(component) {
   return data && typeof data === "object" ? data : null;
 }
 
+function isItemAllowedInSlot(itemDef, slotCode) {
+  const equippable = pickEquippableComponent(itemDef);
+  if (!equippable) return false;
+
+  const data = extractEquipData(equippable);
+  const allowedSlots = normalizeAllowedSlots(data);
+  return allowedSlots.includes(String(slotCode));
+}
+
 async function loadItemForEquip(itemInstanceId, tx) {
   return db.GaItemInstance.findByPk(itemInstanceId, {
     transaction: tx,
@@ -102,15 +111,8 @@ async function equipItemToSlot(playerIdRaw, itemInstanceIdRaw, slotCode) {
         throw new Error("ITEM_DEF_NOT_FOUND");
       }
 
-      const equippable = pickEquippableComponent(itemDef);
-      if (!equippable) {
+      if (!isItemAllowedInSlot(itemDef, targetSlotCode)) {
         throw new Error("ITEM_NOT_EQUIPPABLE");
-      }
-
-      const data = extractEquipData(equippable);
-      const allowedSlots = normalizeAllowedSlots(data);
-      if (!allowedSlots.includes(targetSlotCode)) {
-        throw new Error("SLOT_NOT_ALLOWED");
       }
 
       const existingSlotRow = await loadEquippedRow(playerId, slotDef.id, tx);
@@ -147,6 +149,97 @@ async function equipItemToSlot(playerIdRaw, itemInstanceIdRaw, slotCode) {
         ok: false,
         code: error.message || "EQUIP_ERR",
         message: error.message || "EQUIP_ERR",
+      };
+    }
+  });
+}
+
+async function swapEquipmentSlots(playerIdRaw, fromSlotCode, toSlotCode) {
+  const playerId = String(playerIdRaw);
+  const sourceSlotCode = String(fromSlotCode);
+  const targetSlotCode = String(toSlotCode);
+
+  return withEquipmentLock(playerId, async () => {
+    const tx = await db.sequelize.transaction();
+    try {
+      if (!sourceSlotCode || !targetSlotCode || sourceSlotCode === targetSlotCode) {
+        throw new Error("EQUIPMENT_SLOT_INVALID");
+      }
+
+      const sourceSlotDef = await loadSlotDefByCode(sourceSlotCode, tx);
+      const targetSlotDef = await loadSlotDefByCode(targetSlotCode, tx);
+      if (!sourceSlotDef || !targetSlotDef) {
+        throw new Error("EQUIPMENT_SLOT_NOT_FOUND");
+      }
+
+      const sourceRow = await loadEquippedRow(playerId, sourceSlotDef.id, tx);
+      if (!sourceRow) {
+        throw new Error("SOURCE_SLOT_EMPTY");
+      }
+
+      const targetRow = await loadEquippedRow(playerId, targetSlotDef.id, tx);
+      const sourceItem = await loadItemForEquip(sourceRow.item_instance_id, tx);
+      if (!sourceItem) {
+        throw new Error("SOURCE_ITEM_NOT_FOUND");
+      }
+
+      if (!isItemAllowedInSlot(sourceItem.def, targetSlotCode)) {
+        throw new Error("TARGET_SLOT_NOT_ALLOWED");
+      }
+
+      let targetItem = null;
+      if (targetRow) {
+        targetItem = await loadItemForEquip(targetRow.item_instance_id, tx);
+        if (!targetItem) {
+          throw new Error("TARGET_ITEM_NOT_FOUND");
+        }
+
+        if (!isItemAllowedInSlot(targetItem.def, sourceSlotCode)) {
+          throw new Error("SOURCE_SLOT_NOT_ALLOWED");
+        }
+      }
+
+      await sourceRow.destroy({ transaction: tx });
+      if (targetRow) {
+        await targetRow.destroy({ transaction: tx });
+      }
+
+      await db.GaEquippedItem.create(
+        {
+          owner_kind: "PLAYER",
+          owner_id: playerId,
+          slot_def_id: targetSlotDef.id,
+          item_instance_id: sourceRow.item_instance_id,
+        },
+        { transaction: tx }
+      );
+
+      if (targetRow) {
+        await db.GaEquippedItem.create(
+          {
+            owner_kind: "PLAYER",
+            owner_id: playerId,
+            slot_def_id: sourceSlotDef.id,
+            item_instance_id: targetRow.item_instance_id,
+          },
+          { transaction: tx }
+        );
+      }
+
+      await tx.commit();
+
+      clearEquipment(playerId);
+      const eqRt = await ensureEquipmentLoaded(playerId);
+      return {
+        ok: true,
+        equipment: buildEquipmentFull(eqRt),
+      };
+    } catch (error) {
+      await tx.rollback().catch(() => {});
+      return {
+        ok: false,
+        code: error.message || "EQUIP_SWAP_ERR",
+        message: error.message || "EQUIP_SWAP_ERR",
       };
     }
   });
@@ -191,5 +284,6 @@ async function unequipItemFromSlot(playerIdRaw, slotCode) {
 
 module.exports = {
   equipItemToSlot,
+  swapEquipmentSlots,
   unequipItemFromSlot,
 };

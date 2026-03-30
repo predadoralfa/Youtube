@@ -47,6 +47,12 @@ export function bindInputs(domElement, bus) {
     return false;
   }
 
+  function isUiBlockedTarget(target) {
+    if (!target || typeof target !== "object") return false;
+    if (typeof target.closest !== "function") return false;
+    return Boolean(target.closest("[data-ui-block-game-input='true']"));
+  }
+
   // =========================
   // Mouse (click + wheel + orbit)
   // =========================
@@ -55,6 +61,8 @@ export function bindInputs(domElement, bus) {
   let lastY = 0;
 
   function onMouseDown(e) {
+    if (isUiBlockedTarget(e.target)) return;
+
     // RMB = orbit
     if (e.button === 2) {
       orbiting = true;
@@ -73,6 +81,7 @@ export function bindInputs(domElement, bus) {
 
   function onMouseMove(e) {
     if (!orbiting) return;
+    if (isUiBlockedTarget(e.target)) return;
 
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
@@ -92,6 +101,8 @@ export function bindInputs(domElement, bus) {
   }
 
   function onWheel(e) {
+    if (isUiBlockedTarget(e.target)) return;
+
     const delta = e.deltaY;
     bus.emit(intentCameraZoom(delta));
     e.preventDefault();
@@ -203,6 +214,7 @@ export function bindInputs(domElement, bus) {
   // Bind
   // =========================
   function onContextMenu(e) {
+    if (isUiBlockedTarget(e.target)) return;
     e.preventDefault();
   }
 
