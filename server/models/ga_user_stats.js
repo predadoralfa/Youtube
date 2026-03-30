@@ -74,6 +74,15 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 1000,
         comment: "Cooldown em milissegundos entre coletas de actors (ex: BAU)"
+      },
+
+      carry_weight: {
+        type: DataTypes.FLOAT,
+        allowNull: false,
+        defaultValue: 20,
+        validate: {
+          min: 0
+        }
       }
     },
     {

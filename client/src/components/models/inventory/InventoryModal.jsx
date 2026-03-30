@@ -82,6 +82,13 @@ function clampSplitQty(raw, maxQty) {
   return Math.min(Math.max(1, Math.floor(n)), Math.max(1, maxQty));
 }
 
+function formatWeight(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  const rounded = Math.round(n * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 export function InventoryModal({
   open,
   snapshot,
@@ -270,6 +277,11 @@ export function InventoryModal({
   const closeFromBackdrop = (e) => {
     e.preventDefault?.();
     e.stopPropagation?.();
+    console.log("[INV][SPLIT] backdrop mousedown", {
+      button: e.button,
+      clientX: e.clientX,
+      clientY: e.clientY,
+    });
     requestCloseInventory();
   };
 
@@ -287,12 +299,6 @@ export function InventoryModal({
 
   const handleDragStart = (itemInstanceId, slotCode) => (event) => {
     if (heldStateActive) return;
-
-    console.log("[INV][UI] drag start", {
-      itemInstanceId,
-      slotCode,
-      heldStateActive,
-    });
 
     const inst = inventoryIndex.instanceMap.get(String(itemInstanceId));
     const defId = getDefIdFromInstance(inst);
@@ -332,10 +338,6 @@ export function InventoryModal({
     event.preventDefault?.();
     event.stopPropagation?.();
     dropHandledRef.current = true;
-    console.log("[INV][UI] drop hint", {
-      slotCode,
-      dragItem,
-    });
     const raw = event.dataTransfer?.getData("application/json");
     if (!raw) return;
 
@@ -347,11 +349,6 @@ export function InventoryModal({
     }
 
     if (!payload?.itemInstanceId) return;
-
-    console.log("[INV][UI] drop payload parsed", {
-      slotCode,
-      payload,
-    });
 
     const sourceKind = payload.sourceKind || "inventory";
     const allowed = Array.isArray(payload.allowedSlots) ? payload.allowedSlots : [];
@@ -398,13 +395,6 @@ export function InventoryModal({
               slotCode,
             });
 
-    console.log("[INV][UI] equip drop action", {
-      slotCode,
-      sourceKind,
-      occupied: Boolean(slot?.itemInstanceId),
-      ok,
-    });
-
     if (!ok) {
       setLocalNotice(slot?.itemInstanceId ? "Equipment swap is not available right now" : "Equipment action is not available right now");
     } else {
@@ -418,10 +408,6 @@ export function InventoryModal({
     const pending = dragItem;
     dropHandledRef.current = true;
     clearDrag();
-
-    console.log("[INV][UI] drop to world", {
-      pending,
-    });
 
     if (!pending?.itemInstanceId) return;
 
@@ -437,11 +423,6 @@ export function InventoryModal({
     const pending = dragItem;
     clearDrag();
 
-    console.log("[INV][UI] drag end", {
-      pending,
-      dropHandled: dropHandledRef.current,
-    });
-
     if (!dropHandledRef.current && pending?.itemInstanceId) {
       const ok = onDropItemToWorld?.(pending.itemInstanceId);
       if (!ok) {
@@ -454,34 +435,21 @@ export function InventoryModal({
     dropHandledRef.current = false;
   };
 
-  const handleUnequip = (slotCode) => (event) => {
-    event.preventDefault?.();
-    event.stopPropagation?.();
-
-    console.log("[INV][UI] unequip click", { slotCode });
-
+  const handleUnequip = (slotCode) => {
     const ok = onUnequipItemFromSlot?.({ slotCode });
     if (!ok) {
       setLocalNotice("Equipment action is not available right now");
-      return;
+      return false;
     }
 
     setLocalNotice(null);
+    return true;
   };
 
   const handleEquipmentSlotMouseUp = (slot, occupied) => (event) => {
     if (event.button != null && event.button !== 0) return;
     event.preventDefault?.();
     event.stopPropagation?.();
-
-    console.log("[INV][UI] equipment slot mouseup", {
-      slotCode: slot.slotCode,
-      occupied,
-      sourceContainerId: slot.sourceContainerId,
-      sourceSlotIndex: slot.sourceSlotIndex,
-      heldStateActive,
-      dragItem,
-    });
 
     setCursorPos({
       x: Number(event.clientX ?? 0),
@@ -501,10 +469,6 @@ export function InventoryModal({
         containerId: slot.sourceContainerId,
         slotIndex: slot.sourceSlotIndex,
       });
-      console.log("[INV][UI] equipment slot place", {
-        slotCode: slot.slotCode,
-        ok,
-      });
       if (!ok) {
         setLocalNotice("Place is not available right now");
       } else {
@@ -519,10 +483,6 @@ export function InventoryModal({
       containerId: slot.sourceContainerId,
       slotIndex: slot.sourceSlotIndex,
     });
-    console.log("[INV][UI] equipment slot pickup", {
-      slotCode: slot.slotCode,
-      ok,
-    });
     if (!ok) {
       setLocalNotice("Pickup is not available right now");
     } else {
@@ -534,11 +494,21 @@ export function InventoryModal({
     event.preventDefault?.();
     event.stopPropagation?.();
 
-    console.log("[INV][UI] open context menu", {
-      slotCtx,
-      x: event.clientX,
-      y: event.clientY,
+    const containerId = slotCtx?.containerId ?? slotCtx?.sourceContainerId ?? null;
+    const slotIndex = slotCtx?.slotIndex ?? slotCtx?.sourceSlotIndex ?? null;
+    const stackMax = Number(slotCtx?.itemDef?.stackMax ?? slotCtx?.item?.stackMax ?? 1);
+    const canSplit = Boolean(stackMax > 1 && Number(slotCtx?.qty ?? 0) > 1);
+
+    console.log("[INV][SPLIT] open context menu", {
+      slotCtx: {
+        ...slotCtx,
+        containerId,
+        slotIndex,
+      },
+      canSplit,
       heldStateActive,
+      clientX: event.clientX,
+      clientY: event.clientY,
     });
 
     if (heldStateActive || !slotCtx?.itemInstanceId) return;
@@ -549,9 +519,32 @@ export function InventoryModal({
     setContextMenu({
       x: Math.max(12, Math.min(event.clientX, maxX)),
       y: Math.max(12, Math.min(event.clientY, maxY)),
-      slot: slotCtx,
+      slot: {
+        ...slotCtx,
+        containerId,
+        slotIndex,
+        canSplit,
+      },
     });
     setSplitDraft(null);
+  };
+
+  const openContextMenuFromMouseDown = (slotCtx, event) => {
+    if (event.button !== 2) return false;
+
+    event.preventDefault?.();
+    event.stopPropagation?.();
+
+    console.log("[INV][SPLIT] right mousedown fallback", {
+      slotCtx,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+
+    if (heldStateActive || !slotCtx?.itemInstanceId) return true;
+
+    openContextMenu(slotCtx, event);
+    return true;
   };
 
   const openSplitModal = () => {
@@ -561,14 +554,15 @@ export function InventoryModal({
     const qty = Number(slot.qty ?? 0);
     const defaultQty = qty > 2 ? Math.max(1, Math.floor(qty / 2)) : 1;
 
-    console.log("[INV][UI] open split modal", {
+    console.log("[INV][SPLIT] open split modal", {
       slot,
+      qty,
       defaultQty,
     });
 
     setSplitDraft({
       slot,
-      qtyText: String(defaultQty),
+      qtyText: String(clampSplitQty(defaultQty, Math.max(1, qty - 1))),
       error: null,
     });
     setContextMenu(null);
@@ -578,11 +572,12 @@ export function InventoryModal({
     if (!splitDraft?.slot) return;
 
     const slot = splitDraft.slot;
+    const containerId = slot?.containerId ?? slot?.sourceContainerId ?? null;
+    const slotIndex = slot?.slotIndex ?? slot?.sourceSlotIndex ?? null;
     const qtyCurrent = Number(slot.qty ?? 0);
-    const rawQty = Number(splitDraft.qtyText);
-    const qty = Number.isFinite(rawQty) ? Math.floor(rawQty) : NaN;
+    const qty = clampSplitQty(splitDraft.qtyText, Math.max(1, qtyCurrent - 1));
 
-    console.log("[INV][UI] submit split", {
+    console.log("[INV][SPLIT] submit split", {
       slot,
       qtyCurrent,
       qtyText: splitDraft.qtyText,
@@ -590,6 +585,10 @@ export function InventoryModal({
     });
 
     if (!Number.isInteger(qty) || qty < 1 || qty >= qtyCurrent) {
+      console.log("[INV][SPLIT] split validation failed", {
+        qty,
+        qtyCurrent,
+      });
       setSplitDraft((prev) => ({
         ...prev,
         error: `Split qty must be between 1 and ${Math.max(1, qtyCurrent - 1)}`,
@@ -598,8 +597,15 @@ export function InventoryModal({
     }
 
     const ok = onSplitInventoryItem?.({
-      containerId: slot.containerId,
-      slotIndex: slot.slotIndex,
+      containerId,
+      slotIndex,
+      qty,
+    });
+
+    console.log("[INV][SPLIT] emit result", {
+      ok,
+      containerId,
+      slotIndex,
       qty,
     });
 
@@ -618,6 +624,21 @@ export function InventoryModal({
   const heldPreviewLabel =
     heldPreviewItem?.name || heldPreviewItem?.code || heldState?.itemInstanceId || "Item";
   const heldPreviewQty = Number(heldState?.qty ?? 0);
+  const carryWeight = snapshot?.carryWeight ?? null;
+  const carryWeightCurrent = Number(carryWeight?.current ?? 0);
+  const carryWeightMax = Number(carryWeight?.max ?? 0);
+  const carryWeightPct =
+    carryWeightMax > 0
+      ? Math.min(100, Math.max(0, (carryWeightCurrent / carryWeightMax) * 100))
+      : 0;
+  const carryWeightTone =
+    carryWeightMax > 0
+      ? carryWeightPct >= 95
+        ? "danger"
+        : carryWeightPct >= 75
+          ? "warn"
+          : "ok"
+      : "neutral";
 
   if (!snapshot || !ok) {
     return (
@@ -753,6 +774,23 @@ export function InventoryModal({
 
           <div className="inv-layout">
             <section className="inv-panel inv-panel--inventory">
+              <div className="inv-weight">
+                <div className="inv-weight-head">
+                  <span className="inv-weight-label">Carry Weight</span>
+                  <span className="inv-weight-value">
+                    {formatWeight(carryWeightCurrent)} / {formatWeight(carryWeightMax)}
+                  </span>
+                </div>
+                <div className={`inv-weight-track is-${carryWeightTone}`} aria-hidden="true">
+                  <div
+                    className="inv-weight-fill"
+                    style={{
+                      width: `${carryWeightPct}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
               <div className="inv-panel-title">Inventory</div>
 
               {containers.map((container, cIndex) => {
@@ -810,13 +848,6 @@ export function InventoryModal({
                               event.preventDefault?.();
                               event.stopPropagation?.();
 
-                              console.log("[INV][UI] slot mouseup", {
-                                containerId,
-                                slotIndex,
-                                heldStateActive,
-                                instanceId,
-                              });
-
                               setCursorPos({
                                 x: Number(event.clientX ?? 0),
                                 y: Number(event.clientY ?? 0),
@@ -826,19 +857,9 @@ export function InventoryModal({
                               setSplitDraft(null);
 
                               if (heldStateActive) {
-                                console.log("[INV][UI] slot place intent", {
-                                  containerId,
-                                  slotIndex,
-                                });
                                 const ok = onPlaceHeldItem?.({
                                   containerId,
                                   slotIndex,
-                                });
-
-                                console.log("[INV][UI] slot place result", {
-                                  containerId,
-                                  slotIndex,
-                                  ok,
                                 });
                                 if (!ok) {
                                   setLocalNotice("Place is not available right now");
@@ -850,20 +871,9 @@ export function InventoryModal({
 
                               if (!instanceId) return;
 
-                              console.log("[INV][UI] slot pickup intent", {
-                                containerId,
-                                slotIndex,
-                                instanceId,
-                              });
                               const ok = onPickupInventoryItem?.({
                                 containerId,
                                 slotIndex,
-                              });
-
-                              console.log("[INV][UI] slot pickup result", {
-                                containerId,
-                                slotIndex,
-                                ok,
                               });
                               if (!ok) {
                                 setLocalNotice("Pickup is not available right now");
@@ -871,11 +881,56 @@ export function InventoryModal({
                                 setLocalNotice(null);
                               }
                             }}
-                            onContextMenu={(event) => {
-                              if (!instanceId) {
-                                event.preventDefault?.();
+                            onMouseDown={(event) => {
+                              console.log("[INV][SPLIT] slot mousedown", {
+                                button: event.button,
+                                containerId,
+                                slotIndex,
+                                instanceId,
+                                clientX: event.clientX,
+                                clientY: event.clientY,
+                              });
+
+                              if (openContextMenuFromMouseDown(
+                                {
+                                  containerId,
+                                  slotIndex,
+                                  itemInstanceId: instanceId,
+                                  qty,
+                                  itemName,
+                                  itemDef,
+                                },
+                                event
+                              )) {
                                 return;
                               }
+
+                              event.stopPropagation?.();
+                            }}
+                            onContextMenu={(event) => {
+                              console.log("[INV][SPLIT] slot contextmenu event", {
+                                button: event.button,
+                                containerId,
+                                slotIndex,
+                                instanceId,
+                                clientX: event.clientX,
+                                clientY: event.clientY,
+                              });
+                              if (!instanceId) {
+                                event.preventDefault?.();
+                                console.log("[INV][SPLIT] slot context menu on empty slot", {
+                                  containerId,
+                                  slotIndex,
+                                });
+                                return;
+                              }
+                              console.log("[INV][SPLIT] slot context menu", {
+                                containerId,
+                                slotIndex,
+                                instanceId,
+                                qty,
+                                itemName,
+                              });
                               openContextMenu(
                                 {
                                   containerId,
@@ -948,6 +1003,30 @@ export function InventoryModal({
                         }}
                         onDrop={handleInventoryDropHint(slot.slotCode)}
                         onMouseUp={handleEquipmentSlotMouseUp(slot, occupied)}
+                        onMouseDown={(event) => {
+                          console.log("[INV][SPLIT] equip slot mousedown", {
+                            button: event.button,
+                            slotCode: slot.slotCode,
+                            occupied,
+                            clientX: event.clientX,
+                            clientY: event.clientY,
+                          });
+
+                          if (openContextMenuFromMouseDown(slot, event)) {
+                            return;
+                          }
+
+                          event.stopPropagation?.();
+                        }}
+                        onContextMenu={(event) => {
+                          console.log("[INV][SPLIT] equip slot contextmenu event", {
+                            button: event.button,
+                            slotCode: slot.slotCode,
+                            occupied,
+                            clientX: event.clientX,
+                            clientY: event.clientY,
+                          });
+                        }}
                       >
                         <div className="equip-slot-head">
                           <span className="equip-slot-code">{slot.slotCode}</span>
@@ -958,9 +1037,6 @@ export function InventoryModal({
                             <div className="equip-slot-details">
                               <div className="equip-item-name">{item.name || item.code || "Equipped item"}</div>
                               {qty > 0 ? <div className="equip-item-qty">x{qty}</div> : null}
-                              <button className="equip-unequip" onClick={handleUnequip(slot.slotCode)}>
-                                Remove
-                              </button>
                             </div>
                           ) : (
                             <div className="equip-slot-details">
@@ -1016,9 +1092,6 @@ export function InventoryModal({
                             {item ? (
                               <>
                                 <div className="equip-item-name">{item.name || item.code || "Equipped item"}</div>
-                                <button className="equip-unequip" onClick={handleUnequip(slot.slotCode)}>
-                                  Remove
-                                </button>
                               </>
                             ) : (
                               <div className="equip-empty">Drop compatible item here</div>
@@ -1037,14 +1110,43 @@ export function InventoryModal({
 
       {contextMenu ? (
         <div
-          className="inv-context-menu"
-          style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
-          onMouseDown={(e) => e.stopPropagation()}
+          className="inv-context-overlay"
+          onMouseDown={(e) => {
+            e.preventDefault?.();
+            e.stopPropagation?.();
+            if (e.target === e.currentTarget) {
+              setContextMenu(null);
+            }
+          }}
           onContextMenu={(e) => {
             e.preventDefault?.();
             e.stopPropagation?.();
           }}
         >
+          <div
+            className="inv-context-menu"
+            style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault?.();
+              e.stopPropagation?.();
+            }}
+          >
+          {contextMenu.slot?.canSplit ? (
+            <button
+              type="button"
+              className="inv-context-menu-item"
+              onClick={() => {
+                console.log("[INV][SPLIT] context menu split click", {
+                  slot: contextMenu.slot,
+                });
+                openSplitModal();
+              }}
+            >
+              Split
+            </button>
+          ) : null}
+
           <button
             type="button"
             className="inv-context-menu-item"
@@ -1052,6 +1154,10 @@ export function InventoryModal({
               const slot = contextMenu.slot;
               setContextMenu(null);
               setSplitDraft(null);
+              console.log("[INV][SPLIT] context menu drop click", {
+                itemInstanceId: slot?.itemInstanceId ?? null,
+                slot,
+              });
               const ok = onDropItemToWorld?.(slot.itemInstanceId);
               if (!ok) {
                 setLocalNotice("Drop is not available right now");
@@ -1063,22 +1169,40 @@ export function InventoryModal({
             Drop
           </button>
 
-          {contextMenu.slot?.itemDef?.stackMax > 1 && Number(contextMenu.slot?.qty ?? 0) > 1 ? (
+          {contextMenu.slot?.slotCode ? (
             <button
               type="button"
               className="inv-context-menu-item"
-              onClick={openSplitModal}
+              onClick={() => {
+                const slot = contextMenu.slot;
+                setContextMenu(null);
+                setSplitDraft(null);
+                console.log("[INV][SPLIT] context menu remove click", {
+                  slotCode: slot?.slotCode ?? null,
+                });
+                const ok = handleUnequip(slot?.slotCode);
+                if (!ok) {
+                  setLocalNotice("Equipment action is not available right now");
+                }
+              }}
             >
-              Split
+              Remove
             </button>
           ) : null}
+          </div>
         </div>
       ) : null}
 
       {splitDraft ? (
         <div
           className="inv-split-modal"
-          onMouseDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => {
+            e.preventDefault?.();
+            e.stopPropagation?.();
+            if (e.target === e.currentTarget) {
+              setSplitDraft(null);
+            }
+          }}
           onContextMenu={(e) => {
             e.preventDefault?.();
             e.stopPropagation?.();
@@ -1117,13 +1241,23 @@ export function InventoryModal({
             {splitDraft.error ? <div className="inv-split-error">{splitDraft.error}</div> : null}
 
             <div className="inv-split-actions">
-              <button type="button" className="inv-split-btn" onClick={submitSplit}>
+              <button
+                type="button"
+                className="inv-split-btn"
+                onClick={() => {
+                  console.log("[INV][SPLIT] split ok button click");
+                  submitSplit();
+                }}
+              >
                 OK
               </button>
               <button
                 type="button"
                 className="inv-split-btn inv-split-btn--ghost"
-                onClick={() => setSplitDraft(null)}
+                onClick={() => {
+                  console.log("[INV][SPLIT] split cancel click");
+                  setSplitDraft(null);
+                }}
               >
                 Cancel
               </button>

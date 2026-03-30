@@ -37,6 +37,14 @@ function normalizeItemDefRow(row) {
     code: plain.code ?? null,
     name: plain.name ?? null,
     category: plain.category ?? plain.categoria ?? null,
+    weight:
+      plain.unit_weight == null
+        ? plain.weight == null
+          ? plain.peso == null
+            ? null
+            : Number(plain.peso)
+          : Number(plain.weight)
+        : Number(plain.unit_weight),
     stackMax: asInt(plain.stack_max ?? plain.stackMax, 1),
     components: [],
   };

@@ -4,6 +4,7 @@
 const db = require("../models");
 const { ensureInventoryLoaded } = require("../state/inventory/loader");
 const { buildInventoryFull } = require("../state/inventory/fullPayload");
+const { loadCarryWeightStats } = require("../state/inventory/weight");
 
 /**
  * attemptCollectFromActor(userId, actorId)
@@ -384,6 +385,8 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     if (invRt?.heldState) {
       return { ok: false, error: "HELD_STATE_ACTIVE" };
     }
+
+    invRt.carryWeight = await loadCarryWeightStats(userId);
 
     const runtimeContainerById = invRt.containersById || new Map();
     const syncRuntimeSlot = (containerId, slotIndex, itemInstanceId, qty) => {

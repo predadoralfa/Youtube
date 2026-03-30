@@ -2,6 +2,7 @@
 "use strict";
 
 const { buildEquipmentFull } = require("../equipment/fullPayload");
+const { computeCarryWeight } = require("./weight");
 
 function uniq(arr) {
   return Array.from(new Set(arr));
@@ -172,6 +173,8 @@ function buildInventoryFull(invRt, equipmentRt = null) {
     : null;
 
   const equipment = equipmentRt && equipmentRt.userId ? buildEquipmentFull(equipmentRt, invRt) : null;
+  const computedCarryWeight = computeCarryWeight(invRt, equipmentRt);
+  const carryWeightMax = Number.isFinite(Number(invRt?.carryWeight)) ? Number(invRt.carryWeight) : 20;
 
   return {
     ok: true,
@@ -179,6 +182,16 @@ function buildInventoryFull(invRt, equipmentRt = null) {
     itemInstances: itemInstancesPayload,
     itemDefs: itemDefsPayload,
     heldState: heldStatePayload,
+    carryWeight: {
+      current: computedCarryWeight.current,
+      max: carryWeightMax,
+      ratio: carryWeightMax > 0 ? computedCarryWeight.current / carryWeightMax : 0,
+      percent:
+        carryWeightMax > 0
+          ? Math.min(100, Math.max(0, (computedCarryWeight.current / carryWeightMax) * 100))
+          : 0,
+      isOverCapacity: carryWeightMax > 0 ? computedCarryWeight.current > carryWeightMax : false,
+    },
     equipment,
   };
 }

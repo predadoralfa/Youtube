@@ -79,7 +79,7 @@ async function ensureNewInstance(invRt, needsNewInstance, tx) {
   return newId;
 }
 
-async function flush(invRt, result, tx) {
+async function flush(invRt, result, tx, eqRt = null) {
   const containerIds = Array.from(new Set((result.touchedContainers || []).map(String)));
 
   const slotKeys = (result.touchedSlots || []).map((s) => ({

@@ -54,11 +54,6 @@ function assertNoHeldState(invRt) {
   }
 }
 
-function logInvAuth(level, message, data) {
-  const logger = level === "warn" ? console.warn : level === "error" ? console.error : console.log;
-  logger(`[INV][AUTH] ${message}`, data || {});
-}
-
 function assertHeldState(invRt) {
   if (!invRt?.heldState) {
     throw invError(INV_ERR.NO_HELD_STATE, "no held state active");
@@ -172,15 +167,6 @@ async function pickup(invRt, intent, tx) {
   invRt.heldState = heldState;
   container.rev = Number(container.rev ?? 0) + 1;
 
-  logInvAuth("log", "pickup ok", {
-    userId: invRt.userId,
-    containerId: container.id,
-    slotIndex,
-    itemInstanceId,
-    qty,
-    heldState,
-  });
-
   await persistSlot(tx, container.id, slotIndex, null, 0);
   await db.GaContainer.increment({ rev: 1 }, { where: { id: container.id }, transaction: tx });
   markDirty(invRt.userId, container.id);
@@ -265,17 +251,6 @@ async function split(invRt, intent, tx) {
   invRt.heldState = heldState;
   container.rev = Number(container.rev ?? 0) + 1;
 
-  logInvAuth("log", "split ok", {
-    userId: invRt.userId,
-    containerId: container.id,
-    slotIndex,
-    sourceInstanceId,
-    sourceQty,
-    splitQty: qty,
-    heldState,
-    newItemInstanceId,
-  });
-
   await persistSlot(tx, container.id, slotIndex, sourceInstanceId, slot.qty);
   await db.GaContainer.increment({ rev: 1 }, { where: { id: container.id }, transaction: tx });
   markDirty(invRt.userId, container.id);
@@ -324,13 +299,6 @@ async function place(invRt, intent, tx) {
     await db.GaContainer.increment({ rev: 1 }, { where: { id: container.id }, transaction: tx });
     markDirty(invRt.userId, container.id);
 
-    logInvAuth("log", "place ok empty-slot", {
-      userId: invRt.userId,
-      containerId: container.id,
-      slotIndex,
-      heldState,
-    });
-
     return {
       touchedContainers: [container.id],
       touchedSlots: [
@@ -378,16 +346,6 @@ async function place(invRt, intent, tx) {
   await db.GaContainer.increment({ rev: 1 }, { where: { id: container.id }, transaction: tx });
   markDirty(invRt.userId, container.id);
 
-  logInvAuth("log", "place ok merge-stack", {
-    userId: invRt.userId,
-    containerId: container.id,
-    slotIndex,
-    heldState,
-    dstQtyBefore: dstQty,
-    heldQty,
-    stackMax,
-  });
-
   return {
     touchedContainers: [container.id],
     touchedSlots: [
@@ -413,13 +371,6 @@ async function cancel(invRt, tx) {
     await persistSlot(tx, container.id, heldState.sourceSlotIndex, slot.itemInstanceId, slot.qty);
     await db.GaContainer.increment({ rev: 1 }, { where: { id: container.id }, transaction: tx });
     markDirty(invRt.userId, container.id);
-
-    logInvAuth("log", "cancel ok pick", {
-      userId: invRt.userId,
-      containerId: container.id,
-      slotIndex: heldState.sourceSlotIndex,
-      heldState,
-    });
 
     return {
       touchedContainers: [container.id],
@@ -450,14 +401,6 @@ async function cancel(invRt, tx) {
     await persistSlot(tx, container.id, heldState.sourceSlotIndex, slot.itemInstanceId, slot.qty);
     await db.GaContainer.increment({ rev: 1 }, { where: { id: container.id }, transaction: tx });
     markDirty(invRt.userId, container.id);
-
-    logInvAuth("log", "cancel ok split", {
-      userId: invRt.userId,
-      containerId: container.id,
-      slotIndex: heldState.sourceSlotIndex,
-      heldState,
-      revertedQty: heldQty,
-    });
 
     return {
       touchedContainers: [container.id],

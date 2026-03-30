@@ -181,19 +181,7 @@ export function GameShell() {
     if (!s) return false;
     if (!joinedRef.current) return false;
 
-    console.log("[EQUIP][CLIENT] emit", {
-      eventName,
-      payload,
-      joined: joinedRef.current,
-      socketId: s?.id ?? null,
-    });
-
     s.emit(eventName, payload, (ack) => {
-      console.log("[EQUIP][CLIENT] ack", {
-        eventName,
-        ack,
-      });
-
       if (ack?.ok === true && ack?.equipment?.ok === true) {
         setEquipmentSnapshot(ack.equipment);
         setEquipmentMessage(null);
@@ -216,20 +204,9 @@ export function GameShell() {
     if (!s) return false;
     if (!joinedRef.current) return false;
 
-    console.log("[INV][CLIENT] drop emit", {
-      itemInstanceId,
-      joined: joinedRef.current,
-      socketId: s?.id ?? null,
-    });
-
     setInventoryMessage(null);
 
     s.emit("inv:drop", { itemInstanceId: String(itemInstanceId) }, (ack) => {
-      console.log("[INV][CLIENT] drop ack", {
-        itemInstanceId,
-        ack,
-      });
-
       if (ack?.ok === true && ack?.inventory?.ok === true) {
         setInventorySnapshot(ack.inventory);
         if (ack.inventory?.equipment?.ok === true) {
@@ -252,21 +229,9 @@ export function GameShell() {
     if (!s) return false;
     if (!joinedRef.current) return false;
 
-    console.log("[INV][CLIENT] emit", {
-      eventName,
-      payload,
-      joined: joinedRef.current,
-      socketId: s?.id ?? null,
-    });
-
     setInventoryMessage(null);
 
     s.emit(eventName, payload, (ack) => {
-      console.log("[INV][CLIENT] ack", {
-        eventName,
-        ack,
-      });
-
       if (ack?.ok === true && ack?.inventory?.ok === true) {
         setInventorySnapshot(ack.inventory);
         if (ack.inventory?.equipment?.ok === true) {
@@ -286,7 +251,6 @@ export function GameShell() {
 
   const onPickupInventoryItem = useCallback(
     ({ containerId, slotIndex }) => {
-      console.log("[INV][CLIENT] onPickupInventoryItem", { containerId, slotIndex });
       return emitInventoryAction("inv:pickup", {
         containerId: String(containerId),
         slotIndex: Number(slotIndex),
@@ -297,7 +261,6 @@ export function GameShell() {
 
   const onPlaceHeldItem = useCallback(
     ({ containerId, slotIndex }) => {
-      console.log("[INV][CLIENT] onPlaceHeldItem", { containerId, slotIndex });
       return emitInventoryAction("inv:place", {
         containerId: String(containerId),
         slotIndex: Number(slotIndex),
@@ -308,7 +271,6 @@ export function GameShell() {
 
   const onSplitInventoryItem = useCallback(
     ({ containerId, slotIndex, qty }) => {
-      console.log("[INV][CLIENT] onSplitInventoryItem", { containerId, slotIndex, qty });
       return emitInventoryAction("inv:split", {
         containerId: String(containerId),
         slotIndex: Number(slotIndex),
@@ -320,13 +282,6 @@ export function GameShell() {
 
   const onMoveInventoryItem = useCallback(
     ({ fromRole, fromSlotIndex, toRole, toSlotIndex, qty }) => {
-      console.log("[INV][CLIENT] onMoveInventoryItem", {
-        fromRole,
-        fromSlotIndex,
-        toRole,
-        toSlotIndex,
-        qty,
-      });
       return emitInventoryAction("inv:move", {
         from: {
           role: String(fromRole),
@@ -648,7 +603,7 @@ export function GameShell() {
           const actorId = toId(payload?.actorId ?? null);
           const actorDisabled = Boolean(payload?.actorDisabled);
           const inventoryFull = payload?.inventory ?? payload?.inventoryFull ?? null;
-          if (!actorId || !actorDisabled) return;
+          if (!actorId) return;
 
           if (inventoryFull?.ok === true) {
             setInventorySnapshot(inventoryFull);
@@ -660,6 +615,7 @@ export function GameShell() {
 
           setSnapshot((prev) => {
             if (!prev) return prev;
+            if (!actorDisabled) return prev;
             const actors = Array.isArray(prev.actors) ? prev.actors : [];
             if (!actors.some((a) => String(a.id) === String(actorId))) return prev;
 

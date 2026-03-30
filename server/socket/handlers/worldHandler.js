@@ -5,6 +5,7 @@ const { handleWorldResync } = require("./world/resync");
 const { ensureInventoryLoaded } = require("../../state/inventory/loader");
 const { ensureEquipmentLoaded } = require("../../state/equipment/loader");
 const { buildInventoryFull } = require("../../state/inventory/fullPayload");
+const { loadCarryWeightStats } = require("../../state/inventory/weight");
 
 function emitBaseline(socket, baseline) {
   socket.emit("world:baseline", {
@@ -39,6 +40,15 @@ async function emitInventoryFull(socket) {
   if (!userId) return;
   const invRt = await ensureInventoryLoaded(userId);
   const eqRt = await ensureEquipmentLoaded(userId);
+  try {
+    invRt.carryWeight = await loadCarryWeightStats(userId);
+  } catch (loadErr) {
+    console.warn("[WORLD] carry weight load failed", {
+      userId,
+      socketId: socket.id,
+      error: String(loadErr?.message || loadErr),
+    });
+  }
   const inv = buildInventoryFull(invRt, eqRt);
   socket.emit("inv:full", inv);
   logWorld("emitInventoryFull", {

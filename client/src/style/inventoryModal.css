@@ -111,6 +111,67 @@
   text-transform: uppercase;
 }
 
+.inv-weight {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.inv-weight-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.inv-weight-label {
+  color: rgba(0, 255, 255, 0.9);
+}
+
+.inv-weight-value {
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+}
+
+.inv-weight-track {
+  position: relative;
+  overflow: hidden;
+  height: clamp(8px, 0.9vw, 11px);
+  border: 1px solid rgba(0, 255, 255, 0.18);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(8, 16, 28, 0.95), rgba(4, 8, 15, 0.98));
+  box-shadow: inset 0 0 0 1px rgba(0, 255, 255, 0.03);
+}
+
+.inv-weight-fill {
+  width: 0;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  transition: width 180ms ease, background 180ms ease;
+  background: linear-gradient(90deg, rgba(0, 255, 160, 0.95), rgba(0, 255, 255, 0.9));
+}
+
+.inv-weight-track.is-ok .inv-weight-fill {
+  background: linear-gradient(90deg, rgba(0, 255, 160, 0.95), rgba(0, 255, 220, 0.9));
+}
+
+.inv-weight-track.is-warn .inv-weight-fill {
+  background: linear-gradient(90deg, rgba(255, 210, 90, 0.96), rgba(255, 146, 0, 0.92));
+}
+
+.inv-weight-track.is-danger .inv-weight-fill {
+  background: linear-gradient(90deg, rgba(255, 82, 120, 0.98), rgba(255, 0, 96, 0.96));
+}
+
+.inv-weight-track.is-neutral .inv-weight-fill {
+  background: linear-gradient(90deg, rgba(0, 255, 255, 0.55), rgba(0, 255, 255, 0.4));
+}
+
 .inv-notice {
   margin: 0 0 14px;
   padding: 10px 12px;
@@ -210,6 +271,8 @@
 .inv-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  grid-auto-rows: clamp(88px, 9vw, 112px);
+  align-items: stretch;
   gap: 8px;
 }
 
@@ -220,11 +283,13 @@
   flex-direction: column;
   justify-content: space-between;
   min-width: 0;
-  min-height: 80px;
+  min-height: 0;
+  height: 100%;
   padding: 6px;
   border: 1px solid #00ffff22;
   border-radius: 8px;
   background: #111827;
+  overflow: hidden;
 }
 
 .inv-slot.is-occupied {
@@ -251,9 +316,11 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 6px;
   min-width: 0;
-  min-height: 52px;
+  min-height: 0;
+  height: 100%;
   padding: 8px;
   border: 1px solid rgba(0, 255, 255, 0.18);
   border-radius: 8px;
@@ -303,6 +370,10 @@
 }
 
 .inv-empty-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
   color: #ffffff55;
   font-size: 11px;
 }
@@ -318,6 +389,12 @@
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
   display: grid;
   gap: 4px;
+}
+
+.inv-context-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 11999;
 }
 
 .inv-context-menu-item {
@@ -440,12 +517,15 @@
   grid-template-columns: minmax(0, 1fr) 44px;
   align-items: center;
   gap: 8px;
+  height: 100%;
 }
 
 .equip-list--hands .equip-slot-details {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  height: 100%;
   gap: 6px;
 }
 
@@ -486,7 +566,8 @@
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  min-height: 71px;
+  min-height: 0;
+  height: clamp(76px, 8.2vw, 96px);
   padding: 10px;
   border: 1px solid rgba(0, 255, 255, 0.16);
   border-radius: 12px;
@@ -494,6 +575,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow: hidden;
   transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
@@ -541,6 +623,7 @@
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  min-height: 0;
 }
 
 .equip-empty {

@@ -3,6 +3,7 @@
 
 const db = require("../../models");
 const { getInventory, setInventory } = require("./store");
+const { loadCarryWeightStats } = require("./weight");
 
 // =======================
 // utils
@@ -200,7 +201,14 @@ function normalizeItemDefRow(row) {
     code: plain.code ?? null,
     name: plain.name ?? null,
     category: plain.categoria ?? plain.category ?? null,
-    weight: plain.peso == null ? null : Number(plain.peso),
+    weight:
+      plain.unit_weight == null
+        ? plain.weight == null
+          ? plain.peso == null
+            ? null
+            : Number(plain.peso)
+          : Number(plain.weight)
+        : Number(plain.unit_weight),
     stackMax: asInt(plain.stack_max ?? plain.stackMax, 1),
     components: [],
   };
@@ -340,12 +348,15 @@ async function loadInventoryRuntime(userIdRaw) {
     def.components = itemDefComponentsById.get(String(id)) || [];
   }
 
+  const carryWeight = await loadCarryWeightStats(userId);
+
   return {
     userId,
     containersByRole,
     containersById,
     itemInstanceById,
     heldState: null,
+    carryWeight,
 
     // usado pelo fullPayload
     containers,

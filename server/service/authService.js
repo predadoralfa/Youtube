@@ -70,7 +70,10 @@ const register = async (req, res) => {
     );
 
     // 6) cria status separado
-    await GaUserStats.create({ user_id: novoUser.id }, { transaction: t });
+    await GaUserStats.create(
+      { user_id: novoUser.id },
+      { transaction: t }
+    );
 
     // 7) cria localização separado
     await GaUserRuntime.create(
