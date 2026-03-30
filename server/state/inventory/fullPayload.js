@@ -175,6 +175,13 @@ function buildInventoryFull(invRt, equipmentRt = null) {
   const equipment = equipmentRt && equipmentRt.userId ? buildEquipmentFull(equipmentRt, invRt) : null;
   const computedCarryWeight = computeCarryWeight(invRt, equipmentRt);
   const carryWeightMax = Number.isFinite(Number(invRt?.carryWeight)) ? Number(invRt.carryWeight) : 20;
+  const carryWeightCurrent = computedCarryWeight.current;
+  const carryWeightRatio = carryWeightMax > 0 ? carryWeightCurrent / carryWeightMax : 0;
+
+  invRt.carryWeightCurrent = carryWeightCurrent;
+  invRt.carryWeightRatio = carryWeightRatio;
+  invRt.carryWeightPercent = Math.min(100, Math.max(0, carryWeightRatio * 100));
+  invRt.carryWeightMax = carryWeightMax;
 
   return {
     ok: true,
@@ -183,14 +190,12 @@ function buildInventoryFull(invRt, equipmentRt = null) {
     itemDefs: itemDefsPayload,
     heldState: heldStatePayload,
     carryWeight: {
-      current: computedCarryWeight.current,
+      current: carryWeightCurrent,
       max: carryWeightMax,
-      ratio: carryWeightMax > 0 ? computedCarryWeight.current / carryWeightMax : 0,
+      ratio: carryWeightRatio,
       percent:
-        carryWeightMax > 0
-          ? Math.min(100, Math.max(0, (computedCarryWeight.current / carryWeightMax) * 100))
-          : 0,
-      isOverCapacity: carryWeightMax > 0 ? computedCarryWeight.current > carryWeightMax : false,
+        carryWeightMax > 0 ? Math.min(100, Math.max(0, carryWeightRatio * 100)) : 0,
+      isOverCapacity: carryWeightMax > 0 ? carryWeightCurrent > carryWeightMax : false,
     },
     equipment,
   };

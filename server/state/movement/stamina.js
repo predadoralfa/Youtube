@@ -1,8 +1,13 @@
 // server/state/movement/stamina.js
 
 const { DT_MAX } = require("./config");
-
-const MOVE_STAMINA_DRAIN_PER_SEC = 1;
+const {
+  MOVE_STAMINA_DRAIN_PER_SEC,
+  MOVE_STAMINA_DRAIN_WARN_RATIO,
+  MOVE_STAMINA_DRAIN_DANGER_RATIO,
+  MOVE_STAMINA_DRAIN_WARN_MULTIPLIER,
+  MOVE_STAMINA_DRAIN_DANGER_MULTIPLIER,
+} = require("../../config/movementConstants");
 const STAMINA_BASE_REGEN_PER_SEC = 0.5;
 const HP_BASE_REGEN_PER_SEC = 0.5;
 const DEFAULT_TERRAIN_DRAIN_MULTIPLIER = 1.0;
@@ -16,6 +21,20 @@ function clamp(n, min, max) {
 function toFiniteNumber(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function resolveCarryWeightDrainMultiplier(carryWeightRatio) {
+  const ratio = clamp(toFiniteNumber(carryWeightRatio, 0), 0, Number.POSITIVE_INFINITY);
+
+  if (ratio >= MOVE_STAMINA_DRAIN_DANGER_RATIO) {
+    return MOVE_STAMINA_DRAIN_DANGER_MULTIPLIER;
+  }
+
+  if (ratio >= MOVE_STAMINA_DRAIN_WARN_RATIO) {
+    return MOVE_STAMINA_DRAIN_WARN_MULTIPLIER;
+  }
+
+  return MOVE_STAMINA_DRAIN_PER_SEC;
 }
 
 function readRuntimeStaminaCurrent(rt) {
@@ -112,6 +131,7 @@ function applyVitalsTick(
   nowMs,
   {
     movedReal = false,
+    carryWeightRatio = 0,
     terrainDrainMultiplier = DEFAULT_TERRAIN_DRAIN_MULTIPLIER,
     regenMultiplier = DEFAULT_STAMINA_REGEN_MULTIPLIER,
     hpRegenMultiplier = DEFAULT_HP_REGEN_MULTIPLIER,
@@ -147,7 +167,9 @@ function applyVitalsTick(
 
   const hpRegen = HP_BASE_REGEN_PER_SEC * dt * toFiniteNumber(hpRegenMultiplier, 1.0);
   const drain = movedReal
-    ? MOVE_STAMINA_DRAIN_PER_SEC * dt * toFiniteNumber(terrainDrainMultiplier, 1.0)
+    ? resolveCarryWeightDrainMultiplier(carryWeightRatio) *
+      dt *
+      toFiniteNumber(terrainDrainMultiplier, 1.0)
     : 0;
   const regen = STAMINA_BASE_REGEN_PER_SEC * dt * toFiniteNumber(regenMultiplier, 1.0);
   const nextHpCurrent = clamp(hpCurrent + hpRegen, 0, hpMax);
