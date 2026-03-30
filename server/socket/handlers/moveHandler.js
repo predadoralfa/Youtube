@@ -36,7 +36,7 @@ function registerMoveHandler(socket) {
       const parsed = parseMoveIntentPayload(payload);
       if (!parsed) return;
 
-      const result = applyWASDIntent({
+      const result = await applyWASDIntent({
         runtime,
         nowMs,
         dir: parsed.dir,

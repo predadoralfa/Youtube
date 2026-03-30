@@ -7,9 +7,10 @@ const {
   MOVE_STAMINA_DRAIN_DANGER_RATIO,
   MOVE_STAMINA_DRAIN_WARN_MULTIPLIER,
   MOVE_STAMINA_DRAIN_DANGER_MULTIPLIER,
+  STAMINA_BASE_REGEN_PER_SEC,
+  HP_BASE_REGEN_PER_SEC,
+  MOVE_SPEED_AT_ZERO_STAMINA_MULTIPLIER,
 } = require("../../config/movementConstants");
-const STAMINA_BASE_REGEN_PER_SEC = 0.5;
-const HP_BASE_REGEN_PER_SEC = 0.5;
 const DEFAULT_TERRAIN_DRAIN_MULTIPLIER = 1.0;
 const DEFAULT_STAMINA_REGEN_MULTIPLIER = 1.0;
 const DEFAULT_HP_REGEN_MULTIPLIER = 1.0;
@@ -35,6 +36,48 @@ function resolveCarryWeightDrainMultiplier(carryWeightRatio) {
   }
 
   return MOVE_STAMINA_DRAIN_PER_SEC;
+}
+
+function resolveMoveSpeedMultiplierFromStamina(staminaCurrent, projectedStaminaAfterMove = null) {
+  const current = toFiniteNumber(staminaCurrent, 0);
+  const projected = projectedStaminaAfterMove == null ? null : toFiniteNumber(projectedStaminaAfterMove, current);
+
+  if (projected != null && projected <= 0) {
+    return MOVE_SPEED_AT_ZERO_STAMINA_MULTIPLIER;
+  }
+
+  return current <= 0 ? MOVE_SPEED_AT_ZERO_STAMINA_MULTIPLIER : 1;
+}
+
+function resolveStaminaPersistBucket(staminaCurrent, staminaMax) {
+  const max = Math.max(0, toFiniteNumber(staminaMax, 0));
+  if (max <= 0) return 0;
+
+  const ratio = clamp(toFiniteNumber(staminaCurrent, 0) / max, 0, 1);
+  return Math.max(0, Math.min(4, Math.floor(ratio * 4 + 1e-9)));
+}
+
+function syncStaminaPersistMarkers(rt, bucket) {
+  if (!rt) return;
+  const nextBucket = Math.max(0, Math.min(4, Number(bucket)));
+  rt._lastPersistedStaminaBucket = nextBucket;
+  rt._lastQueuedStaminaBucket = nextBucket;
+}
+
+function shouldQueueStaminaPersist(rt, staminaCurrent, staminaMax) {
+  const bucket = resolveStaminaPersistBucket(staminaCurrent, staminaMax);
+  const lastQueued = Number.isFinite(Number(rt?._lastQueuedStaminaBucket))
+    ? Number(rt._lastQueuedStaminaBucket)
+    : Number.isFinite(Number(rt?._lastPersistedStaminaBucket))
+      ? Number(rt._lastPersistedStaminaBucket)
+      : bucket;
+
+  const changed = bucket !== lastQueued;
+  if (changed && rt) {
+    rt._lastQueuedStaminaBucket = bucket;
+  }
+
+  return { changed, bucket, lastQueued };
 }
 
 function readRuntimeStaminaCurrent(rt) {
@@ -218,4 +261,9 @@ module.exports = {
   syncRuntimeStamina,
   applyVitalsTick,
   applyStaminaTick,
+  resolveCarryWeightDrainMultiplier,
+  resolveMoveSpeedMultiplierFromStamina,
+  resolveStaminaPersistBucket,
+  syncStaminaPersistMarkers,
+  shouldQueueStaminaPersist,
 };

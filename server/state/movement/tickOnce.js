@@ -9,13 +9,19 @@ const { ensureInventoryLoaded } = require("../inventory/loader");
 const { getEquipment } = require("../equipment/store");
 const { ensureEquipmentLoaded } = require("../equipment/loader");
 const { computeCarryWeight } = require("../inventory/weight");
+const { markStatsDirty } = require("../runtime/dirty");
 
 const { DT_MAX } = require("./config");
 const { COMBAT_BASE_COOLDOWN_MS } = require("../../config/combatConstants");
 const { computeDtSeconds, readRuntimeSpeedStrict } = require("./math");
 const { moveEntityTowardTarget } = require("./entityMotion");
 const { bumpRev, toDelta } = require("./entity");
-const { applyStaminaTick } = require("./stamina");
+const {
+  applyStaminaTick,
+  resolveCarryWeightDrainMultiplier,
+  resolveMoveSpeedMultiplierFromStamina,
+  shouldQueueStaminaPersist,
+} = require("./stamina");
 const { readHpCurrent, readHpMax } = require("../enemies/enemyEntity");
 const { emitDeltaToInterest } = require("./emit");
 const { handleChunkTransition } = require("./chunkTransition");
@@ -316,6 +322,13 @@ async function tickOnce(io, nowMsValue) {
 
     const speed = readRuntimeSpeedStrict(rt);
     if (speed == null) continue;
+    const currentStamina = rt?.staminaCurrent ?? rt?.stats?.staminaCurrent ?? rt?.combat?.staminaCurrent;
+    const carryWeight = await resolveCarryWeightContext(rt.userId);
+    const projectedDrain = resolveCarryWeightDrainMultiplier(carryWeight?.ratio ?? 0) * dt;
+    const moveSpeedMultiplier = resolveMoveSpeedMultiplierFromStamina(
+      currentStamina,
+      Number(currentStamina ?? 0) - projectedDrain
+    );
 
     // bounds obrigatório
     if (!rt.bounds) continue;
@@ -337,7 +350,7 @@ async function tickOnce(io, nowMsValue) {
     const movement = moveEntityTowardTarget({
       pos: rt.pos,
       target,
-      speed,
+      speed: speed * moveSpeedMultiplier,
       dt,
       bounds: rt.bounds,
       stopRadius: stopR,
@@ -467,11 +480,17 @@ async function tickOnce(io, nowMsValue) {
     const moved = movement.moved;
     const newYaw = movement.yaw;
     const yawChanged = newYaw != null && rt.yaw !== newYaw;
-    const carryWeight = moved ? await resolveCarryWeightContext(rt.userId) : null;
+    const carryWeightAfterMove = moved ? await resolveCarryWeightContext(rt.userId) : null;
     const staminaResult = applyStaminaTick(rt, t, {
       movedReal: moved,
-      carryWeightRatio: carryWeight?.ratio ?? 0,
+      carryWeightRatio: carryWeightAfterMove?.ratio ?? 0,
     });
+
+    const staminaState = shouldQueueStaminaPersist(
+      rt,
+      rt?.staminaCurrent ?? rt?.stats?.staminaCurrent ?? rt?.combat?.staminaCurrent,
+      rt?.staminaMax ?? rt?.stats?.staminaMax ?? rt?.combat?.staminaMax
+    );
 
     if (!moved && !yawChanged && !staminaResult.changed) continue;
 
@@ -479,7 +498,8 @@ async function tickOnce(io, nowMsValue) {
     if (newYaw != null) rt.yaw = newYaw;
     rt.action = "move";
 
-    if (staminaResult.changed) {
+    if (staminaState.changed) {
+      markStatsDirty(rt.userId, t);
     }
 
     bumpRev(rt);
@@ -547,8 +567,15 @@ async function tickOnce(io, nowMsValue) {
       movedReal: false,
     });
 
+    const staminaState = shouldQueueStaminaPersist(
+      rt,
+      rt?.staminaCurrent ?? rt?.stats?.staminaCurrent ?? rt?.combat?.staminaCurrent,
+      rt?.staminaMax ?? rt?.stats?.staminaMax ?? rt?.combat?.staminaMax
+    );
+
     if (!staminaResult.changed) continue;
 
+    markStatsDirty(rt.userId, t);
     bumpRev(rt);
     markRuntimeDirty(rt.userId, t);
 

@@ -2,6 +2,10 @@
 const db = require("../../models");
 
 const { getRuntime } = require("../runtimeStore");
+const {
+  resolveStaminaPersistBucket,
+  syncStaminaPersistMarkers,
+} = require("../movement/stamina");
 
 function toNum(value, fallback = 0) {
   const n = Number(value);
@@ -115,17 +119,22 @@ async function flushUserRuntime(userId, now) {
  * Flush dos stats de combate/sobrevivência.
  * Hoje persistimos HP/stamina e os atributos de combate do runtime.
  */
-async function flushUserStats(userId, now) {
+async function flushUserStats(userId, now, { force = false } = {}) {
   const rt = getRuntime(userId);
   if (!rt) return false;
-  if (!rt.dirtyStats) return false;
+  if (!force && !rt.dirtyStats) return false;
 
   try {
+    const staminaCurrentRaw = readRuntimeCombatField(rt, "staminaCurrent", 100);
+    const staminaMax = readRuntimeCombatField(rt, "staminaMax", 100);
+    const staminaBucket = resolveStaminaPersistBucket(staminaCurrentRaw, staminaMax);
+    const staminaCurrent = staminaBucket * (staminaMax / 4);
+
     const payload = {
       hp_current: readRuntimeCombatField(rt, "hpCurrent", 100),
       hp_max: readRuntimeCombatField(rt, "hpMax", 100),
-      stamina_current: readRuntimeCombatField(rt, "staminaCurrent", 100),
-      stamina_max: readRuntimeCombatField(rt, "staminaMax", 100),
+      stamina_current: staminaCurrent,
+      stamina_max: staminaMax,
       attack_power: readRuntimeCombatField(rt, "attackPower", 10),
       defense: readRuntimeCombatField(rt, "defense", 0),
       attack_speed: readRuntimeCombatField(rt, "attackSpeed", 1),
@@ -137,6 +146,7 @@ async function flushUserStats(userId, now) {
       where: { user_id: rt.userId },
     });
 
+    syncStaminaPersistMarkers(rt, staminaBucket);
     rt.dirtyStats = false;
     return true;
   } catch (err) {

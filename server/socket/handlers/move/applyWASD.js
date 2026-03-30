@@ -1,17 +1,34 @@
 // server/socket/handlers/move/applyWASD.js
 
 const { DT_MAX } = require("./config");
+const { ensureInventoryLoaded } = require("../../../state/inventory/loader");
+const { ensureEquipmentLoaded } = require("../../../state/equipment/loader");
+const { computeCarryWeight } = require("../../../state/inventory/weight");
+const { markStatsDirty } = require("../../../state/runtime/dirty");
 
 const {
   normalize2D,
   readRuntimeSpeedStrict,
   computeDtSeconds,
-} = require("../../../state/movement/math");
+  } = require("../../../state/movement/math");
 const { moveEntityByDirection } = require("../../../state/movement/entityMotion");
 
 const { isFiniteNumber } = require("./validate");
 const { clearPlayerCombat } = require("./clearCombat");
-const { applyStaminaTick } = require("../../../state/movement/stamina");
+const {
+  applyStaminaTick,
+  resolveCarryWeightDrainMultiplier,
+  resolveMoveSpeedMultiplierFromStamina,
+  shouldQueueStaminaPersist,
+} = require("../../../state/movement/stamina");
+
+async function resolveCarryWeightRatio(userId) {
+  const invRt = await ensureInventoryLoaded(userId);
+  const eqRt = await ensureEquipmentLoaded(userId);
+  const current = computeCarryWeight(invRt, eqRt).current;
+  const max = Number.isFinite(Number(invRt?.carryWeight)) ? Number(invRt.carryWeight) : 20;
+  return max > 0 ? current / max : 0;
+}
 
 /**
  * Aplica um intent WASD no runtime.
@@ -19,7 +36,7 @@ const { applyStaminaTick } = require("../../../state/movement/stamina");
  * - NÃO toca DB.
  * - Retorna um resumo do que mudou.
  */
-function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
+async function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
   // dt autoritativo do servidor (não confia no client)
   const dt = computeDtSeconds(nowMs, runtime.wasdTickAtMs, DT_MAX);
   runtime.wasdTickAtMs = nowMs;
@@ -93,6 +110,14 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
 
   let moved = false;
   let staminaChanged = false;
+  const currentStamina =
+    runtime?.staminaCurrent ?? runtime?.stats?.staminaCurrent ?? runtime?.combat?.staminaCurrent;
+  const carryWeightRatio = await resolveCarryWeightRatio(runtime.userId);
+  const projectedDrain = resolveCarryWeightDrainMultiplier(carryWeightRatio) * dt;
+  const moveSpeedMultiplier = resolveMoveSpeedMultiplierFromStamina(
+    currentStamina,
+    Number(currentStamina ?? 0) - projectedDrain
+  );
 
   // Só tenta mover se houver direção não-nula
   if (!(d.x === 0 && d.z === 0)) {
@@ -111,7 +136,7 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
     const movedResult = moveEntityByDirection({
       pos: runtime.pos,
       dir: d,
-      speed,
+      speed: speed * moveSpeedMultiplier,
       dt,
       bounds: runtime.bounds,
     });
@@ -133,8 +158,19 @@ function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
       moved = true;
       const staminaResult = applyStaminaTick(runtime, nowMs, {
         movedReal: true,
+        carryWeightRatio,
       });
-      staminaChanged = !!staminaResult.changed;
+      staminaChanged = !!staminaResult.staminaChanged;
+      if (staminaChanged) {
+        const staminaState = shouldQueueStaminaPersist(
+          runtime,
+          runtime?.staminaCurrent ?? runtime?.stats?.staminaCurrent ?? runtime?.combat?.staminaCurrent,
+          runtime?.staminaMax ?? runtime?.stats?.staminaMax ?? runtime?.combat?.staminaMax
+        );
+        if (staminaState.changed) {
+          markStatsDirty(runtime.userId, nowMs);
+        }
+      }
     }
   }
 

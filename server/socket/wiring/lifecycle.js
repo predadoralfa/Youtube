@@ -5,7 +5,10 @@ const {
   setConnectionState,
 } = require("../../state/runtimeStore");
 
-const { flushUserRuntimeImmediate } = require("../../state/persistenceManager");
+const {
+  flushUserRuntimeImmediate,
+  flushUserStatsImmediate,
+} = require("../../state/persistenceManager");
 
 function nowMs() {
   return Date.now();
@@ -28,6 +31,7 @@ async function onConnected(userId) {
   );
 
   await flushUserRuntimeImmediate(userId);
+  await flushUserStatsImmediate(userId);
 }
 
 /**
@@ -58,6 +62,7 @@ function installDisconnectHandler({ socket, userId, clearIfCurrentSession }) {
       );
 
       await flushUserRuntimeImmediate(userId);
+      await flushUserStatsImmediate(userId);
 
       console.log(
         `[SOCKET] disconnect pending user=${userId} reason=${reason} offlineAt=${offlineAt}`

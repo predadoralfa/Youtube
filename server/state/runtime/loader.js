@@ -6,6 +6,10 @@ const { computeChunk } = require("./chunk");
 const { getRuntime, setRuntime, hasRuntime } = require("./store");
 const { markStatsDirty } = require("./dirty");
 const { loadPlayerCombatStats } = require("./combatLoader");
+const {
+  resolveStaminaPersistBucket,
+  syncStaminaPersistMarkers,
+} = require("../movement/stamina");
 
 function sanitizeSpeed(value) {
   const n = Number(value);
@@ -252,6 +256,10 @@ async function ensureRuntimeLoaded(userId) {
   };
 
   applyCombatStatsToRuntime(runtime, combatStats);
+  syncStaminaPersistMarkers(
+    runtime,
+    resolveStaminaPersistBucket(combatStats?.staminaCurrent, combatStats?.staminaMax)
+  );
 
   runtime.chunk = computeChunk(runtime.pos);
 
@@ -288,6 +296,10 @@ async function refreshRuntimeCombatStats(userId) {
 
   const combatStats = await loadPlayerCombatStats(userId);
   applyCombatStatsToRuntime(runtime, combatStats);
+  syncStaminaPersistMarkers(
+    runtime,
+    resolveStaminaPersistBucket(combatStats?.staminaCurrent, combatStats?.staminaMax)
+  );
 
   markStatsDirty(userId);
   return runtime;

@@ -15,6 +15,10 @@ async function flushUserRuntimeImmediate(userId) {
   return flushUserRuntime(userId, nowMs());
 }
 
+async function flushUserStatsImmediate(userId) {
+  return flushUserStats(userId, nowMs(), { force: true });
+}
+
 module.exports = {
   startPersistenceLoop,
   stopPersistenceLoop,
@@ -25,6 +29,7 @@ module.exports = {
   flushUserRuntime,
   flushUserStats,
   flushUserRuntimeImmediate,
+  flushUserStatsImmediate,
 
   // eventos (ETAPA 6)
   persistenceEvents,

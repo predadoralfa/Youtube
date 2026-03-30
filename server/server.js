@@ -4,8 +4,14 @@ const express = require("express");
 const cors = require("cors");
 const { createServer } = require("http");
 const { Server } = require("socket.io");
-const { startPersistenceLoop, stopPersistenceLoop } = require("./state/persistenceManager"); // 👈 add stop
+const {
+  startPersistenceLoop,
+  stopPersistenceLoop,
+  flushUserRuntimeImmediate,
+  flushUserStatsImmediate,
+} = require("./state/persistenceManager"); // 👈 add stop
 const { startMovementTick, stopMovementTick } = require("./state/movementTick"); // ✅ NOVO
+const { getAllRuntimes } = require("./state/runtimeStore");
 
 const db = require("./models");
 
@@ -73,6 +79,10 @@ async function bootstrap() {
       try {
         stopMovementTick();   // ✅ NOVO
         stopPersistenceLoop();
+        for (const rt of getAllRuntimes()) {
+          await flushUserRuntimeImmediate(rt.userId);
+          await flushUserStatsImmediate(rt.userId);
+        }
         if (httpServer) {
           await new Promise((resolve) => httpServer.close(() => resolve()));
         }
