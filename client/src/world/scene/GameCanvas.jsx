@@ -20,6 +20,7 @@ import { createPlayerMesh } from "../entities/character/player";
 import { createActorMesh } from "../entities/actors/ActorFactory";
 import { TargetMarker } from "./TargetMarker";
 import { FloatingDamageText } from "./FloatingDamageText";
+import { FloatingLootText } from "./FloatingLootText";
 import { HPBar } from "./HPBar";
 
 const COLOR_SELF = "#ff2d55";
@@ -222,6 +223,7 @@ export function GameCanvas({
   onInputIntent,
   onTargetSelect,
   onTargetClear,
+  lootNotifications = [],
 }) {
   const containerRef = useRef(null);
 
@@ -1160,6 +1162,17 @@ export function GameCanvas({
         }}
       >
         <FloatingDamageText damages={floatingDamages} />
+      </div>
+
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 1090,
+          pointerEvents: "none",
+        }}
+      >
+        <FloatingLootText loots={lootNotifications} />
       </div>
 
       <div

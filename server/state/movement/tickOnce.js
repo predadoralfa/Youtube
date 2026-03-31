@@ -391,12 +391,13 @@ async function tickOnce(io, nowMsValue) {
 
                   const activeSocket = getActiveSocket(rt.userId);
                   if (activeSocket) {
-                    activeSocket.emit("actor:collected", {
-                      actorId: String(interactActorId),
-                      actorDisabled: true,
-                      inventory: null,
-                    });
-                  }
+                  activeSocket.emit("actor:collected", {
+                    actorId: String(interactActorId),
+                    actorDisabled: true,
+                    inventory: null,
+                    loot: null,
+                  });
+                }
                 }
 
                 console.warn(
@@ -419,6 +420,7 @@ async function tickOnce(io, nowMsValue) {
                   actorId: String(interactActorId),
                   actorDisabled: result.actorDisabled,
                   inventory: result.inventoryFull,
+                  loot: result.loot ?? null,
                 });
               }
             })

@@ -32,12 +32,6 @@ export function useActorCollection({
       const actorDisabled = Boolean(payload?.actorDisabled);
       const inventoryFull = payload?.inventoryFull ?? payload?.inventory ?? null;
 
-      console.log("[COLLECT] actor:collected", {
-        actorId,
-        actorDisabled,
-        hasInventory: !!inventoryFull,
-      });
-
       // ✅ Atualizar inventário se recebeu novo payload
       if (inventoryFull?.ok === true && onInventoryUpdate) {
         onInventoryUpdate(inventoryFull);

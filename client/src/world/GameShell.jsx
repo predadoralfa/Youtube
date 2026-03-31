@@ -64,6 +64,78 @@ function toDisplayInt(value, fallback = 0) {
   return Math.max(0, Math.floor(n));
 }
 
+function buildInventoryTotals(snapshot) {
+  const containers = Array.isArray(snapshot?.containers) ? snapshot.containers : [];
+  const itemInstances = Array.isArray(snapshot?.itemInstances) ? snapshot.itemInstances : [];
+  const itemDefs = Array.isArray(snapshot?.itemDefs) ? snapshot.itemDefs : [];
+
+  const itemInstanceById = new Map(
+    itemInstances
+      .filter((it) => it?.id != null)
+      .map((it) => [String(it.id), it])
+  );
+
+  const itemDefById = new Map(
+    itemDefs
+      .filter((def) => def?.id != null)
+      .map((def) => [String(def.id), def])
+  );
+
+  const totals = new Map();
+
+  for (const container of containers) {
+    const slots = Array.isArray(container?.slots) ? container.slots : [];
+    for (const slot of slots) {
+      const itemInstanceId = slot?.itemInstanceId;
+      if (itemInstanceId == null) continue;
+
+      const inst = itemInstanceById.get(String(itemInstanceId));
+      if (!inst) continue;
+
+      const def = itemDefById.get(String(inst.itemDefId)) ?? null;
+      const itemDefId = String(inst.itemDefId ?? "unknown");
+      const qty = toDisplayInt(slot?.qty ?? 0, 0);
+      if (qty <= 0) continue;
+
+      const current = totals.get(itemDefId) ?? {
+        itemDefId,
+        qty: 0,
+        name: def?.name ?? `Item ${itemDefId}`,
+      };
+
+      current.qty += qty;
+      if (!current.name && def?.name) current.name = def.name;
+      totals.set(itemDefId, current);
+    }
+  }
+
+  return totals;
+}
+
+function buildLootNotifications(prevSnapshot, nextSnapshot) {
+  if (!nextSnapshot) return [];
+
+  const prevTotals = buildInventoryTotals(prevSnapshot);
+  const nextTotals = buildInventoryTotals(nextSnapshot);
+  const now = Date.now();
+
+  const messages = [];
+  for (const [itemDefId, nextEntry] of nextTotals.entries()) {
+    const prevQty = prevTotals.get(itemDefId)?.qty ?? 0;
+    const deltaQty = Number(nextEntry.qty ?? 0) - Number(prevQty ?? 0);
+    if (deltaQty <= 0) continue;
+
+    messages.push({
+      id: `loot:${itemDefId}:${now}:${Math.random().toString(36).slice(2, 8)}`,
+      text: `+${deltaQty} ${nextEntry.name ?? `Item ${itemDefId}`}`,
+      startedAt: now,
+      ttlMs: 1400,
+    });
+  }
+
+  return messages;
+}
+
 function debugIds(...args) {
   if (!DEBUG_IDS) return;
   // console.log(...args);
@@ -150,10 +222,12 @@ export function GameShell() {
   const [equipmentSnapshot, setEquipmentSnapshot] = useState(null);
   const [inventoryMessage, setInventoryMessage] = useState(null);
   const [equipmentMessage, setEquipmentMessage] = useState(null);
+  const [lootNotifications, setLootNotifications] = useState([]);
 
   const socketRef = useRef(null);
   const joinedRef = useRef(false);
   const pendingInvRequestRef = useRef(false);
+  const inventorySnapshotRef = useRef(null);
 
   // { kind: "ACTOR"|"PLAYER"|"ENEMY", id: "123" } | null
   const selectedTargetRef = useRef(null);
@@ -166,6 +240,10 @@ export function GameShell() {
   if (!worldStoreRef.current) {
     worldStoreRef.current = createEntitiesStore();
   }
+
+  useEffect(() => {
+    inventorySnapshotRef.current = inventorySnapshot ?? null;
+  }, [inventorySnapshot]);
 
   const requestInventoryFull = useCallback(() => {
     const s = socketRef.current;
@@ -603,14 +681,46 @@ export function GameShell() {
           const actorId = toId(payload?.actorId ?? null);
           const actorDisabled = Boolean(payload?.actorDisabled);
           const inventoryFull = payload?.inventory ?? payload?.inventoryFull ?? null;
+          const lootInfo = payload?.loot ?? null;
+          console.log("[LOOT_TRACE] actor:collected received", {
+            actorId,
+            actorDisabled,
+            hasInventory: inventoryFull?.ok === true,
+            hasLoot: Boolean(lootInfo),
+          });
           if (!actorId) return;
 
           if (inventoryFull?.ok === true) {
+            const lootMessages = lootInfo?.qty > 0
+              ? [{
+                  id: `loot:${actorId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+                  text: `+${Number(lootInfo.qty)} ${lootInfo.itemName ?? lootInfo.itemDefId ?? "Loot"}`,
+                  startedAt: Date.now(),
+                  ttlMs: 1400,
+                }]
+              : buildLootNotifications(
+                  inventorySnapshotRef.current,
+                  inventoryFull
+                );
+            console.log("[LOOT_TRACE] loot delta", {
+              prevInventoryOk: Boolean(inventorySnapshotRef.current?.ok === true),
+              lootCount: lootMessages.length,
+              lootMessages,
+            });
+            if (lootMessages.length > 0) {
+              setLootNotifications((current) => [
+                ...current,
+                ...lootMessages,
+              ].slice(-8));
+            }
             setInventorySnapshot(inventoryFull);
             if (inventoryFull?.equipment?.ok === true) {
               setEquipmentSnapshot(inventoryFull.equipment);
             }
             setInventoryMessage(null);
+            console.log("[LOOT_TRACE] inventory snapshot updated", {
+              lootCount: lootMessages.length,
+            });
           }
 
           setSnapshot((prev) => {
@@ -960,6 +1070,7 @@ export function GameShell() {
         onInputIntent={handleInputIntent}
         onTargetSelect={onTargetSelect}
         onTargetClear={onTargetClear}
+        lootNotifications={lootNotifications}
       />
 
         <InventoryModal

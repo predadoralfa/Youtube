@@ -435,6 +435,11 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
       ok: true,
       actorDisabled,
       inventoryFull,
+      loot: {
+        itemDefId: String(itemDef.id),
+        itemName: itemDef.name ?? itemDef.code ?? null,
+        qty: qtyToMove,
+      },
     };
   });
 }
