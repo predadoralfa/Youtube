@@ -47,6 +47,20 @@ function normalizeVitals(raw) {
     stats?.staminaMax ??
     stats?.stamina_max;
 
+  const hungerCurrent =
+    vitals?.hunger?.current ??
+    raw?.hungerCurrent ??
+    raw?.hunger_current ??
+    stats?.hungerCurrent ??
+    stats?.hunger_current;
+
+  const hungerMax =
+    vitals?.hunger?.max ??
+    raw?.hungerMax ??
+    raw?.hunger_max ??
+    stats?.hungerMax ??
+    stats?.hunger_max;
+
   return {
     hp: {
       current: toDisplayInt(hpCurrent, 0),
@@ -55,6 +69,10 @@ function normalizeVitals(raw) {
     stamina: {
       current: toDisplayInt(staminaCurrent, 0),
       max: toDisplayInt(staminaMax, 0),
+    },
+    hunger: {
+      current: toDisplayInt(hungerCurrent, 0),
+      max: toDisplayInt(hungerMax, 0),
     },
   };
 }
@@ -116,6 +134,7 @@ function mergeVitals(baseVitals, rawDelta, nextHpCompat) {
   const current = baseVitals ?? {
     hp: { current: 0, max: 0 },
     stamina: { current: 0, max: 0 },
+    hunger: { current: 0, max: 0 },
   };
 
   const deltaVitals = rawDelta?.vitals ?? null;
@@ -155,6 +174,22 @@ function mergeVitals(baseVitals, rawDelta, nextHpCompat) {
     stats?.stamina_max ??
     current.stamina.max;
 
+  const hungerCurrent =
+    deltaVitals?.hunger?.current ??
+    rawDelta?.hungerCurrent ??
+    rawDelta?.hunger_current ??
+    stats?.hungerCurrent ??
+    stats?.hunger_current ??
+    current.hunger.current;
+
+  const hungerMax =
+    deltaVitals?.hunger?.max ??
+    rawDelta?.hungerMax ??
+    rawDelta?.hunger_max ??
+    stats?.hungerMax ??
+    stats?.hunger_max ??
+    current.hunger.max;
+
   return {
     hp: {
       current: toDisplayInt(hpCurrent, 0),
@@ -163,6 +198,10 @@ function mergeVitals(baseVitals, rawDelta, nextHpCompat) {
     stamina: {
       current: toDisplayInt(staminaCurrent, 0),
       max: toDisplayInt(staminaMax, 0),
+    },
+    hunger: {
+      current: toDisplayInt(hungerCurrent, 0),
+      max: toDisplayInt(hungerMax, 0),
     },
   };
 }
@@ -328,6 +367,7 @@ export function createEntitiesStore() {
         vitals: {
           hp: { current: 0, max: 0 },
           stamina: { current: 0, max: 0 },
+          hunger: { current: 0, max: 0 },
         },
         action: "idle",
         rev: -1,

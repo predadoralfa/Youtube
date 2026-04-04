@@ -73,6 +73,8 @@ const bootstrap = async (req, res) => {
     const hpMax = combatStats.hpMax;
     const staminaCurrent = combatStats.staminaCurrent;
     const staminaMax = combatStats.staminaMax;
+    const hungerCurrent = combatStats.hungerCurrent;
+    const hungerMax = combatStats.hungerMax;
 
     // 2) Instância + Local template (geometry + visual + materiais/mesh)
     const instance = await GaInstance.findByPk(runtime.instance_id, {
@@ -251,6 +253,10 @@ const bootstrap = async (req, res) => {
               current: staminaCurrent,
               max: staminaMax,
             },
+            hunger: {
+              current: hungerCurrent,
+              max: hungerMax,
+            },
           },
 
           connection_state: runtime.connection_state,
@@ -268,6 +274,10 @@ const bootstrap = async (req, res) => {
               stamina: {
                 current: staminaCurrent,
                 max: staminaMax,
+              },
+              hunger: {
+                current: hungerCurrent,
+                max: hungerMax,
               },
             },
           },

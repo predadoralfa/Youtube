@@ -507,6 +507,23 @@
   gap: 10px;
 }
 
+.equip-row {
+  display: grid;
+  gap: 8px;
+}
+
+.equip-row--triple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.equip-row--double {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.equip-row--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .equip-list--hands {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -637,6 +654,13 @@
   font-size: 13px;
   line-height: 1.15;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .equip-row--triple,
+  .equip-row--double {
+    grid-template-columns: 1fr;
+  }
 }
 
 .equip-unequip {

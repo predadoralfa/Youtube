@@ -15,6 +15,14 @@ const WEAR_SLOT_ORDER = [
   "RING_2",
 ];
 
+const WEAR_SLOT_ROWS = [
+  ["HEAD", "NECK_1", "NECK_2"],
+  ["TORSO", "BACK"],
+  ["LEGS", "BELT"],
+  ["HANDS_WEAR", "RING_1", "RING_2"],
+  ["FEET"],
+];
+
 const HANDS_SLOT_ORDER = ["HAND_L", "HAND_R"];
 
 function toId(raw) {
@@ -137,6 +145,13 @@ export function InventoryModal({
     });
 
   const wearSlots = useMemo(() => buildSlotList(WEAR_SLOT_ORDER, "WEAR"), [equipmentIndex]);
+  const wearSlotRows = useMemo(
+    () =>
+      WEAR_SLOT_ROWS.map((row) =>
+        row.map((slotCode) => wearSlots.find((slot) => slot.slotCode === slotCode)).filter(Boolean)
+      ),
+    [wearSlots]
+  );
   const handSlots = useMemo(() => buildSlotList(HANDS_SLOT_ORDER, "USAGE"), [equipmentIndex]);
 
   const debug = useMemo(() => {
@@ -1057,49 +1072,50 @@ export function InventoryModal({
 
                 <div className="equip-group">
                   <div className="equip-list">
-                    {wearSlots.map((slot) => {
-                      const item = slot.item;
-                      const occupied = Boolean(slot.itemInstanceId);
-                      const compatible = dragItem
-                        ? isSlotCompatible(dragItem.itemInstanceId, slot.slotCode)
-                        : false;
-                      const canDrag = occupied && !heldStateActive;
+                    {wearSlotRows.map((row, rowIndex) => (
+                      <div
+                        className={`equip-row equip-row--${row.length === 1 ? "single" : row.length === 2 ? "double" : "triple"}`}
+                        key={`wear-row-${rowIndex}`}
+                      >
+                        {row.map((slot) => {
+                          const item = slot.item;
+                          const occupied = Boolean(slot.itemInstanceId);
+                          const compatible = dragItem
+                            ? isSlotCompatible(dragItem.itemInstanceId, slot.slotCode)
+                            : false;
+                          const canDrag = occupied && !heldStateActive;
 
-                      return (
-                        <div
-                          className={[
-                            "equip-slot",
-                            occupied ? "is-occupied" : "is-empty",
-                            compatible ? "is-drop-ready" : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          key={slot.slotCode}
-                          draggable={canDrag}
-                          onDragStart={canDrag ? handleDragStart(slot.itemInstanceId, slot.slotCode) : undefined}
-                          onDragEnd={handleDragEnd}
-                          onDragOver={(e) => {
-                            if (dragItem) e.preventDefault();
-                          }}
-                          onDrop={handleInventoryDropHint(slot.slotCode)}
-                          onMouseUp={handleEquipmentSlotMouseUp(slot, occupied)}
-                        >
-                          <div className="equip-slot-head">
-                            <span className="equip-slot-code">{slot.slotCode}</span>
-                          </div>
+                          return (
+                            <div
+                              className={[
+                                "equip-slot",
+                                occupied ? "is-occupied" : "is-empty",
+                                compatible ? "is-drop-ready" : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                              key={slot.slotCode}
+                              draggable={canDrag}
+                              onDragStart={canDrag ? handleDragStart(slot.itemInstanceId, slot.slotCode) : undefined}
+                              onDragEnd={handleDragEnd}
+                              onDragOver={(e) => {
+                                if (dragItem) e.preventDefault();
+                              }}
+                              onDrop={handleInventoryDropHint(slot.slotCode)}
+                              onMouseUp={handleEquipmentSlotMouseUp(slot, occupied)}
+                            >
+                              <div className="equip-slot-head">
+                                <span className="equip-slot-code">{slot.slotCode}</span>
+                              </div>
 
-                          <div className="equip-slot-body">
-                            {item ? (
-                              <>
-                                <div className="equip-item-name">{item.name || item.code || "Equipped item"}</div>
-                              </>
-                            ) : (
-                              <div className="equip-empty">Drop compatible item here</div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                              <div className="equip-slot-body">
+                                {item ? <div className="equip-item-name">{item.name || item.code || "Equipped item"}</div> : null}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </section>

@@ -181,6 +181,18 @@ function normalizeVitals(raw) {
     raw?.stamina_max ??
     0;
 
+  const hungerCurrent =
+    raw?.vitals?.hunger?.current ??
+    raw?.hungerCurrent ??
+    raw?.hunger_current ??
+    0;
+
+  const hungerMax =
+    raw?.vitals?.hunger?.max ??
+    raw?.hungerMax ??
+    raw?.hunger_max ??
+    0;
+
   return {
     hp: {
       current: toDisplayInt(hpCurrent, 0),
@@ -189,6 +201,10 @@ function normalizeVitals(raw) {
     stamina: {
       current: toDisplayInt(staminaCurrent, 0),
       max: toDisplayInt(staminaMax, 0),
+    },
+    hunger: {
+      current: toDisplayInt(hungerCurrent, 0),
+      max: toDisplayInt(hungerMax, 0),
     },
   };
 }
@@ -209,6 +225,7 @@ function pickBestSelfVitals(snapshot, selfEntity) {
   return {
     hp: { current: 0, max: 0 },
     stamina: { current: 0, max: 0 },
+    hunger: { current: 0, max: 0 },
   };
 }
 
@@ -973,6 +990,7 @@ export function GameShell() {
                 max: hpMax,
               },
               stamina: currentVitals?.stamina ?? { current: 0, max: 0 },
+              hunger: currentVitals?.hunger ?? { current: 0, max: 0 },
             };
 
             return {

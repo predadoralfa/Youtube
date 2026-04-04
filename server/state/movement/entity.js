@@ -46,6 +46,26 @@ function readStaminaMax(rt) {
   );
 }
 
+function readHungerCurrent(rt) {
+  return toNum(
+    rt?.hungerCurrent ??
+      rt?.hunger_current ??
+      rt?.stats?.hungerCurrent ??
+      rt?.stats?.hunger_current,
+    0
+  );
+}
+
+function readHungerMax(rt) {
+  return toNum(
+    rt?.hungerMax ??
+      rt?.hunger_max ??
+      rt?.stats?.hungerMax ??
+      rt?.stats?.hunger_max,
+    0
+  );
+}
+
 function bumpRev(rt) {
   const cur = Number(rt.rev ?? 0);
   rt.rev = Number.isFinite(cur) ? cur + 1 : 1;
@@ -56,6 +76,8 @@ function toEntity(rt) {
   const hpMax = readHpMax(rt);
   const staminaCurrent = readStaminaCurrent(rt);
   const staminaMax = readStaminaMax(rt);
+  const hungerCurrent = readHungerCurrent(rt);
+  const hungerMax = readHungerMax(rt);
 
   return {
     entityId: String(rt.userId),
@@ -76,6 +98,10 @@ function toEntity(rt) {
         current: staminaCurrent,
         max: staminaMax,
       },
+      hunger: {
+        current: hungerCurrent,
+        max: hungerMax,
+      },
     },
   };
 }
@@ -85,6 +111,8 @@ function toDelta(rt) {
   const hpMax = readHpMax(rt);
   const staminaCurrent = readStaminaCurrent(rt);
   const staminaMax = readStaminaMax(rt);
+  const hungerCurrent = readHungerCurrent(rt);
+  const hungerMax = readHungerMax(rt);
 
   return {
     entityId: String(rt.userId),
@@ -103,6 +131,10 @@ function toDelta(rt) {
       stamina: {
         current: staminaCurrent,
         max: staminaMax,
+      },
+      hunger: {
+        current: hungerCurrent,
+        max: hungerMax,
       },
     },
   };

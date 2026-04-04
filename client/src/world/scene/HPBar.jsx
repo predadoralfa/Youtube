@@ -109,23 +109,29 @@ export function HPBar({
   // stamina opcional
   staminaCurrent = null,
   staminaMax = null,
+  hungerCurrent = null,
+  hungerMax = null,
 
   // aparência
   width = 60,
   hpHeight = 8,
   staminaHeight = 6,
+  hungerHeight = 6,
   gap = 4,
 
   // modo
   mode = "world", // "world" | "hud"
   showHpText = true,
   showStaminaText = false,
+  showHungerText = false,
   showStamina = false,
+  showHunger = false,
 
   // cores
   hpColorHigh = "#ef4444",
   hpColorLow = "#b91c1c",
   staminaColor = "#facc15",
+  hungerColor = "#38bdf8",
   trackColor = "#1a1a1a",
   borderColor = "#444",
   textColor = "#ffffff",
@@ -143,6 +149,12 @@ export function HPBar({
     staminaCurrent != null &&
     staminaMax != null &&
     Number(staminaMax) > 0;
+
+  const hasHunger =
+    showHunger &&
+    hungerCurrent != null &&
+    hungerMax != null &&
+    Number(hungerMax) > 0;
 
   const wrapperStyle =
     mode === "hud"
@@ -191,6 +203,22 @@ export function HPBar({
           backgroundColor={trackColor}
           borderColor={borderColor}
           showText={showStaminaText}
+          textColor={textColor}
+          fontSize="10px"
+          label=""
+        />
+      ) : null}
+
+      {hasHunger ? (
+        <VitalRow
+          width={`${width}px`}
+          height={hungerHeight}
+          current={hungerCurrent}
+          max={hungerMax}
+          fillColor={hungerColor}
+          backgroundColor={trackColor}
+          borderColor={borderColor}
+          showText={showHungerText}
           textColor={textColor}
           fontSize="10px"
           label=""

@@ -38,6 +38,8 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
   const hpMax = combatStats?.hpMax;
   const staminaCurrent = combatStats?.staminaCurrent;
   const staminaMax = combatStats?.staminaMax;
+  const hungerCurrent = combatStats?.hungerCurrent;
+  const hungerMax = combatStats?.hungerMax;
   const attackPower = combatStats?.attackPower;
   const defense = combatStats?.defense;
   const attackSpeed = combatStats?.attackSpeed;
@@ -48,6 +50,8 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
     hpMax,
     staminaCurrent,
     staminaMax,
+    hungerCurrent,
+    hungerMax,
     attackPower,
     defense,
     attackSpeed,
@@ -66,6 +70,8 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
   runtime.hpMax = hpMax;
   runtime.staminaCurrent = staminaCurrent;
   runtime.staminaMax = staminaMax;
+  runtime.hungerCurrent = hungerCurrent;
+  runtime.hungerMax = hungerMax;
   runtime.attackPower = attackPower;
   runtime.defense = defense;
   runtime.attackSpeed = attackSpeed;
@@ -78,10 +84,28 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
     hpMax,
     staminaCurrent,
     staminaMax,
+    hungerCurrent,
+    hungerMax,
     attackPower,
     defense,
     attackSpeed,
     attackRange,
+  };
+
+  runtime.vitals = {
+    ...(runtime.vitals ?? {}),
+    hp: {
+      current: hpCurrent,
+      max: hpMax,
+    },
+    stamina: {
+      current: staminaCurrent,
+      max: staminaMax,
+    },
+    hunger: {
+      current: hungerCurrent,
+      max: hungerMax,
+    },
   };
 
   return runtime;
@@ -178,6 +202,8 @@ async function ensureRuntimeLoaded(userId) {
     hpMax: combatStats?.hpMax,
     staminaCurrent: combatStats?.staminaCurrent,
     staminaMax: combatStats?.staminaMax,
+    hungerCurrent: combatStats?.hungerCurrent,
+    hungerMax: combatStats?.hungerMax,
     action: "idle",
     rev: 0,
     chunk: null, // { cx, cz } preenchido abaixo
@@ -232,6 +258,8 @@ async function ensureRuntimeLoaded(userId) {
       hpMax: combatStats?.hpMax,
       staminaCurrent: combatStats?.staminaCurrent,
       staminaMax: combatStats?.staminaMax,
+      hungerCurrent: combatStats?.hungerCurrent,
+      hungerMax: combatStats?.hungerMax,
       attackPower: combatStats?.attackPower,
       defense: combatStats?.defense,
       attackSpeed: combatStats?.attackSpeed,

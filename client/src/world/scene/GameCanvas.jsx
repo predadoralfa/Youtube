@@ -106,11 +106,25 @@ function readEntityVitals(entity) {
     entity?.stamina_max ??
     0;
 
+  const hungerCurrent =
+    entity?.vitals?.hunger?.current ??
+    entity?.hungerCurrent ??
+    entity?.hunger_current ??
+    0;
+
+  const hungerMax =
+    entity?.vitals?.hunger?.max ??
+    entity?.hungerMax ??
+    entity?.hunger_max ??
+    0;
+
   return {
     hpCurrent: toDisplayInt(hpCurrent, 0),
     hpMax: toDisplayInt(hpMax, 0),
     staminaCurrent: toDisplayInt(staminaCurrent, 0),
     staminaMax: toDisplayInt(staminaMax, 0),
+    hungerCurrent: toDisplayInt(hungerCurrent, 0),
+    hungerMax: toDisplayInt(hungerMax, 0),
   };
 }
 
@@ -419,6 +433,8 @@ export function GameCanvas({
         hpMax: vitals.hpMax,
         staminaCurrent: vitals.staminaCurrent,
         staminaMax: vitals.staminaMax,
+        hungerCurrent: vitals.hungerCurrent,
+        hungerMax: vitals.hungerMax,
       });
     });
   }, [worldStoreRef]);
@@ -865,6 +881,8 @@ export function GameCanvas({
               hpMax: vitals.hpMax,
               staminaCurrent: vitals.staminaCurrent,
               staminaMax: vitals.staminaMax,
+              hungerCurrent: vitals.hungerCurrent,
+              hungerMax: vitals.hungerMax,
             };
 
             setSelfHpBar((prev) => {
@@ -873,7 +891,9 @@ export function GameCanvas({
                 prev.hpCurrent === nextSelfHpBar.hpCurrent &&
                 prev.hpMax === nextSelfHpBar.hpMax &&
                 prev.staminaCurrent === nextSelfHpBar.staminaCurrent &&
-                prev.staminaMax === nextSelfHpBar.staminaMax
+                prev.staminaMax === nextSelfHpBar.staminaMax &&
+                prev.hungerCurrent === nextSelfHpBar.hungerCurrent &&
+                prev.hungerMax === nextSelfHpBar.hungerMax
               ) {
                 return prev;
               }
@@ -1204,13 +1224,18 @@ export function GameCanvas({
               width={220}
               hpHeight={18}
               staminaHeight={12}
+              hungerHeight={12}
               hpCurrent={selfHpBar.hpCurrent}
               hpMax={selfHpBar.hpMax}
               staminaCurrent={selfHpBar.staminaCurrent}
               staminaMax={selfHpBar.staminaMax}
+              hungerCurrent={selfHpBar.hungerCurrent}
+              hungerMax={selfHpBar.hungerMax}
               showHpText={true}
               showStamina={true}
               showStaminaText={true}
+              showHunger={true}
+              showHungerText={true}
             />
           </div>
         ) : null}

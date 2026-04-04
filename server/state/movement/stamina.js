@@ -14,6 +14,7 @@ const {
 const DEFAULT_TERRAIN_DRAIN_MULTIPLIER = 1.0;
 const DEFAULT_STAMINA_REGEN_MULTIPLIER = 1.0;
 const DEFAULT_HP_REGEN_MULTIPLIER = 1.0;
+const DEFAULT_HUNGER_ITEM_RECOVERY = 0;
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -131,6 +132,32 @@ function readRuntimeHpMax(rt) {
   );
 }
 
+function readRuntimeHungerCurrent(rt) {
+  return toFiniteNumber(
+    rt?.hungerCurrent ??
+      rt?.hunger_current ??
+      rt?.vitals?.hunger?.current ??
+      rt?.combat?.hungerCurrent ??
+      rt?.combat?.hunger_current ??
+      rt?.stats?.hungerCurrent ??
+      rt?.stats?.hunger_current,
+    0
+  );
+}
+
+function readRuntimeHungerMax(rt) {
+  return toFiniteNumber(
+    rt?.hungerMax ??
+      rt?.hunger_max ??
+      rt?.vitals?.hunger?.max ??
+      rt?.combat?.hungerMax ??
+      rt?.combat?.hunger_max ??
+      rt?.stats?.hungerMax ??
+      rt?.stats?.hunger_max,
+    0
+  );
+}
+
 function syncRuntimeHp(rt, current, max) {
   const nextCurrent = toFiniteNumber(current, 0);
   const nextMax = toFiniteNumber(max, 0);
@@ -160,6 +187,11 @@ function syncRuntimeStamina(rt, current, max) {
   rt.staminaCurrent = nextCurrent;
   rt.staminaMax = nextMax;
 
+  if (!rt.vitals) rt.vitals = {};
+  if (!rt.vitals.stamina) rt.vitals.stamina = { current: nextCurrent, max: nextMax };
+  rt.vitals.stamina.current = nextCurrent;
+  rt.vitals.stamina.max = nextMax;
+
   if (!rt.combat) rt.combat = {};
   rt.combat.staminaCurrent = nextCurrent;
   rt.combat.staminaMax = nextMax;
@@ -167,6 +199,39 @@ function syncRuntimeStamina(rt, current, max) {
   if (!rt.stats) rt.stats = {};
   rt.stats.staminaCurrent = nextCurrent;
   rt.stats.staminaMax = nextMax;
+}
+
+function syncRuntimeHunger(rt, current, max) {
+  const nextCurrent = toFiniteNumber(current, 0);
+  const nextMax = toFiniteNumber(max, 0);
+
+  rt.hungerCurrent = nextCurrent;
+  rt.hungerMax = nextMax;
+
+  if (!rt.vitals) rt.vitals = {};
+  if (!rt.vitals.hunger) rt.vitals.hunger = { current: nextCurrent, max: nextMax };
+  rt.vitals.hunger.current = nextCurrent;
+  rt.vitals.hunger.max = nextMax;
+
+  if (!rt.combat) rt.combat = {};
+  rt.combat.hungerCurrent = nextCurrent;
+  rt.combat.hungerMax = nextMax;
+
+  if (!rt.stats) rt.stats = {};
+  rt.stats.hungerCurrent = nextCurrent;
+  rt.stats.hungerMax = nextMax;
+}
+
+function resolveHungerRegenMultiplier(hungerCurrent, hungerMax) {
+  const max = Math.max(0, toFiniteNumber(hungerMax, 0));
+  if (max <= 0) return 0;
+
+  const ratio = clamp(toFiniteNumber(hungerCurrent, 0) / max, 0, 1);
+  if (ratio <= 0) return 0;
+  if (ratio <= 0.05) return 0.05;
+  if (ratio < 0.15) return 0.5;
+  if (ratio < 0.35) return 0.8;
+  return 1;
 }
 
 function applyVitalsTick(
@@ -178,6 +243,7 @@ function applyVitalsTick(
     terrainDrainMultiplier = DEFAULT_TERRAIN_DRAIN_MULTIPLIER,
     regenMultiplier = DEFAULT_STAMINA_REGEN_MULTIPLIER,
     hpRegenMultiplier = DEFAULT_HP_REGEN_MULTIPLIER,
+    hungerItemRecovery = DEFAULT_HUNGER_ITEM_RECOVERY,
     dtMax = DT_MAX,
   } = {}
 ) {
@@ -192,6 +258,9 @@ function applyVitalsTick(
       regen: 0,
       hpCurrent: 0,
       hpMax: 0,
+      hungerCurrent: 0,
+      hungerMax: 0,
+      hungerRegenMultiplier: 0,
       current: 0,
       max: 0,
     };
@@ -207,19 +276,32 @@ function applyVitalsTick(
   const hpMax = Math.max(0, readRuntimeHpMax(rt));
   const current = readRuntimeStaminaCurrent(rt);
   const max = Math.max(0, readRuntimeStaminaMax(rt));
+  const hungerCurrent = readRuntimeHungerCurrent(rt);
+  const hungerMax = Math.max(0, readRuntimeHungerMax(rt));
+  const hungerRegenMultiplier = resolveHungerRegenMultiplier(hungerCurrent, hungerMax);
+  const effectiveStaminaRegenMultiplier =
+    toFiniteNumber(regenMultiplier, 1.0) * hungerRegenMultiplier;
+  const effectiveHpRegenMultiplier =
+    toFiniteNumber(hpRegenMultiplier, 1.0) * hungerRegenMultiplier;
 
-  const hpRegen = HP_BASE_REGEN_PER_SEC * dt * toFiniteNumber(hpRegenMultiplier, 1.0);
+  const hpRegen = HP_BASE_REGEN_PER_SEC * dt * effectiveHpRegenMultiplier;
   const drain = movedReal
     ? resolveCarryWeightDrainMultiplier(carryWeightRatio) *
       dt *
       toFiniteNumber(terrainDrainMultiplier, 1.0)
     : 0;
-  const regen = STAMINA_BASE_REGEN_PER_SEC * dt * toFiniteNumber(regenMultiplier, 1.0);
+  const regen = STAMINA_BASE_REGEN_PER_SEC * dt * effectiveStaminaRegenMultiplier;
+  const nextHungerCurrent = clamp(
+    hungerCurrent + toFiniteNumber(hungerItemRecovery, 0),
+    0,
+    hungerMax
+  );
   const nextHpCurrent = clamp(hpCurrent + hpRegen, 0, hpMax);
   const nextCurrent = clamp(current + regen - drain, 0, max);
   const hpChanged = Math.abs(nextHpCurrent - hpCurrent) > 1e-9;
   const staminaChanged = Math.abs(nextCurrent - current) > 1e-9;
-  const changed = hpChanged || staminaChanged;
+  const hungerChanged = Math.abs(nextHungerCurrent - hungerCurrent) > 1e-9;
+  const changed = hpChanged || staminaChanged || hungerChanged;
 
   if (hpChanged || hpMax !== readRuntimeHpMax(rt)) {
     syncRuntimeHp(rt, nextHpCurrent, hpMax);
@@ -229,16 +311,26 @@ function applyVitalsTick(
     syncRuntimeStamina(rt, nextCurrent, max);
   }
 
+  if (hungerChanged || hungerMax !== readRuntimeHungerMax(rt)) {
+    syncRuntimeHunger(rt, nextHungerCurrent, hungerMax);
+  } else if (readRuntimeHungerMax(rt) !== hungerMax) {
+    syncRuntimeHunger(rt, hungerCurrent, hungerMax);
+  }
+
   return {
     changed,
     hpChanged,
     staminaChanged,
+    hungerChanged,
     dt,
     hpRegen,
     drain,
     regen,
     hpCurrent: nextHpCurrent,
     hpMax,
+    hungerCurrent: nextHungerCurrent,
+    hungerMax,
+    hungerRegenMultiplier,
     current: nextCurrent,
     max,
   };
@@ -256,11 +348,15 @@ module.exports = {
   readRuntimeHpCurrent,
   readRuntimeHpMax,
   syncRuntimeHp,
+  readRuntimeHungerCurrent,
+  readRuntimeHungerMax,
+  syncRuntimeHunger,
   readRuntimeStaminaCurrent,
   readRuntimeStaminaMax,
   syncRuntimeStamina,
   applyVitalsTick,
   applyStaminaTick,
+  resolveHungerRegenMultiplier,
   resolveCarryWeightDrainMultiplier,
   resolveMoveSpeedMultiplierFromStamina,
   resolveStaminaPersistBucket,

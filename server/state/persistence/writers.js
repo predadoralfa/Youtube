@@ -39,12 +39,38 @@ function readRuntimeCombatField(rt, field, fallback = 0) {
       );
     case "staminaCurrent":
       return toNum(
-        combat.staminaCurrent ?? stats.staminaCurrent ?? rt?.staminaCurrent ?? fallback,
+        rt?.vitals?.stamina?.current ??
+          combat.staminaCurrent ??
+          stats.staminaCurrent ??
+          rt?.staminaCurrent ??
+          fallback,
         fallback
       );
     case "staminaMax":
       return toNum(
-        combat.staminaMax ?? stats.staminaMax ?? rt?.staminaMax ?? fallback,
+        rt?.vitals?.stamina?.max ??
+          combat.staminaMax ??
+          stats.staminaMax ??
+          rt?.staminaMax ??
+          fallback,
+        fallback
+      );
+    case "hungerCurrent":
+      return toNum(
+        rt?.vitals?.hunger?.current ??
+          combat.hungerCurrent ??
+          stats.hungerCurrent ??
+          rt?.hungerCurrent ??
+          fallback,
+        fallback
+      );
+    case "hungerMax":
+      return toNum(
+        rt?.vitals?.hunger?.max ??
+          combat.hungerMax ??
+          stats.hungerMax ??
+          rt?.hungerMax ??
+          fallback,
         fallback
       );
     case "attackPower":
@@ -135,6 +161,8 @@ async function flushUserStats(userId, now, { force = false } = {}) {
       hp_max: readRuntimeCombatField(rt, "hpMax", 100),
       stamina_current: staminaCurrent,
       stamina_max: staminaMax,
+      hunger_current: readRuntimeCombatField(rt, "hungerCurrent", 100),
+      hunger_max: readRuntimeCombatField(rt, "hungerMax", 100),
       attack_power: readRuntimeCombatField(rt, "attackPower", 10),
       defense: readRuntimeCombatField(rt, "defense", 0),
       attack_speed: readRuntimeCombatField(rt, "attackSpeed", 1),

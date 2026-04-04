@@ -25,6 +25,8 @@ async function loadPlayerCombatStats(userId) {
       "hp_max",
       "stamina_current",
       "stamina_max",
+      "hunger_current",
+      "hunger_max",
       "attack_power",
       "defense",
       "attack_speed",
@@ -40,6 +42,8 @@ async function loadPlayerCombatStats(userId) {
   const hpCurrent = readStrictNumber(stats.hp_current, "hp_current", userId);
   const staminaMax = readStrictNumber(stats.stamina_max, "stamina_max", userId);
   const staminaCurrent = readStrictNumber(stats.stamina_current, "stamina_current", userId);
+  const hungerMax = readStrictNumber(stats.hunger_max, "hunger_max", userId);
+  const hungerCurrent = readStrictNumber(stats.hunger_current, "hunger_current", userId);
   const attackPower = readStrictNumber(stats.attack_power, "attack_power", userId);
   const defense = readStrictNumber(stats.defense, "defense", userId);
   const attackSpeed = readStrictNumber(stats.attack_speed, "attack_speed", userId);
@@ -50,6 +54,8 @@ async function loadPlayerCombatStats(userId) {
     hpCurrent: Math.min(hpCurrent, hpMax),
     staminaMax,
     staminaCurrent: Math.min(staminaCurrent, staminaMax),
+    hungerMax,
+    hungerCurrent: Math.min(hungerCurrent, hungerMax),
     attackPower,
     defense,
     attackSpeed,
