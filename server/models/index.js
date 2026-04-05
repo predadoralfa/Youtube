@@ -29,6 +29,8 @@ const defineGaLocalGeometry = require("./ga_local_geometry");
 const defineGaLocalVisual = require("./ga_local_visual");
 const defineGaMaterial = require("./ga_material");
 const defineGaInstance = require("./ga_instance");
+const defineGaWorldClock = require("./ga_world_clock");
+const defineGaWorldMonthDef = require("./ga_world_month_def");
 
 // RENDER (NOVO)
 const defineGaRenderMaterial = require("./ga_render_material");
@@ -81,6 +83,8 @@ const GaMaterial = defineGaMaterial(sequelize, DataTypes);
 
 // INSTANCE MODELS
 const GaInstance = defineGaInstance(sequelize, DataTypes);
+const GaWorldClock = defineGaWorldClock(sequelize, DataTypes);
+const GaWorldMonthDef = defineGaWorldMonthDef(sequelize, DataTypes);
 
 // RENDER MODELS (NOVO)
 const GaRenderMaterial = defineGaRenderMaterial(sequelize, DataTypes);
@@ -140,6 +144,8 @@ const models = {
 
   // INSTANCE
   GaInstance,
+  GaWorldClock,
+  GaWorldMonthDef,
 
   // RENDER (NOVO)
   GaRenderMaterial,

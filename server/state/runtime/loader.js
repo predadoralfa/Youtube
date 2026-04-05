@@ -212,6 +212,7 @@ async function ensureRuntimeLoaded(userId) {
     speed: speedFromStats,
     _speedFallback: false,
     staminaTickAtMs: Date.now(),
+    hungerTickAtMs: Date.now(),
 
     // conexão / presença (persistíveis)
     connectionState: row.connection_state || CONNECTION.OFFLINE,
@@ -220,7 +221,7 @@ async function ensureRuntimeLoaded(userId) {
 
     // dirty model (hot + batch)
     dirtyRuntime: false,
-    dirtyStats: false,
+    dirtyStats: Boolean(combatStats?.hungerWasAdjusted),
     lastRuntimeDirtyAtMs: 0,
     lastStatsDirtyAtMs: 0,
 
@@ -329,6 +330,9 @@ async function refreshRuntimeCombatStats(userId) {
     resolveStaminaPersistBucket(combatStats?.staminaCurrent, combatStats?.staminaMax)
   );
 
+  if (combatStats?.hungerWasAdjusted) {
+    runtime.dirtyStats = true;
+  }
   markStatsDirty(userId);
   return runtime;
 }

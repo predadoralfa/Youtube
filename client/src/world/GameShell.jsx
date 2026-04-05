@@ -48,6 +48,7 @@ import { createEntitiesStore } from "./state/entitiesStore";
 import { logInventory } from "@/inventory/inventoryProbe";
 import { IntentType } from "./input/intents";
 import { InventoryModal } from "@/components/models/inventory/InventoryModal";
+import { WorldClockPanel } from "@/world/ui/WorldClockPanel";
 
 const DEBUG_IDS = false;
 
@@ -1084,12 +1085,15 @@ export function GameShell() {
     <>
       <GameCanvas
         snapshot={snapshot}
+        worldClock={snapshot?.worldClock}
         worldStoreRef={worldStoreRef}
         onInputIntent={handleInputIntent}
         onTargetSelect={onTargetSelect}
         onTargetClear={onTargetClear}
         lootNotifications={lootNotifications}
       />
+
+      <WorldClockPanel worldClock={snapshot?.worldClock} />
 
         <InventoryModal
           open={inventoryOpen}

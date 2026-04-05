@@ -10,6 +10,8 @@ import * as THREE from "three";
 
 import { setupCamera } from "./camera/camera";
 import { setupLight } from "./light/light";
+import { applyDayNightCycle } from "./light/dayNightCycle";
+import { useWorldClock } from "../hooks/useWorldClock";
 
 import { createInputBus } from "../input/InputBus";
 import { bindInputs } from "../input/inputs";
@@ -233,13 +235,16 @@ function isEnemyEntity(entity) {
 
 export function GameCanvas({
   snapshot,
+  worldClock,
   worldStoreRef,
   onInputIntent,
   onTargetSelect,
   onTargetClear,
   lootNotifications = [],
 }) {
+  const currentWorldTime = useWorldClock(worldClock);
   const containerRef = useRef(null);
+  const worldTimeRef = useRef(currentWorldTime);
 
   const runtimeRef = useRef(null);
   const templateRef = useRef(null);
@@ -265,6 +270,10 @@ export function GameCanvas({
   const entityPositionsRef = useRef(new Map());
   const seenDamageEventIdsRef = useRef(new Set());
   const damageTtlMs = 1200;
+
+  useEffect(() => {
+    worldTimeRef.current = currentWorldTime;
+  }, [currentWorldTime]);
 
   // ✨ LOG SNAPSHOT
   useEffect(() => {
@@ -496,19 +505,18 @@ export function GameCanvas({
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
 
-    const grid = new THREE.GridHelper(Math.max(sizeX, sizeZ), 20);
-    grid.position.set(0, 0.001, 0);
-    scene.add(grid);
-
-    const axes = new THREE.AxesHelper(10);
-    axes.position.set(0, 0.01, 0);
-    scene.add(axes);
-
     const { camera, update, applyOrbit, applyZoom, onResize, setBounds, getYaw } =
       setupCamera(container);
     cameraRef.current = camera;
 
-    setupLight(scene);
+    const lightRig = setupLight(scene);
+    applyDayNightCycle({
+      scene,
+      renderer,
+      hemiLight: lightRig.hemiLight,
+      dirLight: lightRig.dirLight,
+      worldTime: worldTimeRef.current,
+    });
 
     setBounds({ sizeX, sizeZ });
     window.addEventListener("resize", onResize);
@@ -1077,6 +1085,14 @@ export function GameCanvas({
         }
       }
 
+      applyDayNightCycle({
+        scene,
+        renderer,
+        hemiLight: lightRig.hemiLight,
+        dirLight: lightRig.dirLight,
+        worldTime: worldTimeRef.current,
+      });
+
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
     };
@@ -1137,9 +1153,6 @@ export function GameCanvas({
         } catch {}
       }
       meshByActorIdRef.current.clear();
-
-      scene.remove(grid);
-      scene.remove(axes);
 
       renderer.dispose();
 

@@ -18,10 +18,12 @@ const { moveEntityTowardTarget } = require("./entityMotion");
 const { bumpRev, toDelta } = require("./entity");
 const {
   applyStaminaTick,
+  applyHungerTick,
   resolveCarryWeightDrainMultiplier,
   resolveMoveSpeedMultiplierFromStamina,
   shouldQueueStaminaPersist,
 } = require("./stamina");
+const { getTimeFactor } = require("../../service/worldClockService");
 const { readHpCurrent, readHpMax } = require("../enemies/enemyEntity");
 const { emitDeltaToInterest } = require("./emit");
 const { handleChunkTransition } = require("./chunkTransition");
@@ -183,6 +185,10 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
       targetDied: combatResult.targetDied,
       attackPower: stats?.attackPower,
       cooldownMs: combatResult.cooldownMs,
+      staminaCost: combatResult.staminaCost,
+      staminaBefore: combatResult.staminaBefore,
+      staminaAfter: combatResult.staminaAfter,
+      staminaMax: combatResult.staminaMax,
     });
   }
 
@@ -280,6 +286,7 @@ async function processAutomaticCombat(io, rt, instanceId, nowMs) {
  */
 async function tickOnce(io, nowMsValue) {
   const t = nowMsValue;
+  const worldTimeFactor = await getTimeFactor();
   const allRuntimes = Array.from(getAllRuntimes());
 
   // ========================================
@@ -568,6 +575,9 @@ async function tickOnce(io, nowMsValue) {
     const staminaResult = applyStaminaTick(rt, t, {
       movedReal: false,
     });
+    const hungerResult = applyHungerTick(rt, t, {
+      timeFactor: worldTimeFactor,
+    });
 
     const staminaState = shouldQueueStaminaPersist(
       rt,
@@ -575,7 +585,7 @@ async function tickOnce(io, nowMsValue) {
       rt?.staminaMax ?? rt?.stats?.staminaMax ?? rt?.combat?.staminaMax
     );
 
-    if (!staminaResult.changed) continue;
+    if (!staminaResult.changed && !hungerResult.changed) continue;
 
     markStatsDirty(rt.userId, t);
     bumpRev(rt);

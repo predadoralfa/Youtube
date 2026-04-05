@@ -264,7 +264,11 @@ async function onCombatAttack(socket, io, payload) {
       return socket.emit("combat:attack_result", {
         ok: false,
         error: combatResult.error,
-        details: combatResult
+        details: combatResult,
+        staminaCost: combatResult.staminaCost,
+        staminaBefore: combatResult.staminaBefore,
+        staminaAfter: combatResult.staminaAfter,
+        staminaMax: combatResult.staminaMax,
       });
     }
 
@@ -331,7 +335,11 @@ async function onCombatAttack(socket, io, payload) {
       targetHPAfter: combatResult.targetHPAfter,
       targetHPMax: combatResult.targetHPMax,
       targetDied: combatResult.targetDied,
-      cooldownMs: COMBAT_BASE_COOLDOWN_MS / (attackerStats.attackSpeed || 1)
+      cooldownMs: COMBAT_BASE_COOLDOWN_MS / (attackerStats.attackSpeed || 1),
+      staminaCost: combatResult.staminaCost,
+      staminaBefore: combatResult.staminaBefore,
+      staminaAfter: combatResult.staminaAfter,
+      staminaMax: combatResult.staminaMax,
     });
 
     console.log(`[COMBAT] ✅ Dano broadcast enviado`);

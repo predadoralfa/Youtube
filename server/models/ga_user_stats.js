@@ -40,13 +40,13 @@ module.exports = (sequelize, DataTypes) => {
       },
 
       hunger_current: {
-        type: DataTypes.INTEGER.UNSIGNED,
+        type: DataTypes.DOUBLE.UNSIGNED,
         allowNull: false,
         defaultValue: 100
       },
 
       hunger_max: {
-        type: DataTypes.INTEGER.UNSIGNED,
+        type: DataTypes.DOUBLE.UNSIGNED,
         allowNull: false,
         defaultValue: 100
       },

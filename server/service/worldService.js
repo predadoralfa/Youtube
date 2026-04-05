@@ -21,6 +21,7 @@ const {
   DEFAULT_LOCAL_VISUAL_VERSION,
   DEFAULT_GROUND_COLOR,
 } = require("../config/worldVisualConstants");
+const { getWorldClockBootstrap } = require("./worldClockService");
 
 // ACTORS
 const { loadActorsForInstance } = require("./actorLoader");
@@ -230,6 +231,8 @@ const bootstrap = async (req, res) => {
 
     console.log(`[BOOTSTRAP] 📦 Preparando payload de resposta para userId=${userId}`);
 
+    const worldClock = await getWorldClockBootstrap();
+
     const responsePayload = {
       ok: true,
       snapshot: {
@@ -344,6 +347,8 @@ const bootstrap = async (req, res) => {
             bounds: { size_x: sizeX, size_z: sizeZ },
           },
         },
+
+        worldClock,
 
         actors,
       },

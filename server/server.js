@@ -14,6 +14,7 @@ const { startMovementTick, stopMovementTick } = require("./state/movementTick");
 const { getAllRuntimes } = require("./state/runtimeStore");
 
 const db = require("./models");
+const { initWorldClock } = require("./service/worldClockService");
 
 // ROTAS
 const authRouter = require("./router/authRouter");
@@ -61,6 +62,9 @@ async function bootstrap() {
 
     // ✅ registra pipeline do socket (auth + handlers)
     registerSocket(io);
+
+    await initWorldClock();
+    console.log("[WORLD CLOCK] Initialized");
 
     startPersistenceLoop();
 

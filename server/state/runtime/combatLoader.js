@@ -1,5 +1,7 @@
 // server/state/runtime/combatLoader.js
 const db = require("../../models");
+const { getTimeFactor } = require("../../service/worldClockService");
+const { resolveHungerDrainPerSecond } = require("../movement/stamina");
 
 function readStrictNumber(value, fieldName, userId) {
   const n = Number(value);
@@ -31,6 +33,7 @@ async function loadPlayerCombatStats(userId) {
       "defense",
       "attack_speed",
       "attack_range",
+      "updated_at",
     ],
   });
 
@@ -43,11 +46,17 @@ async function loadPlayerCombatStats(userId) {
   const staminaMax = readStrictNumber(stats.stamina_max, "stamina_max", userId);
   const staminaCurrent = readStrictNumber(stats.stamina_current, "stamina_current", userId);
   const hungerMax = readStrictNumber(stats.hunger_max, "hunger_max", userId);
-  const hungerCurrent = readStrictNumber(stats.hunger_current, "hunger_current", userId);
+  const persistedHungerCurrent = readStrictNumber(stats.hunger_current, "hunger_current", userId);
   const attackPower = readStrictNumber(stats.attack_power, "attack_power", userId);
   const defense = readStrictNumber(stats.defense, "defense", userId);
   const attackSpeed = readStrictNumber(stats.attack_speed, "attack_speed", userId);
   const attackRange = readStrictNumber(stats.attack_range, "attack_range", userId);
+  const statsUpdatedAtMs = stats.updated_at ? new Date(stats.updated_at).getTime() : Date.now();
+  const timeFactor = await getTimeFactor();
+  const elapsedSeconds = Math.max(0, (Date.now() - statsUpdatedAtMs) / 1000);
+  const offlineHungerDrain = resolveHungerDrainPerSecond(hungerMax, timeFactor) * elapsedSeconds;
+  const hungerCurrent = Math.max(0, Math.min(hungerMax, persistedHungerCurrent - offlineHungerDrain));
+  const hungerWasAdjusted = Math.abs(hungerCurrent - persistedHungerCurrent) > 1e-9;
 
   return {
     hpMax,
@@ -55,7 +64,8 @@ async function loadPlayerCombatStats(userId) {
     staminaMax,
     staminaCurrent: Math.min(staminaCurrent, staminaMax),
     hungerMax,
-    hungerCurrent: Math.min(hungerCurrent, hungerMax),
+    hungerCurrent,
+    hungerWasAdjusted,
     attackPower,
     defense,
     attackSpeed,

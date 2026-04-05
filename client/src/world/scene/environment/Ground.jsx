@@ -3,9 +3,11 @@
  *
  * Renderiza ambiente estático:
  * - Chão (plano principal)
- * - Grid de debug
- * - Eixos de debug
  * - Limites visuais (bounds)
+ *
+ * Legado:
+ * - grid de debug removido
+ * - eixos de debug removidos
  *
  * Props:
  * - snapshot: { localTemplate, ... }
@@ -50,15 +52,6 @@ export function Ground({ snapshot }) {
         <planeGeometry args={[sizeX, sizeZ]} />
         <meshStandardMaterial color={groundColor} />
       </mesh>
-
-      {/* ✅ Grid de debug (linhas) */}
-      <gridHelper 
-        args={[Math.max(sizeX, sizeZ), 20]} 
-        position={[0, 0.01, 0]} 
-      />
-
-      {/* ✅ Eixos de debug (RGB: X=red, Y=green, Z=blue) */}
-      <axesHelper args={[10]} position={[0, 0.02, 0]} />
 
       {/* ✅ Limites visuais (bounds do mundo) */}
       <BoundsVisual sizeX={sizeX} sizeZ={sizeZ} />
