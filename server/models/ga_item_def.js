@@ -21,7 +21,7 @@ module.exports = (sequelize, DataTypes) => {
       },
 
       category: {
-        type: DataTypes.ENUM("CONSUMABLE", "EQUIP", "AMMO", "MATERIAL", "QUEST", "CONTAINER", "MISC"),
+        type: DataTypes.ENUM("CONSUMABLE", "FOOD", "EQUIP", "AMMO", "MATERIAL", "QUEST", "CONTAINER", "MISC"),
         allowNull: false,
         defaultValue: "MISC",
       },

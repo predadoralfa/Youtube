@@ -39,7 +39,7 @@
  *
  * =====================================================================
  */
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { GameCanvas } from "./scene/GameCanvas";
 import { bootstrapWorld } from "@/services/World";
 import { LoadingOverlay } from "@/components/overlays/LoadingOverlay";
@@ -258,6 +258,7 @@ export function GameShell() {
   if (!worldStoreRef.current) {
     worldStoreRef.current = createEntitiesStore();
   }
+  const selfVitals = useMemo(() => pickBestSelfVitals(snapshot, null), [snapshot]);
 
   useEffect(() => {
     inventorySnapshotRef.current = inventorySnapshot ?? null;
@@ -398,6 +399,16 @@ export function GameShell() {
   const onCancelHeldState = useCallback(() => {
     return emitInventoryAction("inv:cancel", {});
   }, [emitInventoryAction]);
+
+  const onSetAutoFoodMacro = useCallback(
+    ({ itemInstanceId, hungerThreshold }) => {
+      return emitInventoryAction("inv:auto_food:set", {
+        itemInstanceId: itemInstanceId == null ? null : String(itemInstanceId),
+        hungerThreshold: Number(hungerThreshold),
+      });
+    },
+    [emitInventoryAction]
+  );
 
   const onEquipItemToSlot = useCallback(
     ({ itemInstanceId, slotCode }) => {
@@ -574,7 +585,7 @@ export function GameShell() {
 
         // Soltar SPACE não cancela combate de ENEMY.
         // O cancelamento explícito fica para seleção/ação de movimento.
-        if (target?.kind && target.kind !== "ENEMY") {
+        if (!target?.kind || target.kind !== "ENEMY") {
           emitInteractStop();
         }
         return;
@@ -671,11 +682,24 @@ export function GameShell() {
           const actorId = toId(actor?.id ?? actor?.actorId ?? actor?.actor_id ?? null);
           if (!actorId) return;
 
+          const normalizedState = actor?.state ?? actor?.state_json ?? null;
+          const looksLikeItemDrop =
+            normalizedState?.dropSource != null ||
+            normalizedState?.sourceKind != null ||
+            normalizedState?.itemInstanceId != null ||
+            normalizedState?.itemDefId != null ||
+            normalizedState?.itemCode != null;
+
           const normalizedActor = {
             ...actor,
             id: actorId,
-            actorType: actor?.actorType ?? actor?.actor_type ?? "CHEST",
+            actorType: actor?.actorType === "GROUND_LOOT" || actor?.actor_type === "GROUND_LOOT"
+              ? "GROUND_LOOT"
+              : looksLikeItemDrop
+              ? "ITEM_DROP"
+              : (actor?.actorType ?? actor?.actor_type ?? "CHEST"),
             instanceId: Number(actor?.instanceId ?? actor?.instance_id ?? store.instanceId ?? 0),
+            state: normalizedState,
             pos: {
               x: Number(actor?.pos?.x ?? actor?.position?.x ?? 0),
               y: Number(actor?.pos?.y ?? actor?.position?.y ?? 0),
@@ -700,6 +724,7 @@ export function GameShell() {
           const actorDisabled = Boolean(payload?.actorDisabled);
           const inventoryFull = payload?.inventory ?? payload?.inventoryFull ?? null;
           const lootInfo = payload?.loot ?? null;
+          const actorMessage = payload?.message ?? null;
           console.log("[LOOT_TRACE] actor:collected received", {
             actorId,
             actorDisabled,
@@ -739,6 +764,19 @@ export function GameShell() {
             console.log("[LOOT_TRACE] inventory snapshot updated", {
               lootCount: lootMessages.length,
             });
+          }
+
+          if (actorMessage) {
+            setInventoryMessage(actorMessage);
+            setLootNotifications((current) => [
+              ...current,
+              {
+                id: `actor-msg:${actorId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+                text: actorMessage,
+                startedAt: Date.now(),
+                ttlMs: 1800,
+              },
+            ].slice(-8));
           }
 
           setSnapshot((prev) => {
@@ -1099,6 +1137,7 @@ export function GameShell() {
           open={inventoryOpen}
           snapshot={inventorySnapshot}
           equipmentSnapshot={equipmentSnapshot}
+          selfVitals={selfVitals}
           inventoryMessage={inventoryMessage}
           equipmentMessage={equipmentMessage}
           onClose={closeInventory}
@@ -1111,6 +1150,7 @@ export function GameShell() {
           onUnequipItemFromSlot={onUnequipItemFromSlot}
           onSwapEquipmentSlots={onSwapEquipmentSlots}
           onDropItemToWorld={emitInventoryDrop}
+          onSetAutoFoodMacro={onSetAutoFoodMacro}
         />
     </>
   );

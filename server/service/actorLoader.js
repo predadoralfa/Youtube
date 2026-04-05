@@ -41,7 +41,11 @@ async function loadActorsForInstance(instanceIdRaw, opts = {}) {
       id: Number(a.id),
       actorType: a.actor_type,
       instanceId: Number(a.instance_id),
-      pos: { x: Number(a.pos_x ?? 0), y: Number(a.pos_y ?? 0) },
+      pos: {
+        x: Number(a.pos_x ?? 0),
+        y: 0,
+        z: Number(a.pos_y ?? 0),
+      },
       status: a.status,
       state: a.state_json ?? null,
 
@@ -93,6 +97,13 @@ async function loadActorsForInstance(instanceIdRaw, opts = {}) {
       })
     : [];
 
+  const lootSlotRows = containerIds.length
+    ? await db.GaContainerSlot.findAll({
+        where: { container_id: containerIds },
+        attributes: ["container_id", "item_instance_id", "qty"],
+      })
+    : [];
+
   const containersById = new Map();
   for (const r of containerRows) {
     const c = r.get({ plain: true });
@@ -102,6 +113,15 @@ async function loadActorsForInstance(instanceIdRaw, opts = {}) {
       state: c.state,
       rev: Number(c.rev ?? 0),
     });
+  }
+
+  const containerHasItems = new Map();
+  for (const row of lootSlotRows) {
+    const s = row.get({ plain: true });
+    const containerId = Number(s.container_id);
+    const hasItem = s.item_instance_id != null && Number(s.qty ?? 0) > 0;
+    if (hasItem) containerHasItems.set(containerId, true);
+    else if (!containerHasItems.has(containerId)) containerHasItems.set(containerId, false);
   }
 
   // 4) monta payload final
@@ -125,7 +145,32 @@ async function loadActorsForInstance(instanceIdRaw, opts = {}) {
       .sort((a, b) => String(a.slotRole).localeCompare(String(b.slotRole)));
   }
 
-  return actors;
+  const staleGroundLootActors = actors.filter((actor) => {
+    const actorType = String(actor.actorType ?? "").trim().toUpperCase();
+    if (actorType !== "GROUND_LOOT" && actorType !== "ITEM_DROP" && actorType !== "DROP" && actorType !== "LOOT_DROP") {
+      return false;
+    }
+
+    const lootContainer = actor.containers.find((container) => String(container?.slotRole ?? "").toUpperCase() === "LOOT");
+    if (!lootContainer?.containerId) return false;
+    return containerHasItems.get(Number(lootContainer.containerId)) !== true;
+  });
+
+  if (staleGroundLootActors.length > 0) {
+    const staleActorIds = staleGroundLootActors.map((actor) => actor.id);
+    const staleContainerIds = staleGroundLootActors
+      .map((actor) =>
+        actor.containers.find((container) => String(container?.slotRole ?? "").toUpperCase() === "LOOT")?.containerId ?? null
+      )
+      .filter((id) => id != null);
+
+    await db.GaActor.destroy({ where: { id: staleActorIds } }).catch(() => {});
+    if (staleContainerIds.length > 0) {
+      await db.GaContainer.destroy({ where: { id: staleContainerIds } }).catch(() => {});
+    }
+  }
+
+  return actors.filter((actor) => !staleGroundLootActors.some((stale) => stale.id === actor.id));
 }
 
 module.exports = {

@@ -6,6 +6,7 @@ const { computeChunk } = require("./chunk");
 const { getRuntime, setRuntime, hasRuntime } = require("./store");
 const { markStatsDirty } = require("./dirty");
 const { loadPlayerCombatStats } = require("./combatLoader");
+const { loadPersistedAutoFoodConfig } = require("../../service/autoFoodService");
 const {
   resolveStaminaPersistBucket,
   syncStaminaPersistMarkers,
@@ -176,6 +177,11 @@ async function ensureRuntimeLoaded(userId) {
   const bounds = await loadBoundsForInstance(row.instance_id);
   const speedFromStats = await loadSpeedFromStats(userId);
   const combatStats = await loadPlayerCombatStats(userId);
+  const hungerMax = Math.max(0, Number(combatStats?.hungerMax ?? 100) || 100);
+  const persistedAutoFood = await loadPersistedAutoFoodConfig(
+    userId,
+    hungerMax
+  );
 
   if (speedFromStats == null) {
     throw new Error(
@@ -232,6 +238,9 @@ async function ensureRuntimeLoaded(userId) {
 
     // cache de bounds para evitar ler local/geometry repetidamente
     bounds,
+
+    // automacoes locais do player controladas pelo servidor
+    autoFood: persistedAutoFood,
 
     // ==============================
     // Click-to-move + Input

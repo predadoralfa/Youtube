@@ -8,6 +8,16 @@ function toNum(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function resolveDropVisualHint(itemDef, effectiveItemInstance) {
+  const code = String(itemDef?.code ?? effectiveItemInstance?.code ?? "").trim().toUpperCase();
+  const name = String(itemDef?.name ?? effectiveItemInstance?.name ?? "").trim().toUpperCase();
+  const token = `${code} ${name}`;
+
+  if (token.includes("APPLE") || token.includes("MACA")) return "APPLE";
+  if (token.includes("STONE") || token.includes("ROCK") || token.includes("PEDRA")) return "ROCK";
+  return "DEFAULT";
+}
+
 function findInventorySourceSlot(invRt, itemInstanceId) {
   const targetId = String(itemInstanceId);
 
@@ -175,15 +185,17 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
       equipmentSource?.qty ??
       (effectiveItemInstance ? 1 : 0)
   ) || 1;
+  const visualHint = resolveDropVisualHint(itemDef, effectiveItemInstance);
 
-  console.log("[DROP] service:resolved", {
-    userId,
-    itemInstanceId,
-    itemDefId: effectiveItemInstance?.itemDefId ?? null,
-    itemName: itemDef?.name ?? itemDef?.code ?? null,
-    sourceQty,
-    dropPos,
-    sourceKind: inventorySource ? "INVENTORY" : "EQUIPMENT",
+    console.log("[DROP] service:resolved", {
+      userId,
+      itemInstanceId,
+      itemDefId: effectiveItemInstance?.itemDefId ?? null,
+      itemCode: itemDef?.code ?? null,
+      itemName: itemDef?.name ?? itemDef?.code ?? null,
+      sourceQty,
+      dropPos,
+      sourceKind: inventorySource ? "INVENTORY" : "EQUIPMENT",
   });
 
   const run = async (tx) => {
@@ -212,16 +224,19 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
     });
 
     const created = await createActorWithContainer({
-      actorType: "BAU",
+      actorType: "GROUND_LOOT",
       instanceId: Number(runtime.instanceId),
       posX: dropPos.x,
-      posY: dropPos.y,
+      posY: dropPos.z,
       stateJson: {
         dropSource: inventorySource ? "inventory" : "equipment",
         userId,
         itemInstanceId,
         itemDefId: Number(effectiveItemInstance.itemDefId),
+        itemCode: itemDef?.code ?? null,
         itemName: itemDef?.name ?? itemDef?.code ?? null,
+        qty: sourceQty,
+        visualHint,
         sourceKind: inventorySource ? "INVENTORY" : "EQUIPMENT",
       },
       status: "ACTIVE",
@@ -370,10 +385,21 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
       ok: true,
       actor: {
         id: actorId,
-        actorType: "BAU",
+        actorType: "GROUND_LOOT",
         instanceId: Number(runtime.instanceId),
         pos: dropPos,
         status: "ACTIVE",
+        state: {
+          dropSource: inventorySource ? "inventory" : "equipment",
+          userId,
+          itemInstanceId,
+          itemDefId: Number(effectiveItemInstance.itemDefId),
+          itemCode: itemDef?.code ?? null,
+          itemName: itemDef?.name ?? itemDef?.code ?? null,
+          qty: sourceQty,
+          visualHint,
+          sourceKind: inventorySource ? "INVENTORY" : "EQUIPMENT",
+        },
         containers: [
           {
             slotRole: "LOOT",

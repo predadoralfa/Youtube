@@ -6,6 +6,7 @@ const { moveUserChunk, computeChunkFromPos } = require("../presenceIndex");
 const { getActiveSocket } = require("../../socket/sessionIndex");
 const { getInventory } = require("../inventory/store");
 const { ensureInventoryLoaded } = require("../inventory/loader");
+const { buildInventoryFull } = require("../inventory/fullPayload");
 const { getEquipment } = require("../equipment/store");
 const { ensureEquipmentLoaded } = require("../equipment/loader");
 const { computeCarryWeight } = require("../inventory/weight");
@@ -41,6 +42,7 @@ const { getEnemiesForInstance, getEnemy } = require("../enemies/enemiesRuntimeSt
 const { tickEnemyAI, getLastTickAttacks } = require("../enemies/enemyAI");
 const { loadPlayerCombatStats } = require("../runtime/combatLoader");
 const { executeAttack, loadEnemyCombatStats } = require("../../service/combatSystem");
+const { processAutoFoodTick, buildAutoFoodPayload } = require("../../service/autoFoodService");
 
 async function resolveCarryWeightContext(userId) {
   let invRt = getInventory(userId);
@@ -407,6 +409,19 @@ async function tickOnce(io, nowMsValue) {
                 }
                 }
 
+                if (result?.error === "ACTOR_LOOT_EMPTY") {
+                  const activeSocket = getActiveSocket(rt.userId);
+                  if (activeSocket) {
+                    activeSocket.emit("actor:collected", {
+                      actorId: String(interactActorId),
+                      actorDisabled: false,
+                      inventory: null,
+                      loot: null,
+                      message: result?.message || "This resource has no items right now",
+                    });
+                  }
+                }
+
                 console.warn(
                   `[COLLECT] Erro ao coletar: userId=${rt.userId} actorId=${interactActorId} error=${result?.error}`
                 );
@@ -428,6 +443,7 @@ async function tickOnce(io, nowMsValue) {
                   actorDisabled: result.actorDisabled,
                   inventory: result.inventoryFull,
                   loot: result.loot ?? null,
+                  message: result.message ?? null,
                 });
               }
             })
@@ -578,6 +594,7 @@ async function tickOnce(io, nowMsValue) {
     const hungerResult = applyHungerTick(rt, t, {
       timeFactor: worldTimeFactor,
     });
+    const autoFoodResult = await processAutoFoodTick(rt, t);
 
     const staminaState = shouldQueueStaminaPersist(
       rt,
@@ -585,7 +602,7 @@ async function tickOnce(io, nowMsValue) {
       rt?.staminaMax ?? rt?.stats?.staminaMax ?? rt?.combat?.staminaMax
     );
 
-    if (!staminaResult.changed && !hungerResult.changed) continue;
+    if (!staminaResult.changed && !hungerResult.changed && !autoFoodResult.changed) continue;
 
     markStatsDirty(rt.userId, t);
     bumpRev(rt);
@@ -604,6 +621,16 @@ async function tickOnce(io, nowMsValue) {
         chunk: rt.chunk ?? computeChunkFromPos(rt.pos),
         vitals: delta.vitals,
       });
+
+      if (autoFoodResult.inventoryChanged) {
+        const invRt = await ensureInventoryLoaded(rt.userId);
+        const eqRt = await ensureEquipmentLoaded(rt.userId);
+        const full = buildInventoryFull(invRt, eqRt);
+        full.macro = {
+          autoFood: buildAutoFoodPayload(rt),
+        };
+        socket.emit("inv:full", full);
+      }
     }
   }
 

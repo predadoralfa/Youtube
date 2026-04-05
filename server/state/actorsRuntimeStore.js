@@ -12,9 +12,11 @@
  * Shape do actor:
  * {
  *   id: string,
+ *   actorType: string,
  *   instanceId: string,
  *   pos: { x, y, z },
  *   status: "ACTIVE" | "DISABLED",
+ *   state: object|null,
  *   containers: [{
  *     slotRole: string,
  *     containerId: number,
@@ -60,6 +62,7 @@ function addActor(actor) {
 
   const record = {
     id,
+    actorType: actor.actorType ?? actor.actor_type ?? null,
     instanceId,
     pos: {
       x: toNum(actor.pos?.x, 0),
@@ -67,6 +70,7 @@ function addActor(actor) {
       z: toNum(actor.pos?.z, 0),
     },
     status: actor.status ?? "ACTIVE",
+    state: actor.state ?? actor.state_json ?? null,
     containers, // ✅ NOVO
   };
 

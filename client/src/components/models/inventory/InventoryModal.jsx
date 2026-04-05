@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "@/style/inventoryModal.css";
+import { InventoryItemIcon } from "./InventoryItemIcon";
 
 const WEAR_SLOT_ORDER = [
   "HEAD",
@@ -24,6 +25,11 @@ const WEAR_SLOT_ROWS = [
 ];
 
 const HANDS_SLOT_ORDER = ["HAND_L", "HAND_R"];
+const SIDEBAR_TABS = [
+  { id: "equipment", label: "Equipment" },
+  { id: "craft", label: "Craft" },
+  { id: "macro", label: "Macro" },
+];
 
 function toId(raw) {
   return raw == null ? null : String(raw);
@@ -101,6 +107,7 @@ export function InventoryModal({
   open,
   snapshot,
   equipmentSnapshot,
+  selfVitals,
   inventoryMessage,
   equipmentMessage,
   onClose,
@@ -113,6 +120,7 @@ export function InventoryModal({
   onUnequipItemFromSlot,
   onSwapEquipmentSlots,
   onDropItemToWorld,
+  onSetAutoFoodMacro,
 }) {
   const ok = snapshot?.ok === true;
   const heldState = snapshot?.heldState ?? null;
@@ -122,6 +130,10 @@ export function InventoryModal({
   const [contextMenu, setContextMenu] = useState(null);
   const [splitDraft, setSplitDraft] = useState(null);
   const [localNotice, setLocalNotice] = useState(null);
+  const [dismissedNoticeText, setDismissedNoticeText] = useState(null);
+  const [activeSidebarTab, setActiveSidebarTab] = useState("equipment");
+  const [macroFoodItemInstanceId, setMacroFoodItemInstanceId] = useState(null);
+  const [macroHungerThreshold, setMacroHungerThreshold] = useState(60);
   const dropHandledRef = useRef(false);
   const splitInputRef = useRef(null);
 
@@ -229,7 +241,51 @@ export function InventoryModal({
     setContextMenu(null);
     setSplitDraft(null);
     setLocalNotice(null);
+    setDismissedNoticeText(null);
   }, [open]);
+
+  const hungerCurrent = Number(selfVitals?.hunger?.current ?? 0);
+  const hungerMax = Math.max(0, Number(selfVitals?.hunger?.max ?? 100)) || 100;
+  const serverAutoFood = snapshot?.macro?.autoFood ?? null;
+
+  useEffect(() => {
+    setMacroHungerThreshold((prev) => {
+      const fallback = Math.min(60, hungerMax);
+      return Math.min(Math.max(0, Number.isFinite(prev) ? prev : fallback), hungerMax);
+    });
+  }, [hungerMax]);
+
+  useEffect(() => {
+    setMacroFoodItemInstanceId(
+      serverAutoFood?.itemInstanceId == null ? null : String(serverAutoFood.itemInstanceId)
+    );
+    setMacroHungerThreshold((prev) => {
+      const next = Number(serverAutoFood?.hungerThreshold ?? Math.min(60, hungerMax));
+      if (!Number.isFinite(next)) return prev;
+      return Math.min(Math.max(0, next), hungerMax);
+    });
+  }, [serverAutoFood?.itemInstanceId, serverAutoFood?.hungerThreshold, hungerMax]);
+
+  function getInventoryItemContext(itemInstanceId) {
+    if (itemInstanceId == null) return null;
+    const inst = inventoryIndex.instanceMap.get(String(itemInstanceId)) ?? null;
+    if (!inst) return null;
+    const defId = getDefIdFromInstance(inst);
+    const def = defId != null ? inventoryIndex.defMap.get(String(defId)) ?? null : null;
+    return { inst, def };
+  }
+
+  function isFoodItem(itemInstanceId) {
+    const ctx = getInventoryItemContext(itemInstanceId);
+    return String(ctx?.def?.category ?? "").toUpperCase() === "FOOD";
+  }
+
+  useEffect(() => {
+    if (!macroFoodItemInstanceId) return;
+    if (!isFoodItem(macroFoodItemInstanceId)) {
+      setMacroFoodItemInstanceId(null);
+    }
+  }, [macroFoodItemInstanceId, inventoryIndex]);
 
   useEffect(() => {
     if (!open) return;
@@ -312,27 +368,33 @@ export function InventoryModal({
     return allowedSlots.includes(String(slotCode));
   };
 
-  const handleDragStart = (itemInstanceId, slotCode) => (event) => {
+  const handleDragStart = (itemInstanceId, slotCode, options = {}) => (event) => {
     if (heldStateActive) return;
 
-    const inst = inventoryIndex.instanceMap.get(String(itemInstanceId));
-    const defId = getDefIdFromInstance(inst);
-    const def = defId != null ? inventoryIndex.defMap.get(String(defId)) : null;
+    const ctx = getInventoryItemContext(itemInstanceId);
+    const inst = ctx?.inst ?? null;
+    const def = ctx?.def ?? null;
     const allowedSlots = getAllowedSlotsForDef(def);
+    const sourceKind =
+      options.sourceKind ??
+      (equipmentIndex.get(String(slotCode))?.sourceContainerId != null
+        ? "legacy-inventory"
+        : equipmentIndex.has(String(slotCode))
+          ? "equipment"
+          : "inventory");
 
     const payload = {
       itemInstanceId: String(itemInstanceId),
       fromSlotCode: String(slotCode),
-      sourceKind:
-        equipmentIndex.get(String(slotCode))?.sourceContainerId != null
-          ? "legacy-inventory"
-          : equipmentIndex.has(String(slotCode))
-            ? "equipment"
-            : "inventory",
-      sourceContainerId: equipmentIndex.get(String(slotCode))?.sourceContainerId ?? null,
-      sourceSlotIndex: equipmentIndex.get(String(slotCode))?.sourceSlotIndex ?? null,
-      sourceRole: equipmentIndex.get(String(slotCode))?.sourceRole ?? String(slotCode),
+      sourceKind,
+      sourceContainerId:
+        options.sourceContainerId ?? equipmentIndex.get(String(slotCode))?.sourceContainerId ?? null,
+      sourceSlotIndex:
+        options.sourceSlotIndex ?? equipmentIndex.get(String(slotCode))?.sourceSlotIndex ?? null,
+      sourceRole: options.sourceRole ?? equipmentIndex.get(String(slotCode))?.sourceRole ?? String(slotCode),
       allowedSlots,
+      itemCategory: def?.category ?? null,
+      itemName: getItemLabel(inst, def),
     };
 
     if (event.dataTransfer) {
@@ -505,6 +567,42 @@ export function InventoryModal({
     }
   };
 
+  const handleMacroFoodDrop = (event) => {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    dropHandledRef.current = true;
+    const raw = event.dataTransfer?.getData("application/json");
+    if (!raw) return;
+
+    let payload = null;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      payload = null;
+    }
+
+    if (!payload?.itemInstanceId) return;
+
+    if (!isFoodItem(payload.itemInstanceId)) {
+      setLocalNotice("Macro accepts only FOOD items");
+      clearDrag();
+      return;
+    }
+
+    const nextItemInstanceId = String(payload.itemInstanceId);
+    setMacroFoodItemInstanceId(nextItemInstanceId);
+    const ok = onSetAutoFoodMacro?.({
+      itemInstanceId: nextItemInstanceId,
+      hungerThreshold: macroHungerThreshold,
+    });
+    if (!ok) {
+      setLocalNotice("Macro update is not available right now");
+    } else {
+      setLocalNotice(null);
+    }
+    clearDrag();
+  };
+
   const openContextMenu = (slotCtx, event) => {
     event.preventDefault?.();
     event.stopPropagation?.();
@@ -634,7 +732,8 @@ export function InventoryModal({
   };
 
   const containers = snapshot.containers || [];
-  const equipmentNoticeText = inventoryMessage || equipmentMessage || localNotice;
+  const rawNoticeText = inventoryMessage || equipmentMessage || localNotice;
+  const equipmentNoticeText = rawNoticeText && rawNoticeText === dismissedNoticeText ? null : rawNoticeText;
   const heldPreviewItem = heldState?.item ?? null;
   const heldPreviewLabel =
     heldPreviewItem?.name || heldPreviewItem?.code || heldState?.itemInstanceId || "Item";
@@ -654,7 +753,10 @@ export function InventoryModal({
           ? "warn"
           : "ok"
       : "neutral";
-
+  const selectedMacroFood = macroFoodItemInstanceId ? getInventoryItemContext(macroFoodItemInstanceId) : null;
+  const selectedMacroFoodLabel = selectedMacroFood
+    ? getItemLabel(selectedMacroFood.inst, selectedMacroFood.def)
+    : "Food Item";
   if (!snapshot || !ok) {
     return (
       <div className="inv-backdrop" data-ui-block-game-input="true" onMouseDown={closeFromBackdrop}>
@@ -766,7 +868,21 @@ export function InventoryModal({
             handleDropToWorld();
           }}
         >
-          {equipmentNoticeText ? <div className="inv-notice">{equipmentNoticeText}</div> : null}
+          {equipmentNoticeText ? (
+            <div className="inv-notice">
+              <span className="inv-notice-text">{equipmentNoticeText}</span>
+              <button
+                type="button"
+                className="inv-notice-close"
+                onClick={() => {
+                  setLocalNotice(null);
+                  setDismissedNoticeText(equipmentNoticeText);
+                }}
+              >
+                X
+              </button>
+            </div>
+          ) : null}
 
           {heldStateActive ? (
             <div
@@ -854,10 +970,18 @@ export function InventoryModal({
                               .filter(Boolean)
                               .join(" ")}
                             key={`${cIndex}-${sIndex}`}
-                            draggable={false}
-                            onDragStart={(event) => {
-                              event.preventDefault?.();
-                            }}
+                            draggable={Boolean(instanceId) && !heldStateActive}
+                            onDragStart={
+                              instanceId
+                                ? handleDragStart(instanceId, `INV:${containerId}:${slotIndex}`, {
+                                    sourceKind: "inventory",
+                                    sourceContainerId: containerId,
+                                    sourceSlotIndex: slotIndex,
+                                    sourceRole: role,
+                                  })
+                                : undefined
+                            }
+                            onDragEnd={instanceId ? handleDragEnd : undefined}
                             onMouseUp={(event) => {
                               if (event.button != null && event.button !== 0) return;
                               event.preventDefault?.();
@@ -963,7 +1087,10 @@ export function InventoryModal({
 
                             {itemName ? (
                               <div className="inv-item-card" draggable={false}>
-                                <div className="inv-item-name">{itemName}</div>
+                                <div className="inv-item-top">
+                                  <InventoryItemIcon itemDef={itemDef} label={itemName} className="inv-item-icon" />
+                                  <div className="inv-item-name">{itemName}</div>
+                                </div>
                                 {allowedSlots.length ? (
                                   <div className="inv-item-tags">
                                     {allowedSlots.map((allowed) => (
@@ -1059,7 +1186,9 @@ export function InventoryModal({
                             </div>
                           )}
 
-                          <div className="equip-slot-icon" aria-hidden="true" />
+                          <div className="equip-slot-icon" aria-hidden="true">
+                            {item ? <InventoryItemIcon itemDef={item} label={item.name || item.code || "Item"} /> : null}
+                          </div>
                         </div>
                       </div>
                     );
@@ -1068,56 +1197,175 @@ export function InventoryModal({
               </section>
 
               <section className="inv-panel inv-panel--equipment">
-                <div className="inv-panel-title">Equipment</div>
-
-                <div className="equip-group">
-                  <div className="equip-list">
-                    {wearSlotRows.map((row, rowIndex) => (
-                      <div
-                        className={`equip-row equip-row--${row.length === 1 ? "single" : row.length === 2 ? "double" : "triple"}`}
-                        key={`wear-row-${rowIndex}`}
-                      >
-                        {row.map((slot) => {
-                          const item = slot.item;
-                          const occupied = Boolean(slot.itemInstanceId);
-                          const compatible = dragItem
-                            ? isSlotCompatible(dragItem.itemInstanceId, slot.slotCode)
-                            : false;
-                          const canDrag = occupied && !heldStateActive;
-
-                          return (
-                            <div
-                              className={[
-                                "equip-slot",
-                                occupied ? "is-occupied" : "is-empty",
-                                compatible ? "is-drop-ready" : "",
-                              ]
-                                .filter(Boolean)
-                                .join(" ")}
-                              key={slot.slotCode}
-                              draggable={canDrag}
-                              onDragStart={canDrag ? handleDragStart(slot.itemInstanceId, slot.slotCode) : undefined}
-                              onDragEnd={handleDragEnd}
-                              onDragOver={(e) => {
-                                if (dragItem) e.preventDefault();
-                              }}
-                              onDrop={handleInventoryDropHint(slot.slotCode)}
-                              onMouseUp={handleEquipmentSlotMouseUp(slot, occupied)}
-                            >
-                              <div className="equip-slot-head">
-                                <span className="equip-slot-code">{slot.slotCode}</span>
-                              </div>
-
-                              <div className="equip-slot-body">
-                                {item ? <div className="equip-item-name">{item.name || item.code || "Equipped item"}</div> : null}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
+                <div className="inv-tab-bar" role="tablist" aria-label="Inventory side panels">
+                  {SIDEBAR_TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSidebarTab === tab.id}
+                      className={[
+                        "inv-tab-button",
+                        activeSidebarTab === tab.id ? "is-active" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => setActiveSidebarTab(tab.id)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
+
+                {activeSidebarTab === "equipment" ? (
+                  <div className="equip-group equip-group--tabbed">
+                    <div className="equip-list">
+                      {wearSlotRows.map((row, rowIndex) => (
+                        <div
+                          className={`equip-row equip-row--${row.length === 1 ? "single" : row.length === 2 ? "double" : "triple"}`}
+                          key={`wear-row-${rowIndex}`}
+                        >
+                          {row.map((slot) => {
+                            const item = slot.item;
+                            const occupied = Boolean(slot.itemInstanceId);
+                            const compatible = dragItem
+                              ? isSlotCompatible(dragItem.itemInstanceId, slot.slotCode)
+                              : false;
+                            const canDrag = occupied && !heldStateActive;
+
+                            return (
+                              <div
+                                className={[
+                                  "equip-slot",
+                                  occupied ? "is-occupied" : "is-empty",
+                                  compatible ? "is-drop-ready" : "",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ")}
+                                key={slot.slotCode}
+                                draggable={canDrag}
+                                onDragStart={canDrag ? handleDragStart(slot.itemInstanceId, slot.slotCode) : undefined}
+                                onDragEnd={handleDragEnd}
+                                onDragOver={(e) => {
+                                  if (dragItem) e.preventDefault();
+                                }}
+                                onDrop={handleInventoryDropHint(slot.slotCode)}
+                                onMouseUp={handleEquipmentSlotMouseUp(slot, occupied)}
+                              >
+                                <div className="equip-slot-head">
+                                  <span className="equip-slot-code">{slot.slotCode}</span>
+                                </div>
+
+                                <div className="equip-slot-body">
+                                  {item ? (
+                                    <>
+                                      <div className="equip-slot-details">
+                                        <div className="equip-item-name">{item.name || item.code || "Equipped item"}</div>
+                                      </div>
+                                      <div className="equip-slot-icon" aria-hidden="true">
+                                        <InventoryItemIcon itemDef={item} label={item.name || item.code || "Item"} />
+                                      </div>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : activeSidebarTab === "macro" ? (
+                  <div className="inv-tab-placeholder inv-tab-placeholder--macro">
+                    <div className="macro-card">
+                      <div
+                        className={[
+                          "macro-food-slot",
+                          selectedMacroFood ? "is-occupied" : "is-empty",
+                          dragItem ? (isFoodItem(dragItem.itemInstanceId) ? "is-drop-ready" : "is-drop-blocked") : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onDragOver={(event) => {
+                          if (dragItem) event.preventDefault();
+                        }}
+                        onDrop={handleMacroFoodDrop}
+                      >
+                        <div className="macro-food-slot-top">
+                          <div className="macro-food-slot-body">
+                            <InventoryItemIcon
+                              itemDef={selectedMacroFood?.def ?? null}
+                              label={selectedMacroFoodLabel}
+                              className={`macro-food-icon-box ${selectedMacroFood ? "is-filled" : "is-empty"}`}
+                            />
+                            <div className="macro-food-slot-name">{selectedMacroFoodLabel}</div>
+                          </div>
+
+                          {selectedMacroFood ? (
+                            <button
+                              type="button"
+                              className="macro-food-clear"
+                              onClick={() => {
+                                setMacroFoodItemInstanceId(null);
+                                const ok = onSetAutoFoodMacro?.({
+                                  itemInstanceId: null,
+                                  hungerThreshold: macroHungerThreshold,
+                                });
+                                if (!ok) {
+                                  setLocalNotice("Macro update is not available right now");
+                                } else {
+                                  setLocalNotice(null);
+                                }
+                              }}
+                            >
+                              Clear
+                            </button>
+                          ) : (
+                            <span className="macro-food-empty-state">EMPTY</span>
+                          )}
+                        </div>
+
+                        <div className="macro-threshold-head">
+                          <span className="macro-threshold-label">Trigger Hunger</span>
+                          <span className="macro-threshold-value">
+                            {macroHungerThreshold} / {hungerMax}
+                          </span>
+                        </div>
+
+                        <input
+                          className="macro-threshold-slider"
+                          type="range"
+                          min="0"
+                          max={String(hungerMax)}
+                          step="1"
+                          value={macroHungerThreshold}
+                          onChange={(event) => {
+                            const nextThreshold = Number(event.target.value ?? 0);
+                            setMacroHungerThreshold(nextThreshold);
+                            const ok = onSetAutoFoodMacro?.({
+                              itemInstanceId: macroFoodItemInstanceId,
+                              hungerThreshold: nextThreshold,
+                            });
+                            if (!ok) {
+                              setLocalNotice("Macro update is not available right now");
+                            } else {
+                              setLocalNotice(null);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="inv-tab-placeholder">
+                    <div className="inv-tab-placeholder-title">
+                      {activeSidebarTab === "craft" ? "Craft" : "Macro"}
+                    </div>
+                    <div className="inv-tab-placeholder-text">
+                      Janela de {activeSidebarTab === "craft" ? "craft" : "macro"} pronta para a proxima etapa.
+                    </div>
+                  </div>
+                )}
               </section>
             </div>
           </div>

@@ -9,9 +9,13 @@ const {
   isWASDActive,
 } = require("../../state/runtimeStore");
 
-const { getActor } = require("../../state/actorsRuntimeStore");
+const { getActor, getActorsForInstance } = require("../../state/actorsRuntimeStore");
 const { getEnemy, getEnemiesForInstance } = require("../../state/enemies/enemiesRuntimeStore");
-const { DEFAULT_STOP_RADIUS, DEFAULT_TIMEOUT_MS } = require("../../config/interactionConstants");
+const {
+  DEFAULT_STOP_RADIUS,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_COLLECT_RADIUS,
+} = require("../../config/interactionConstants");
 
 function isFiniteNumber(n) {
   return typeof n === "number" && Number.isFinite(n);
@@ -19,6 +23,47 @@ function isFiniteNumber(n) {
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
+}
+
+function resolveNearbyCollectTarget(rt, radius = DEFAULT_COLLECT_RADIUS) {
+  if (!rt?.instanceId || !rt?.pos) return null;
+
+  const originX = Number(rt.pos.x ?? 0);
+  const originZ = Number(rt.pos.z ?? 0);
+  const maxDistSq = Number(radius) * Number(radius);
+  const actors = getActorsForInstance(rt.instanceId);
+
+  let best = null;
+  let bestDistSq = Number.POSITIVE_INFINITY;
+
+  for (const actor of actors) {
+    if (!actor) continue;
+    if (String(actor.status ?? "ACTIVE") !== "ACTIVE") continue;
+
+    const hasLootContainer = Array.isArray(actor.containers)
+      && actor.containers.some((container) => String(container?.slotRole ?? "") === "LOOT");
+    if (!hasLootContainer) continue;
+
+    const ax = Number(actor.pos?.x ?? 0);
+    const az = Number(actor.pos?.z ?? 0);
+    const dx = ax - originX;
+    const dz = az - originZ;
+    const distSq = dx * dx + dz * dz;
+
+    if (!Number.isFinite(distSq) || distSq > maxDistSq) continue;
+    if (distSq >= bestDistSq) continue;
+
+    best = actor;
+    bestDistSq = distSq;
+  }
+
+  if (!best) return null;
+
+  return {
+    kind: "ACTOR",
+    id: String(best.id),
+    stopRadius: radius,
+  };
 }
 
 /**
@@ -228,7 +273,8 @@ function registerInteractHandler(io, socket) {
       }
       console.log(`[INTERACT_DEBUG] ✅ WASD não está ativo`);
 
-      const target = payload?.target;
+      const autoCollectTarget = payload?.target ? null : resolveNearbyCollectTarget(rt, DEFAULT_COLLECT_RADIUS);
+      const target = payload?.target ?? autoCollectTarget ?? null;
       console.log(`[INTERACT_DEBUG] 6. Target:`, target);
       
       if (!target?.kind || target?.id == null) {
@@ -257,6 +303,8 @@ function registerInteractHandler(io, socket) {
       const stopRadius =
         isFiniteNumber(stopRadiusRaw) && stopRadiusRaw > 0
           ? stopRadiusRaw
+          : autoCollectTarget?.stopRadius
+            ? autoCollectTarget.stopRadius
           : DEFAULT_STOP_RADIUS;
       console.log(`[INTERACT_DEBUG] 8. stopRadius=${stopRadius}`);
 

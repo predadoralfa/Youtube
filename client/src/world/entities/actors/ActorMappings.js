@@ -19,6 +19,7 @@ export function getActorComponent(actorType) {
   const typeMap = {
     BAU: ChestActor,
     CHEST: ChestActor,
+    GROUND_LOOT: DefaultActor,
     TREE: TreeActor,
     NPC: NPCActor,
     // Adicione mais tipos aqui conforme necessário
@@ -42,6 +43,12 @@ export const ACTOR_CONFIG = {
     interactive: true,
     label: "Baú",
     color: 0x8b4513,
+  },
+  GROUND_LOOT: {
+    scale: 0.5,
+    interactive: true,
+    label: "Loot",
+    color: 0xc1c7d0,
   },
   TREE: {
     scale: 2,

@@ -4,6 +4,7 @@
 const db = require("../models");
 const { ensureInventoryLoaded } = require("../state/inventory/loader");
 const { buildInventoryFull } = require("../state/inventory/fullPayload");
+const { ensureEquipmentLoaded } = require("../state/equipment/loader");
 const { loadCarryWeightStats } = require("../state/inventory/weight");
 
 /**
@@ -50,6 +51,30 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
   }
 
   return await db.sequelize.transaction(async (tx) => {
+    async function destroyActorAndLootContainer(actorIdToDestroy, lootContainerIdToDestroy, lootContainerRow) {
+      await db.GaActor.update(
+        { status: "DISABLED" },
+        { where: { id: actorIdToDestroy }, transaction: tx }
+      );
+
+      await db.GaActor.destroy({
+        where: { id: actorIdToDestroy },
+        transaction: tx,
+      });
+
+      if (lootContainerRow?.id != null) {
+        await db.GaContainer.destroy({
+          where: { id: lootContainerRow.id },
+          transaction: tx,
+        });
+      } else if (lootContainerIdToDestroy != null) {
+        await db.GaContainer.destroy({
+          where: { id: lootContainerIdToDestroy },
+          transaction: tx,
+        });
+      }
+    }
+
     // ================================================================
     // 1) VALIDAR ACTOR E CONTAINER LOOT
     // ================================================================
@@ -61,6 +86,9 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     if (!actor) {
       return { ok: false, error: "ACTOR_NOT_FOUND" };
     }
+
+    const actorType = String(actor.actor_type ?? "").trim().toUpperCase();
+    const shouldDespawnWhenEmpty = actorType !== "TREE";
 
     // ✅ CORRIGIDO: slot_role está em ga_container, não em ga_container_owner!
     const lootOwner = await db.GaContainerOwner.findOne({
@@ -100,7 +128,16 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     );
 
     if (!srcSlot) {
-      return { ok: false, error: "ACTOR_LOOT_EMPTY" };
+      if (shouldDespawnWhenEmpty) {
+        await destroyActorAndLootContainer(actorId, lootContainerId, lootOwner.container);
+        return { ok: false, error: "ACTOR_NOT_FOUND" };
+      }
+
+      return {
+        ok: false,
+        error: "ACTOR_LOOT_EMPTY",
+        message: "This tree has no more fruits right now",
+      };
     }
 
     // ================================================================
@@ -348,33 +385,25 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
       transaction: tx,
     });
 
-    const actorDisabled = remainingSlots.every(
+    const actorWouldBeEmpty = remainingSlots.every(
       (s) => s.item_instance_id == null || Number(s.qty || 0) <= 0
     );
 
+    const actorDisabled = shouldDespawnWhenEmpty && actorWouldBeEmpty;
+
     if (actorDisabled) {
       const lootContainer = lootOwner.container;
-      await db.GaActor.update(
-        { status: "DISABLED" },
-        { where: { id: actorId }, transaction: tx }
-      );
-
-      await db.GaActor.destroy({
-        where: { id: actorId },
-        transaction: tx,
-      });
-
-      if (lootContainer?.id != null) {
-        await db.GaContainer.destroy({
-          where: { id: lootContainer.id },
-          transaction: tx,
-        });
-      }
+      await destroyActorAndLootContainer(actorId, lootContainerId, lootContainer);
 
       console.log("[COLLECT] Actor desabilitado (vazio)");
       console.log("[COLLECT] Actor removido do DB", {
         actorId,
         lootContainerId,
+      });
+    } else if (actorWouldBeEmpty) {
+      console.log("[COLLECT] Actor permaneceu no mundo mesmo vazio", {
+        actorId,
+        actorType,
       });
     }
 
@@ -422,7 +451,8 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
       }
     }
 
-    const inventoryFull = buildInventoryFull(invRt);
+    const eqRt = await ensureEquipmentLoaded(userId);
+    const inventoryFull = buildInventoryFull(invRt, eqRt);
 
     console.log("[COLLECT] ✅ Coleta bem-sucedida!", {
       userId,
@@ -440,6 +470,7 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
         itemName: itemDef.name ?? itemDef.code ?? null,
         qty: qtyToMove,
       },
+      message: actorWouldBeEmpty && !shouldDespawnWhenEmpty ? "This tree has no more fruits right now" : null,
     };
   });
 }

@@ -17,6 +17,16 @@ function asInt(n, fallback = 0) {
   return Number.isFinite(x) ? x : fallback;
 }
 
+function parseJsonObject(value) {
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
 function makeEmptySlots(slotCount) {
   const n = Math.max(0, asInt(slotCount, 0));
   return Array.from({ length: n }, (_, i) => ({
@@ -182,7 +192,7 @@ function normalizeSlotRow(row) {
 function normalizeItemInstanceRow(row, userId) {
   const plain = row.get ? row.get({ plain: true }) : row;
 
-  const props = plain.props_json ?? plain.meta ?? null;
+  const props = parseJsonObject(plain.props_json ?? plain.meta ?? null);
 
   return {
     id: String(plain.id),
@@ -221,7 +231,7 @@ function normalizeItemDefComponentRow(row) {
     id: String(plain.id),
     itemDefId: String(plain.item_def_id),
     componentType: plain.component_type ?? null,
-    dataJson: plain.data_json ?? null,
+    dataJson: parseJsonObject(plain.data_json ?? null),
     version: asInt(plain.version, 1),
   };
 }
