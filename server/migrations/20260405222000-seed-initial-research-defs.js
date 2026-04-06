@@ -26,13 +26,13 @@ module.exports = {
         `
         SELECT id, code, name, category
         FROM ga_item_def
-        WHERE code IN ('FOOD-APPLE', 'MATERIAL-STONE')
+        WHERE code IN ('FOOD-APPLE', 'SMALL_STONE')
         `,
         { transaction }
       );
 
       const appleItem = itemRows.find((row) => String(row.code) === "FOOD-APPLE");
-      const stoneItem = itemRows.find((row) => String(row.code) === "MATERIAL-STONE");
+      const stoneItem = itemRows.find((row) => String(row.code) === "SMALL_STONE");
 
       if (!appleItem?.id) {
         throw new Error("Nao foi possivel localizar FOOD-APPLE para seed de research.");

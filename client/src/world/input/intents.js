@@ -11,6 +11,7 @@ export const IntentType = {
   // UI
   UI_TOGGLE_INVENTORY: "UI_TOGGLE_INVENTORY",
   UI_TOGGLE_RESEARCH: "UI_TOGGLE_RESEARCH",
+  UI_TOGGLE_BUILD: "UI_TOGGLE_BUILD",
   UI_CANCEL: "UI_CANCEL",
 
   // Gameplay: interação canônica
@@ -72,6 +73,13 @@ export function intentUiToggleInventory() {
 export function intentUiToggleResearch() {
   return {
     type: IntentType.UI_TOGGLE_RESEARCH,
+    ts: performance.now(),
+  };
+}
+
+export function intentUiToggleBuild() {
+  return {
+    type: IntentType.UI_TOGGLE_BUILD,
     ts: performance.now(),
   };
 }

@@ -48,6 +48,7 @@ import { createEntitiesStore } from "./state/entitiesStore";
 import { logInventory } from "@/inventory/inventoryProbe";
 import { IntentType } from "./input/intents";
 import { InventoryModal } from "@/components/models/inventory/InventoryModal";
+import { BuildModal } from "@/components/models/build/BuildModal";
 import { ResearchModal } from "@/components/models/research/ResearchModal";
 import { WorldClockPanel } from "@/world/ui/WorldClockPanel";
 
@@ -248,6 +249,7 @@ export function GameShell() {
 
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [researchOpen, setResearchOpen] = useState(false);
+  const [buildOpen, setBuildOpen] = useState(false);
   const [inventorySnapshot, setInventorySnapshot] = useState(null);
   const [equipmentSnapshot, setEquipmentSnapshot] = useState(null);
   const [inventoryMessage, setInventoryMessage] = useState(null);
@@ -385,6 +387,7 @@ export function GameShell() {
               }
             : prev
         );
+        requestInventoryFull();
         setResearchMessage(null);
         return;
       }
@@ -534,6 +537,10 @@ export function GameShell() {
     setResearchOpen(false);
   }, []);
 
+  const closeBuild = useCallback(() => {
+    setBuildOpen(false);
+  }, []);
+
   const onTargetSelect = useCallback((target) => {
     if (!target?.kind || target?.id == null) return;
 
@@ -584,6 +591,8 @@ export function GameShell() {
           const next = !prev;
           if (next) {
             setInventoryOpen(false);
+            setBuildOpen(false);
+            requestInventoryFull();
             requestResearchFull();
           }
           return next;
@@ -591,7 +600,24 @@ export function GameShell() {
         return;
       }
 
+      if (intent.type === IntentType.UI_TOGGLE_BUILD) {
+        setBuildOpen((prev) => {
+          const next = !prev;
+          if (next) {
+            setInventoryOpen(false);
+            setResearchOpen(false);
+          }
+          return next;
+        });
+        return;
+      }
+
       if (intent.type === IntentType.UI_CANCEL) {
+        if (buildOpen) {
+          closeBuild();
+          return;
+        }
+
         if (researchOpen) {
           closeResearch();
           return;
@@ -675,8 +701,10 @@ export function GameShell() {
       emitInteractStop,
       inventoryOpen,
       researchOpen,
+      buildOpen,
       closeInventory,
       closeResearch,
+      closeBuild,
     ]
   );
 
@@ -1285,10 +1313,15 @@ export function GameShell() {
       <ResearchModal
         open={researchOpen}
         snapshot={snapshot?.research}
+        inventorySnapshot={inventorySnapshot}
+        equipmentSnapshot={equipmentSnapshot}
         researchMessage={researchMessage}
         onClose={closeResearch}
         onStartStudy={emitResearchStart}
+        onRequestInventoryFull={requestInventoryFull}
       />
+
+      <BuildModal open={buildOpen} onClose={closeBuild} />
     </>
   );
 }

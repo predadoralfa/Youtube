@@ -2,6 +2,9 @@
 
 const db = require("../models");
 const { getRuntime } = require("../state/runtime/store");
+const { ensureInventoryLoaded } = require("../state/inventory/loader");
+const { withInventoryLock } = require("../state/inventory/store");
+const { flush } = require("../state/inventory/persist/flush");
 
 const STATUS_IDLE = "IDLE";
 const STATUS_RUNNING = "RUNNING";
@@ -34,6 +37,44 @@ function normalizeUnlocks(value) {
   return (Array.isArray(value?.unlock) ? value.unlock : [])
     .map((entry) => String(entry))
     .filter(Boolean);
+}
+
+function normalizeItemCosts(value) {
+  return (Array.isArray(value?.itemCosts) ? value.itemCosts : [])
+    .map((entry) => {
+      const qty = Math.floor(toFiniteNumber(entry?.qty, 0));
+      const itemCode = entry?.itemCode != null ? String(entry.itemCode) : null;
+      const itemDefId = entry?.itemDefId != null ? String(entry.itemDefId) : null;
+
+      return {
+        itemCode,
+        itemDefId,
+        qty,
+      };
+    })
+    .filter((entry) => entry.qty > 0 && (entry.itemCode || entry.itemDefId));
+}
+
+function normalizeItemCode(value) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_");
+}
+
+function canonicalResearchItemCode(value) {
+  const normalized = normalizeItemCode(value);
+  if (
+    normalized === "STONE" ||
+    normalized === "SMALLSTONE" ||
+    normalized === "SMALL_STONE" ||
+    normalized === "MATERIALSTONE" ||
+    normalized === "MATERIAL_STONE" ||
+    normalized === "AMMO_SMALL_ROCK"
+  ) {
+    return "SMALL_STONE";
+  }
+  return normalized;
 }
 
 function resolveCurrentStudy(levels, activeLevel) {
@@ -71,6 +112,8 @@ function buildStudyPayload(study) {
     levelDescription: nextStudy?.description ?? null,
     nextLevelTitle: nextStudy?.title ?? null,
     nextLevelDescription: nextStudy?.description ?? null,
+    levelRequirements: nextStudy?.requirements ?? null,
+    levelItemCosts: normalizeItemCosts(nextStudy?.requirements),
     canStart: Boolean(study.canStart),
     isRunning: study.status === STATUS_RUNNING,
     isCompleted: study.status === STATUS_COMPLETED,
@@ -202,6 +245,7 @@ function buildResearchRuntime(defs, userRows) {
           ? STATUS_RUNNING
           : STATUS_IDLE;
     const levelStudyTimeMs = toFiniteNumber(resolveCurrentStudy(levels, activeLevel)?.studyTimeMs, 0);
+    const nextStudy = resolveCurrentStudy(levels, activeLevel);
     const progressMs =
       status === STATUS_COMPLETED
         ? 0
@@ -219,6 +263,8 @@ function buildResearchRuntime(defs, userRows) {
       status,
       startedAtMs: row?.started_at_ms == null ? null : toFiniteNumber(row.started_at_ms, null),
       completedAtMs: row?.completed_at_ms == null ? null : toFiniteNumber(row.completed_at_ms, null),
+      levelRequirements: nextStudy?.requirements ?? null,
+      levelItemCosts: normalizeItemCosts(nextStudy?.requirements),
       levels,
       itemDef: def.itemDef
         ? {
@@ -249,10 +295,11 @@ function buildResearchRuntime(defs, userRows) {
   };
 }
 
-async function ensureResearchLoaded(userId, rt = getRuntime(userId)) {
+async function ensureResearchLoaded(userId, rt = getRuntime(userId), options = {}) {
   const holder = rt ?? { userId: Number(userId) };
+  const forceReload = Boolean(options?.forceReload);
 
-  if (holder.research?.studies?.length > 0) {
+  if (!forceReload && holder.research?.studies?.length > 0) {
     return holder.research;
   }
 
@@ -279,12 +326,188 @@ function listUnlockedCapabilities(rt) {
   return unlocks;
 }
 
+function findItemDefByCode(invRt, itemCode) {
+  if (!invRt?.itemDefsById || !itemCode) return null;
+  const target = canonicalResearchItemCode(itemCode);
+  for (const def of invRt.itemDefsById.values()) {
+    if (canonicalResearchItemCode(def?.code) === target) {
+      return def;
+    }
+  }
+  return null;
+}
+
+function resolveCostItemDef(invRt, cost) {
+  if (cost?.itemDefId != null) {
+    return invRt?.itemDefsById?.get?.(String(cost.itemDefId)) || null;
+  }
+  return findItemDefByCode(invRt, cost?.itemCode ?? null);
+}
+
+async function resolveCostItemDefFresh(invRt, cost) {
+  const cached = resolveCostItemDef(invRt, cost);
+  if (cached) return cached;
+
+  if (cost?.itemDefId != null) {
+    const row = await db.GaItemDef.findByPk(Number(cost.itemDefId));
+    if (row) {
+      return {
+        id: Number(row.id),
+        code: row.code,
+        name: row.name,
+        category: row.category ?? row.categoria ?? null,
+      };
+    }
+  }
+
+  if (cost?.itemCode != null) {
+    const aliases = Array.from(
+      new Set([
+        canonicalResearchItemCode(cost.itemCode),
+        normalizeItemCode(cost.itemCode),
+        String(cost.itemCode),
+      ])
+    ).filter(Boolean);
+
+    for (const alias of aliases) {
+      const row = await db.GaItemDef.findOne({ where: { code: alias } });
+      if (row) {
+        return {
+          id: Number(row.id),
+          code: row.code,
+          name: row.name,
+          category: row.category ?? row.categoria ?? null,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+async function consumeResearchItemCosts(userId, invRt, requirements, tx) {
+  const itemCosts = normalizeItemCosts(requirements);
+  if (itemCosts.length === 0) {
+    return {
+      touchedContainers: [],
+      touchedSlots: [],
+      consumedInstanceIds: [],
+    };
+  }
+
+  const touchedContainers = new Set();
+  const touchedSlots = new Map();
+  const consumedInstanceIds = new Set();
+
+  for (const cost of itemCosts) {
+    const itemDef = await resolveCostItemDefFresh(invRt, cost);
+    if (!itemDef) {
+      throw Object.assign(new Error(`Research item cost not found: ${cost.itemCode ?? cost.itemDefId}`), {
+        code: "RESEARCH_COST_ITEM_DEF_NOT_FOUND",
+      });
+    }
+
+    const targetItemDefId = String(itemDef.id);
+    const matchingSlots = [];
+    let availableQty = 0;
+
+    for (const container of invRt?.containers ?? []) {
+      for (const slot of container?.slots ?? []) {
+        const slotQty = Number(slot?.qty ?? 0);
+        if (slotQty <= 0 || !slot?.itemInstanceId) continue;
+
+        const itemInstance = invRt?.itemInstanceById?.get?.(String(slot.itemInstanceId)) ?? null;
+        if (!itemInstance) continue;
+        if (String(itemInstance.itemDefId) !== targetItemDefId) continue;
+
+        availableQty += slotQty;
+        matchingSlots.push({ container, slot, itemInstance });
+      }
+    }
+
+    if (availableQty < cost.qty) {
+      throw Object.assign(
+        new Error(
+          `Not enough ${itemDef.name ?? itemDef.code ?? cost.itemCode ?? "items"} (${availableQty}/${cost.qty})`
+        ),
+        {
+          code: "RESEARCH_COST_NOT_ENOUGH_ITEMS",
+          meta: {
+            itemCode: itemDef.code ?? cost.itemCode ?? null,
+            itemName: itemDef.name ?? null,
+            have: availableQty,
+            need: cost.qty,
+          },
+        }
+      );
+    }
+
+    let remaining = cost.qty;
+    for (const match of matchingSlots) {
+      if (remaining <= 0) break;
+
+      const currentQty = Number(match.slot.qty ?? 0);
+      if (currentQty <= 0) continue;
+
+      const consumeQty = Math.min(currentQty, remaining);
+      if (consumeQty <= 0) continue;
+
+      remaining -= consumeQty;
+      const nextQty = currentQty - consumeQty;
+
+      if (nextQty <= 0) {
+        const consumedInstanceId = String(match.slot.itemInstanceId);
+        match.slot.itemInstanceId = null;
+        match.slot.qty = 0;
+        consumedInstanceIds.add(consumedInstanceId);
+        invRt?.itemInstanceById?.delete?.(consumedInstanceId);
+      } else {
+        match.slot.qty = nextQty;
+      }
+
+      const slotKey = `${match.container.id}:${match.slot.slotIndex}`;
+      if (!touchedSlots.has(slotKey)) {
+        touchedSlots.set(slotKey, {
+          containerId: match.container.id,
+          slotIndex: match.slot.slotIndex,
+          slot: match.slot,
+        });
+      }
+      touchedContainers.add(String(match.container.id));
+    }
+  }
+
+  if (touchedSlots.size > 0) {
+    await flush(
+      invRt,
+      {
+        touchedContainers: Array.from(touchedContainers),
+        touchedSlots: Array.from(touchedSlots.values()),
+      },
+      tx
+    );
+  }
+
+  for (const id of consumedInstanceIds) {
+    await db.GaItemInstance.destroy({
+      where: { id: Number(id) },
+      transaction: tx,
+    });
+  }
+
+  return {
+    touchedContainers: Array.from(touchedContainers),
+    touchedSlots: Array.from(touchedSlots.values()),
+    consumedInstanceIds: Array.from(consumedInstanceIds),
+  };
+}
+
 function hasCapability(rt, capabilityCode) {
   if (!capabilityCode) return false;
   return listUnlockedCapabilities(rt).has(String(capabilityCode));
 }
 
-async function persistDirtyResearch(userId, rt = getRuntime(userId), forceAll = false) {
+async function persistDirtyResearch(userId, rt = getRuntime(userId), forceAll = false, tx = null) {
   const studies = Array.isArray(rt?.research?.studies) ? rt.research.studies : [];
   const dirtyStudies = studies.filter((study) => forceAll || study.dirty || study.forcePersist);
   if (dirtyStudies.length === 0) return false;
@@ -301,7 +524,7 @@ async function persistDirtyResearch(userId, rt = getRuntime(userId), forceAll = 
       started_at_ms: study.startedAtMs == null ? null : Number(study.startedAtMs),
       completed_at_ms: study.completedAtMs == null ? null : Number(study.completedAtMs),
       updated_at: now,
-    });
+    }, { transaction: tx });
 
     study.dirty = false;
     study.forcePersist = false;
@@ -312,44 +535,62 @@ async function persistDirtyResearch(userId, rt = getRuntime(userId), forceAll = 
 }
 
 async function startResearch(userId, researchCode, nowMs = Date.now()) {
-  const rt = getRuntime(userId);
-  if (!rt) {
-    return { ok: false, code: "RUNTIME_NOT_LOADED", message: "Runtime not loaded" };
-  }
+  return withInventoryLock(userId, async () => {
+    const rt = getRuntime(userId);
+    if (!rt) {
+      return { ok: false, code: "RUNTIME_NOT_LOADED", message: "Runtime not loaded" };
+    }
 
-  const research = await ensureResearchLoaded(userId, rt);
-  const target = research.studies.find((study) => String(study.code) === String(researchCode));
-  if (!target) {
-    return { ok: false, code: "RESEARCH_NOT_FOUND", message: "Research not found" };
-  }
-  if (target.status === STATUS_RUNNING) {
-    return { ok: true, research: buildResearchPayload(rt) };
-  }
-  if (target.currentLevel >= target.maxLevel || target.status === STATUS_COMPLETED) {
-    return { ok: false, code: "RESEARCH_ALREADY_COMPLETED", message: "Research already completed" };
-  }
+    const invRt = await ensureInventoryLoaded(userId);
+    const research = await ensureResearchLoaded(userId, rt, { forceReload: true });
+    const target = research.studies.find((study) => String(study.code) === String(researchCode));
+    if (!target) {
+      return { ok: false, code: "RESEARCH_NOT_FOUND", message: "Research not found" };
+    }
+    if (target.status === STATUS_RUNNING) {
+      return { ok: true, research: buildResearchPayload(rt) };
+    }
+    if (target.currentLevel >= target.maxLevel || target.status === STATUS_COMPLETED) {
+      return { ok: false, code: "RESEARCH_ALREADY_COMPLETED", message: "Research already completed" };
+    }
 
-  const running = research.studies.find((study) => study.status === STATUS_RUNNING);
-  if (running && running.code !== target.code) {
-    return { ok: false, code: "RESEARCH_ALREADY_RUNNING", message: "Another research is already running" };
-  }
+    const running = research.studies.find((study) => study.status === STATUS_RUNNING);
+    if (running && running.code !== target.code) {
+      return { ok: false, code: "RESEARCH_ALREADY_RUNNING", message: "Another research is already running" };
+    }
 
-  target.status = STATUS_RUNNING;
-  target.startedAtMs = nowMs;
-  target.dirty = true;
-  target.forcePersist = true;
-  research.activeResearchCode = target.code;
+    const nextStudy = resolveCurrentStudy(target.levels, target.activeLevel);
+    const tx = await db.sequelize.transaction();
+    try {
+      await consumeResearchItemCosts(userId, invRt, nextStudy?.requirements ?? null, tx);
 
-  for (const study of research.studies) {
-    study.canStart = false;
-  }
+      target.status = STATUS_RUNNING;
+      target.startedAtMs = nowMs;
+      target.dirty = true;
+      target.forcePersist = true;
+      research.activeResearchCode = target.code;
 
-  await persistDirtyResearch(userId, rt);
+      for (const study of research.studies) {
+        study.canStart = false;
+      }
 
-  return {
-    ok: true,
-    research: buildResearchPayload(rt),
-  };
+      await persistDirtyResearch(userId, rt, false, tx);
+      await tx.commit();
+
+      return {
+        ok: true,
+        research: buildResearchPayload(rt),
+      };
+    } catch (error) {
+      await tx.rollback().catch(() => {});
+      return {
+        ok: false,
+        code: error?.code || "RESEARCH_START_FAILED",
+        message: error?.message || "Failed to start research",
+        meta: error?.meta,
+      };
+    }
+  });
 }
 
 async function processResearchTick(rt, nowMs = Date.now(), dtMs = 50) {

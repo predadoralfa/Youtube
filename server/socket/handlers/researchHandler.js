@@ -18,7 +18,7 @@ function registerResearchHandler(io, socket) {
     try {
       const userId = requireUser();
       const rt = getRuntime(userId);
-      const research = await ensureResearchLoaded(userId, rt);
+      const research = await ensureResearchLoaded(userId, rt, { forceReload: true });
       const payload = buildResearchPayload({ research });
       socket.emit("research:full", payload);
       safeAck(ack, payload);

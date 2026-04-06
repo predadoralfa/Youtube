@@ -176,6 +176,10 @@
   min-width: 1160px;
 }
 
+.research-lane--static {
+  min-width: 100%;
+}
+
 .research-content {
   position: relative;
 }
@@ -234,6 +238,20 @@
     0 16px 38px rgba(0, 0, 0, 0.22);
 }
 
+.research-card--craft {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(0, 255, 255, 0.1),
+    0 16px 38px rgba(0, 0, 0, 0.22);
+}
+
+.research-card--build {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(255, 211, 138, 0.12),
+    0 16px 38px rgba(0, 0, 0, 0.22);
+}
+
 .research-card-head {
   display: flex;
   align-items: center;
@@ -270,6 +288,19 @@
   box-shadow: none;
 }
 
+.research-fallback-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--research-accent);
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .research-head-copy {
   min-width: 0;
 }
@@ -296,6 +327,67 @@
   margin: 0;
   color: var(--research-muted);
   line-height: 1.6;
+}
+
+.research-requirements {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 255, 255, 0.08);
+}
+
+.research-requirements-title {
+  color: var(--research-muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.research-requirement {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.research-requirement.is-ready {
+  border: 1px solid rgba(46, 227, 132, 0.24);
+  background: rgba(46, 227, 132, 0.08);
+}
+
+.research-requirement.is-missing {
+  border: 1px solid rgba(255, 88, 88, 0.24);
+  background: rgba(255, 88, 88, 0.08);
+}
+
+.research-requirement-label {
+  color: var(--research-text);
+  font-size: 0.9rem;
+}
+
+.research-requirement-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 0.88rem;
+}
+
+.research-requirement.is-ready .research-requirement-count {
+  color: #56f0a0;
+}
+
+.research-requirement.is-missing .research-requirement-count {
+  color: #ff7c7c;
+}
+
+.research-requirement-count strong {
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .research-meta {

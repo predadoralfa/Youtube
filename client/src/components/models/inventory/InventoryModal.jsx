@@ -1362,7 +1362,9 @@ export function InventoryModal({
                       {activeSidebarTab === "craft" ? "Craft" : "Macro"}
                     </div>
                     <div className="inv-tab-placeholder-text">
-                      Janela de {activeSidebarTab === "craft" ? "craft" : "macro"} pronta para a proxima etapa.
+                      {activeSidebarTab === "craft"
+                        ? "No recipes unlocked yet. Press R to open Research, complete your first studies, and come back here to start crafting."
+                        : "No macro setup yet. Configure your automation after unlocking the right study paths."}
                     </div>
                   </div>
                 )}

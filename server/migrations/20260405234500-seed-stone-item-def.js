@@ -15,14 +15,14 @@ module.exports = {
 
       const eraMinId = Number(eraRow?.id ?? 0);
       if (!eraMinId) {
-        throw new Error("Nao foi possivel localizar a Era 1 para seedar MATERIAL-STONE.");
+        throw new Error("Nao foi possivel localizar a Era 1 para seedar SMALL_STONE.");
       }
 
       const [itemRows] = await queryInterface.sequelize.query(
         `
         SELECT id
         FROM ga_item_def
-        WHERE code = 'MATERIAL-STONE'
+        WHERE code = 'SMALL_STONE'
         LIMIT 1
         `,
         { transaction }
@@ -31,8 +31,8 @@ module.exports = {
       const itemDefId = Number(itemRows?.[0]?.id ?? 0) || null;
 
       const payload = {
-        code: "MATERIAL-STONE",
-        name: "Stone",
+              code: "SMALL_STONE",
+              name: "Small Stone",
         category: "MATERIAL",
         stack_max: 50,
         unit_weight: 0.4,
@@ -62,7 +62,7 @@ module.exports = {
         `
         SELECT id
         FROM ga_item_def
-        WHERE code = 'MATERIAL-STONE'
+          WHERE code = 'SMALL_STONE'
         LIMIT 1
         `,
         { transaction }
@@ -70,7 +70,7 @@ module.exports = {
 
       const stoneItemDefId = Number(stoneRows?.[0]?.id ?? 0) || null;
       if (!stoneItemDefId) {
-        throw new Error("Nao foi possivel localizar MATERIAL-STONE apos seed.");
+        throw new Error("Nao foi possivel localizar SMALL_STONE apos seed.");
       }
 
       await queryInterface.sequelize.query(
@@ -100,7 +100,7 @@ module.exports = {
 
       await queryInterface.bulkDelete(
         "ga_item_def",
-        { code: "MATERIAL-STONE" },
+        { code: "SMALL_STONE" },
         { transaction }
       );
     });

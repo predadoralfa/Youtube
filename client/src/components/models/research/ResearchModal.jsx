@@ -53,7 +53,272 @@ function deriveLiveStudy(node, serverNowMs, clientNowMs) {
   };
 }
 
-export function ResearchModal({ open, snapshot, researchMessage, onClose, onStartStudy }) {
+function normalizeIdentity(value) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_");
+}
+
+function canonicalItemCode(value) {
+  const normalized = normalizeIdentity(value);
+  if (
+    normalized === "STONE" ||
+    normalized === "SMALLSTONE" ||
+    normalized === "SMALL_STONE" ||
+    normalized === "MATERIALSTONE" ||
+    normalized === "MATERIAL_STONE" ||
+    normalized === "AMMO_SMALL_ROCK"
+  ) {
+    return "SMALL_STONE";
+  }
+  return normalized;
+}
+
+function buildInventoryCounts(inventorySnapshot, equipmentSnapshot) {
+  const defById = new Map();
+  const defByCode = new Map();
+  const defByName = new Map();
+  const countsByDefId = new Map();
+  const countsByCode = new Map();
+  const countsByName = new Map();
+
+  const registerDef = (defLike) => {
+    if (!defLike) return;
+    const id = defLike.id != null ? String(defLike.id) : null;
+    const code = defLike.code != null ? canonicalItemCode(defLike.code) : null;
+    const name = defLike.name != null ? normalizeIdentity(defLike.name) : null;
+    if (id && !defById.has(id)) {
+      defById.set(id, defLike);
+    }
+    if (code && !defByCode.has(code)) {
+      defByCode.set(code, defLike);
+    }
+    if (name && !defByName.has(name)) {
+      defByName.set(name, defLike);
+    }
+  };
+
+  const addCount = (defLike, qty) => {
+    const amount = Math.max(0, Number(qty ?? 0));
+    if (amount <= 0 || !defLike) return;
+
+    const itemDefId = defLike.itemDefId != null ? String(defLike.itemDefId) : defLike.id != null ? String(defLike.id) : null;
+    const code = defLike.code != null ? canonicalItemCode(defLike.code) : null;
+    const name = defLike.name != null ? normalizeIdentity(defLike.name) : null;
+
+    if (itemDefId) {
+      countsByDefId.set(itemDefId, (countsByDefId.get(itemDefId) ?? 0) + amount);
+    }
+
+    if (code) {
+      countsByCode.set(code, (countsByCode.get(code) ?? 0) + amount);
+    }
+
+    if (name) {
+      countsByName.set(name, (countsByName.get(name) ?? 0) + amount);
+    }
+  };
+
+  const inventorySource = inventorySnapshot?.inventory ?? inventorySnapshot ?? null;
+  const inventoryDefs = Array.isArray(inventorySource?.itemDefs)
+    ? inventorySource.itemDefs
+    : Array.isArray(inventorySource?.item_defs)
+      ? inventorySource.item_defs
+      : [];
+  const inventoryContainers = Array.isArray(inventorySource?.containers) ? inventorySource.containers : [];
+  const inventoryInstances = Array.isArray(inventorySource?.itemInstances)
+    ? inventorySource.itemInstances
+    : Array.isArray(inventorySource?.item_instances)
+      ? inventorySource.item_instances
+      : [];
+
+  for (const def of inventoryDefs) {
+    registerDef(def);
+  }
+
+  for (const container of inventoryContainers) {
+    for (const slot of Array.isArray(container?.slots) ? container.slots : []) {
+      const qty = Math.max(0, Number(slot?.qty ?? 0));
+      const itemInstanceId = slot?.itemInstanceId != null ? String(slot.itemInstanceId) : null;
+      if (!itemInstanceId || qty <= 0) continue;
+
+      const instance =
+        inventoryInstances.find((entry) => String(entry?.id ?? entry?.itemInstanceId ?? entry?.item_instance_id ?? "") === itemInstanceId) ??
+        null;
+      const itemDefId =
+        instance?.itemDefId != null
+          ? String(instance.itemDefId)
+          : instance?.item_def_id != null
+            ? String(instance.item_def_id)
+            : null;
+      if (!itemDefId) continue;
+
+      const def = defById.get(itemDefId) ?? null;
+      const defLike = def ?? {
+        id: itemDefId,
+        itemDefId,
+        code: instance?.code ?? instance?.itemCode ?? instance?.item_code ?? null,
+        name: instance?.name ?? instance?.itemName ?? instance?.item_name ?? null,
+      };
+
+      registerDef(defLike);
+      addCount(defLike, qty);
+    }
+  }
+
+  const equipmentSources = [];
+  const normalizedEquipmentSources = [
+    equipmentSnapshot?.equipment ?? equipmentSnapshot ?? null,
+    inventorySnapshot?.equipment ?? null,
+  ].filter(Boolean);
+  const seenSourceRefs = new Set();
+  for (const source of normalizedEquipmentSources) {
+    if (seenSourceRefs.has(source)) continue;
+    seenSourceRefs.add(source);
+    equipmentSources.push(source);
+  }
+
+  const countedEquipmentItemInstanceIds = new Set();
+
+  for (const equipmentSource of equipmentSources) {
+    const equipmentSlots = Array.isArray(equipmentSource?.slots) ? equipmentSource.slots : [];
+    const equipmentInstances = Array.isArray(equipmentSource?.itemInstances)
+      ? equipmentSource.itemInstances
+      : Array.isArray(equipmentSource?.item_instances)
+        ? equipmentSource.item_instances
+        : [];
+    const equipmentDefs = Array.isArray(equipmentSource?.itemDefs)
+      ? equipmentSource.itemDefs
+      : Array.isArray(equipmentSource?.item_defs)
+        ? equipmentSource.item_defs
+        : [];
+
+    for (const def of equipmentDefs) {
+      registerDef(def);
+    }
+
+    for (const slot of equipmentSlots) {
+      const itemInstanceId = slot?.itemInstanceId != null ? String(slot.itemInstanceId) : null;
+      if (itemInstanceId) {
+        if (countedEquipmentItemInstanceIds.has(itemInstanceId)) continue;
+        countedEquipmentItemInstanceIds.add(itemInstanceId);
+      }
+
+      const qty = Math.max(0, Number(slot?.qty ?? (itemInstanceId != null ? 1 : 0)));
+      if (qty <= 0) continue;
+
+      const slotItem = slot?.item ?? null;
+      const itemDefId =
+        slotItem?.itemDefId != null
+          ? String(slotItem.itemDefId)
+          : slotItem?.item_def_id != null
+            ? String(slotItem.item_def_id)
+            : null;
+      const itemCode = slotItem?.code != null ? canonicalItemCode(slotItem.code) : null;
+      const itemName = slotItem?.name != null ? String(slotItem.name) : null;
+
+      let defLike =
+        (itemDefId && defById.get(itemDefId)) ||
+        (itemCode && defByCode.get(itemCode)) ||
+        (itemName && defByName.get(normalizeIdentity(itemName))) ||
+        null;
+
+      if (!defLike && itemInstanceId != null) {
+        const instance =
+          equipmentInstances.find((entry) => String(entry?.id ?? entry?.itemInstanceId ?? entry?.item_instance_id ?? "") === itemInstanceId) ??
+          inventoryInstances.find((entry) => String(entry?.id ?? entry?.itemInstanceId ?? entry?.item_instance_id ?? "") === itemInstanceId) ??
+          null;
+        const resolvedItemDefId =
+          instance?.itemDefId != null
+            ? String(instance.itemDefId)
+            : instance?.item_def_id != null
+              ? String(instance.item_def_id)
+              : null;
+        const resolvedCode = instance?.code != null ? canonicalItemCode(instance.code) : itemCode;
+        const resolvedName = instance?.name ?? slotItem?.name ?? null;
+        defLike =
+          (resolvedItemDefId && defById.get(resolvedItemDefId)) ||
+          (resolvedCode && defByCode.get(resolvedCode)) ||
+          (resolvedName && defByName.get(normalizeIdentity(resolvedName))) ||
+          {
+            id: resolvedItemDefId ?? itemDefId ?? itemInstanceId,
+            itemDefId: resolvedItemDefId ?? itemDefId ?? itemInstanceId,
+            code: resolvedCode ?? itemCode ?? null,
+            name: resolvedName,
+          };
+      }
+
+      if (!defLike) continue;
+
+      registerDef(defLike);
+      addCount(defLike, qty);
+    }
+  }
+
+  return {
+    defById,
+    defByCode,
+    defByName,
+    countsByDefId,
+    countsByCode,
+    countsByName,
+  };
+}
+
+function formatRequirementCounts(have, need) {
+  return `${Math.max(0, Number(have) || 0)} / ${Math.max(0, Number(need) || 0)}`;
+}
+
+function getRequirementLabel(cost, inventoryIndex) {
+  if (!cost) return "Unknown";
+
+  if (cost.itemDefId != null) {
+    const def = inventoryIndex.defById.get(String(cost.itemDefId)) ?? null;
+    if (def?.name) return def.name;
+  }
+
+  if (cost.itemCode != null) {
+    const code = String(cost.itemCode).toUpperCase();
+    const def = inventoryIndex.defByCode.get(code) ?? null;
+    if (def?.name) return def.name;
+    return code;
+  }
+
+  return "Unknown";
+}
+
+function getRequirementCount(cost, inventoryIndex) {
+  if (!cost) return 0;
+
+  if (cost.itemDefId != null) {
+    const count = inventoryIndex.countsByDefId.get(String(cost.itemDefId));
+    if (Number.isFinite(count)) return Number(count);
+  }
+
+  if (cost.itemCode != null) {
+    const count = inventoryIndex.countsByCode.get(canonicalItemCode(cost.itemCode));
+    if (Number.isFinite(count)) return Number(count);
+  }
+
+  if (cost.itemCode != null) {
+    const countByName = inventoryIndex.countsByName.get(normalizeIdentity(canonicalItemCode(cost.itemCode)));
+    if (Number.isFinite(countByName)) return Number(countByName);
+  }
+
+  return 0;
+}
+
+export function ResearchModal({
+  open,
+  snapshot,
+  inventorySnapshot,
+  equipmentSnapshot,
+  researchMessage,
+  onClose,
+  onStartStudy,
+  onRequestInventoryFull,
+}) {
   const boardRef = useRef(null);
   const laneRef = useRef(null);
   const dragStateRef = useRef(null);
@@ -84,6 +349,11 @@ export function ResearchModal({ open, snapshot, researchMessage, onClose, onStar
     }, 250);
     return () => window.clearInterval(timer);
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    onRequestInventoryFull?.();
+  }, [open, onRequestInventoryFull]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -127,6 +397,11 @@ export function ResearchModal({ open, snapshot, researchMessage, onClose, onStar
       };
     });
   }, [clientNowMs, snapshot]);
+
+  const inventoryIndex = useMemo(
+    () => buildInventoryCounts(inventorySnapshot, equipmentSnapshot),
+    [equipmentSnapshot, inventorySnapshot]
+  );
 
   const activeStudy = useMemo(
     () => nodes.find((node) => node?.isRunning) ?? null,
@@ -302,6 +577,7 @@ export function ResearchModal({ open, snapshot, researchMessage, onClose, onStar
                       ? "Studying..."
                       : `Start Lv.${activeLevel}`;
                   const stageLevel = Number(node?.currentLevel ?? 0);
+                  const requirements = Array.isArray(node?.levelItemCosts) ? node.levelItemCosts : [];
 
                   return (
                     <div key={node.code ?? node.researchDefId ?? index} className="research-row">
@@ -323,6 +599,30 @@ export function ResearchModal({ open, snapshot, researchMessage, onClose, onStar
                         </div>
 
                         <p>{node.nextLevelDescription ?? node.levelDescription ?? node.description}</p>
+
+                        {requirements.length > 0 ? (
+                          <div className="research-requirements">
+                            <div className="research-requirements-title">Requirements</div>
+                            {requirements.map((cost, costIndex) => {
+                              const need = Number(cost?.qty ?? 0);
+                              const have = getRequirementCount(cost, inventoryIndex);
+                              const okRequirement = have >= need;
+                              const label = getRequirementLabel(cost, inventoryIndex);
+
+                              return (
+                                <div
+                                  key={`${node.code ?? index}-req-${costIndex}-${label}`}
+                                  className={`research-requirement ${okRequirement ? "is-ready" : "is-missing"}`}
+                                >
+                                  <span className="research-requirement-label">{label}</span>
+                                  <span className="research-requirement-count">
+                                    <strong>{formatRequirementCounts(have, need)}</strong>
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
 
                         <div className="research-meta">
                           <span>Stage: {currentLevel}/{maxLevel}</span>
