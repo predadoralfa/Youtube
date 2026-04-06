@@ -27,7 +27,8 @@ Checklist rapido antes de registrar item:
 1. Ler o enum de `ga_item_def.category`
 2. Ler o enum de `ga_item_def_component.component_type`
 3. Ler o enum de `ga_item_instance.bind_state`
-4. So depois escrever seed, migration ou update de dados
+4. Descobrir qual `ga_era_def.id` corresponde a era minima do item
+5. So depois escrever seed, migration ou update de dados
 
 ## Modelo mental
 
@@ -42,12 +43,15 @@ Campos principais:
 - `category`: classificacao ampla de dominio
 - `stack_max`: tamanho maximo da pilha
 - `unit_weight`: peso unitario
+- `era_min_id`: era minima em que o item passa a existir/ser descoberto
 - `is_active`: se o item esta habilitado
 
 Regra pratica:
 
 - `category` responde "o item pertence a qual familia de negocio?"
 - Nao use `category` para descrever comportamento tecnico fino.
+- `era_min_id` responde "a partir de qual era esse item entra no jogo?"
+- nao deixar `era_min_id = null` por conveniencia quando a era ja for conhecida
 
 Exemplos:
 
@@ -56,6 +60,11 @@ Exemplos:
 - pedra bruta de coleta: `MATERIAL`
 - remedio: `CONSUMABLE`
 - mochila: `CONTAINER`
+
+Observacao importante sobre era:
+
+- `era_min_id` deve ser preenchido de forma explicita na seed ou migration
+- quando o item for da primeira era, preferir resolver a era por `ga_era_def.order_index = 1`
 
 ### 2. `ga_item_def_component`
 
@@ -208,7 +217,45 @@ Adicionar em `data_json`:
 
 - `allowedSlots`
 
-### Caso D: item usavel nao alimentar
+### Caso D: arma
+
+Criar:
+
+- `ga_item_def` com `category = EQUIP`
+- `ga_item_def_component` com `component_type = EQUIPPABLE`
+- `ga_item_def_component` com `component_type = WEAPON`
+
+Adicionais recomendados:
+
+- em `EQUIPPABLE.data_json`: `allowedSlots`
+- em `WEAPON.data_json`: `attackPower`, `attackRange`, `durabilityMax`
+
+Exemplo base para funda de pedra:
+
+```json
+{
+  "weaponClass": "RANGED_THROWN",
+  "attackPower": 7,
+  "attackRange": 3,
+  "durabilityMax": 100,
+  "ammoType": "STONE"
+}
+```
+
+Interpretacao:
+
+- `attackPower`: bonus-base da arma
+- `attackRange`: alcance em metros do jogo
+- `durabilityMax`: total de usos planejado para a instancia
+- `ammoType`: classificacao futura de municao/comportamento
+
+Observacao importante:
+
+- `durabilityMax` vive no componente da definicao como referencia de design
+- a durabilidade corrente continua pertencendo a `ga_item_instance.durability`
+- se a arma for criada no inventario por seed, a instancia deve nascer com `durability = durabilityMax`
+
+### Caso E: item usavel nao alimentar
 
 Criar:
 
@@ -262,3 +309,4 @@ Para cada item novo, decidir nesta ordem:
 ## 9. Pendencias abertas
 
 - revisar a pedra, que hoje esta com semantica de municao e deve ser reclassificada quando a arma de arremesso existir
+- integrar `WEAPON.data_json` ao combate do player equipado; hoje ataque e alcance ainda saem de `ga_user_stats`

@@ -6,6 +6,7 @@ const { ensureInventoryLoaded } = require("../../state/inventory/loader");
 const { ensureEquipmentLoaded } = require("../../state/equipment/loader");
 const { buildInventoryFull } = require("../../state/inventory/fullPayload");
 const { loadCarryWeightStats } = require("../../state/inventory/weight");
+const { ensureResearchLoaded, buildResearchPayload } = require("../../service/researchService");
 
 function emitBaseline(socket, baseline) {
   socket.emit("world:baseline", {
@@ -64,6 +65,13 @@ async function emitInventoryFull(socket) {
   });
 }
 
+async function emitResearchFull(socket) {
+  const userId = socket.data.userId;
+  if (!userId) return;
+  const research = await ensureResearchLoaded(userId);
+  socket.emit("research:full", buildResearchPayload({ research }));
+}
+
 function registerWorldHandler(io, socket) {
   socket.on("world:join", async (_payload, ack) => {
     try {
@@ -73,6 +81,7 @@ function registerWorldHandler(io, socket) {
 
       // ✅ inv privado do self (resync "grátis")
       await emitInventoryFull(socket);
+      await emitResearchFull(socket);
 
       logWorld("world:join ok", {
         socketId: socket.id,
@@ -98,6 +107,7 @@ function registerWorldHandler(io, socket) {
 
       // ✅ inv privado do self (resync "grátis")
       await emitInventoryFull(socket);
+      await emitResearchFull(socket);
 
       logWorld("world:resync ok", {
         socketId: socket.id,

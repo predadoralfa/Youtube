@@ -11,6 +11,7 @@ const {
   readRuntimeHungerMax,
   syncRuntimeHunger,
 } = require("../state/movement/stamina");
+const { ensureResearchLoaded, hasCapability } = require("./researchService");
 
 function toFiniteNumber(value, fallback = 0) {
   const n = Number(value);
@@ -279,6 +280,7 @@ async function setAutoFoodConfig(userId, rt, intent = {}) {
   });
 
   if (nextItemInstanceId) {
+    await ensureResearchLoaded(userId, rt);
     const foodSpec = getFoodSpec(invRt, nextItemInstanceId);
     if (!foodSpec) {
       console.log("[AUTO_FOOD][SET] invalid item", {
@@ -289,6 +291,14 @@ async function setAutoFoodConfig(userId, rt, intent = {}) {
         ok: false,
         code: "AUTO_FOOD_INVALID_ITEM",
         message: "Selected item is not a valid FOOD consumable",
+      };
+    }
+    const autoFoodUnlockCode = `macro.auto_food:${foodSpec?.itemDef?.code ?? ""}`;
+    if (!hasCapability(rt, autoFoodUnlockCode)) {
+      return {
+        ok: false,
+        code: "RESEARCH_REQUIRED_FOR_AUTO_FOOD",
+        message: "Study this food before using it in auto food",
       };
     }
     console.log("[AUTO_FOOD][SET] validated item", {
@@ -370,22 +380,6 @@ async function processAutoFoodTick(rt, nowMs) {
         cooldownUntilMs: autoFood.cooldownUntilMs,
       });
 
-      const consumeResult = await consumeOneConfiguredFood(rt.userId, active.itemInstanceId);
-      inventoryChanged = consumeResult?.ok === true;
-      if (!consumeResult?.ok) {
-        console.log("[AUTO_FOOD][TICK] consume failed", {
-          userId: rt.userId,
-          itemInstanceId: active.itemInstanceId,
-          code: consumeResult?.code ?? "AUTO_FOOD_CONSUME_FAILED",
-        });
-        autoFood.itemInstanceId = null;
-        autoFood.cooldownUntilMs = 0;
-      } else {
-        console.log("[AUTO_FOOD][TICK] consume ok", {
-          userId: rt.userId,
-          itemInstanceId: active.itemInstanceId,
-        });
-      }
       changed = true;
     }
 
@@ -419,6 +413,16 @@ async function processAutoFoodTick(rt, nowMs) {
     return { changed: true, inventoryChanged: false };
   }
 
+  await ensureResearchLoaded(rt.userId, rt);
+  const consumeUnlockCode = `item.consume:${foodSpec?.itemDef?.code ?? ""}`;
+  if (!hasCapability(rt, consumeUnlockCode)) {
+    autoFood.itemInstanceId = null;
+    autoFood.activeConsumption = null;
+    autoFood.cooldownUntilMs = 0;
+    markRuntimeDirty(rt.userId, now);
+    return { changed: true, inventoryChanged: false };
+  }
+
   console.log("[AUTO_FOOD][TICK] starting consumption", {
     userId: rt.userId,
     itemInstanceId: autoFood.itemInstanceId,
@@ -428,6 +432,26 @@ async function processAutoFoodTick(rt, nowMs) {
     consumeTimeMs: foodSpec.consumeTimeMs,
     cooldownMs: foodSpec.cooldownMs,
   });
+
+  const consumeResult = await consumeOneConfiguredFood(rt.userId, autoFood.itemInstanceId);
+  if (!consumeResult?.ok) {
+    console.log("[AUTO_FOOD][TICK] consume failed at start", {
+      userId: rt.userId,
+      itemInstanceId: autoFood.itemInstanceId,
+      code: consumeResult?.code ?? "AUTO_FOOD_CONSUME_FAILED",
+    });
+    autoFood.itemInstanceId = null;
+    autoFood.activeConsumption = null;
+    autoFood.cooldownUntilMs = 0;
+    markRuntimeDirty(rt.userId, now);
+    return { changed: true, inventoryChanged: false };
+  }
+
+  console.log("[AUTO_FOOD][TICK] consume reserved at start", {
+    userId: rt.userId,
+    itemInstanceId: autoFood.itemInstanceId,
+  });
+
   autoFood.activeConsumption = {
     itemInstanceId: String(autoFood.itemInstanceId),
     startedAtMs: now,
@@ -437,7 +461,7 @@ async function processAutoFoodTick(rt, nowMs) {
     appliedRestore: 0,
   };
   markRuntimeDirty(rt.userId, now);
-  return { changed: true, inventoryChanged: false };
+  return { changed: true, inventoryChanged: true };
 }
 
 module.exports = {

@@ -74,6 +74,14 @@ function readPosYawFromRuntime(rt) {
   return { x, y, z, yaw };
 }
 
+function readCameraStateFromRuntime(rt) {
+  return {
+    yaw: Number(rt?.yaw ?? 0),
+    pitch: Number(rt?.cameraPitch ?? rt?.camera_pitch ?? THREE.MathUtils.degToRad(45)),
+    distance: Number(rt?.cameraDistance ?? rt?.camera_distance ?? 26),
+  };
+}
+
 function readPosYawFromEntity(e) {
   const x = Number(e?.pos?.x ?? 0);
   const y = Number(e?.pos?.y ?? 0);
@@ -505,8 +513,15 @@ export function GameCanvas({
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
 
-    const { camera, update, applyOrbit, applyZoom, onResize, setBounds, getYaw } =
-      setupCamera(container);
+    const {
+      camera,
+      update,
+      applyOrbit,
+      applyZoom,
+      onResize,
+      setBounds,
+      getState,
+    } = setupCamera(container, readCameraStateFromRuntime(runtimeRef.current));
     cameraRef.current = camera;
 
     const lightRig = setupLight(scene);
@@ -647,7 +662,11 @@ export function GameCanvas({
     const off = bus.on((intent) => {
       if (!intent || typeof intent !== "object") return;
 
-      if (intent.type === IntentType.UI_TOGGLE_INVENTORY) {
+      if (
+        intent.type === IntentType.UI_TOGGLE_INVENTORY ||
+        intent.type === IntentType.UI_TOGGLE_RESEARCH ||
+        intent.type === IntentType.UI_CANCEL
+      ) {
         onInputIntent?.(intent);
         return;
       }
@@ -729,13 +748,16 @@ export function GameCanvas({
 
       const socket = getSocket();
       if (socket) {
-        const camYaw = getYaw();
+        const camState = getState();
+        const camYaw = camState.yaw;
         const dirWorld = toWorldDir(moveDir, camYaw);
 
         socket.emit("move:intent", {
           dir: dirWorld,
           dt,
           yawDesired: camYaw,
+          cameraPitch: camState.pitch,
+          cameraDistance: camState.distance,
         });
       }
 

@@ -9,6 +9,7 @@ const {
   flushUserRuntimeImmediate,
   flushUserStatsImmediate,
 } = require("../../state/persistenceManager");
+const { persistDirtyResearch } = require("../../service/researchService");
 
 function nowMs() {
   return Date.now();
@@ -32,6 +33,7 @@ async function onConnected(userId) {
 
   await flushUserRuntimeImmediate(userId);
   await flushUserStatsImmediate(userId);
+  await persistDirtyResearch(userId).catch(() => false);
 }
 
 /**
@@ -63,6 +65,7 @@ function installDisconnectHandler({ socket, userId, clearIfCurrentSession }) {
 
       await flushUserRuntimeImmediate(userId);
       await flushUserStatsImmediate(userId);
+      await persistDirtyResearch(userId).catch(() => false);
 
       console.log(
         `[SOCKET] disconnect pending user=${userId} reason=${reason} offlineAt=${offlineAt}`

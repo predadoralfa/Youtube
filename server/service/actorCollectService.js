@@ -6,6 +6,8 @@ const { ensureInventoryLoaded } = require("../state/inventory/loader");
 const { buildInventoryFull } = require("../state/inventory/fullPayload");
 const { ensureEquipmentLoaded } = require("../state/equipment/loader");
 const { loadCarryWeightStats } = require("../state/inventory/weight");
+const { getRuntime } = require("../state/runtime/store");
+const { ensureResearchLoaded, hasCapability } = require("./researchService");
 
 /**
  * attemptCollectFromActor(userId, actorId)
@@ -161,6 +163,37 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
 
     if (!itemDef) {
       return { ok: false, error: "ITEM_DEF_NOT_FOUND" };
+    }
+
+    let actorState = null;
+    if (actor?.state_json != null) {
+      if (typeof actor.state_json === "string") {
+        try {
+          actorState = JSON.parse(actor.state_json);
+        } catch {
+          actorState = null;
+        }
+      } else {
+        actorState = actor.state_json;
+      }
+    }
+
+    const collectUnlockCode =
+      String(actorType) === "TREE" &&
+      String(actorState?.resourceType ?? "").toUpperCase() === "APPLE_TREE"
+        ? "actor.collect:APPLE_TREE"
+        : null;
+
+    if (collectUnlockCode) {
+      const rt = getRuntime(userId);
+      const research = await ensureResearchLoaded(userId, rt ?? { userId });
+      if (!hasCapability(rt ?? { research }, collectUnlockCode)) {
+        return {
+          ok: false,
+          error: "RESEARCH_REQUIRED_FOR_COLLECT",
+          message: "Study apples further before collecting them from trees",
+        };
+      }
     }
 
     const stackMax = Number(itemDef.stack_max || 1);
@@ -416,6 +449,24 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     }
 
     invRt.carryWeight = await loadCarryWeightStats(userId);
+    if (invRt.itemDefsById && !invRt.itemDefsById.has(String(itemDef.id))) {
+      invRt.itemDefsById.set(String(itemDef.id), {
+        id: String(itemDef.id),
+        code: itemDef.code ?? null,
+        name: itemDef.name ?? null,
+        category: itemDef.category ?? itemDef.categoria ?? null,
+        weight:
+          itemDef.unit_weight == null
+            ? itemDef.weight == null
+              ? itemDef.peso == null
+                ? null
+                : Number(itemDef.peso)
+              : Number(itemDef.weight)
+            : Number(itemDef.unit_weight),
+        stackMax: Number(itemDef.stack_max ?? itemDef.stackMax ?? 1) || 1,
+        components: [],
+      });
+    }
 
     const runtimeContainerById = invRt.containersById || new Map();
     const syncRuntimeSlot = (containerId, slotIndex, itemInstanceId, qty) => {

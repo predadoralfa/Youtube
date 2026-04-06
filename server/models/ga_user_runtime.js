@@ -50,6 +50,16 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0
       },
+      camera_pitch: {
+        type: DataTypes.FLOAT,
+        allowNull: false,
+        defaultValue: Math.PI / 4,
+      },
+      camera_distance: {
+        type: DataTypes.FLOAT,
+        allowNull: false,
+        defaultValue: 26,
+      },
       connection_state: {
         type: DataTypes.STRING(32),
         allowNull: false,

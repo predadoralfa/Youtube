@@ -80,6 +80,8 @@ function buildBaseline(rt) {
     pos_y: Number(rt.pos?.y ?? rt.pos_y ?? 0),
     pos_z: Number(rt.pos?.z ?? rt.pos_z ?? 0),
     yaw: Number(rt.yaw ?? 0),
+    cameraPitch: Number(rt.cameraPitch ?? rt.camera_pitch ?? Math.PI / 4),
+    cameraDistance: Number(rt.cameraDistance ?? rt.camera_distance ?? 26),
     connectionState: String(rt.connectionState ?? "ONLINE"),
     vitals: rt.vitals ? {
       hp: {

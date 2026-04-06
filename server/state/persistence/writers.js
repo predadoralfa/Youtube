@@ -115,6 +115,8 @@ async function flushUserRuntime(userId, now) {
       pos_y: rt.pos?.y ?? 0,
       pos_z: rt.pos?.z ?? 0,
       yaw: rt.yaw ?? 0,
+      camera_pitch: rt.cameraPitch ?? Math.PI / 4,
+      camera_distance: rt.cameraDistance ?? 26,
 
       connection_state: rt.connectionState ?? "OFFLINE",
       disconnected_at: rt.disconnectedAtMs ?? null,

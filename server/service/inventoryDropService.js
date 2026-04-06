@@ -170,14 +170,14 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
   }
 
   const itemDef =
-    invRt.itemDefById?.get?.(String(effectiveItemInstance.itemDefId)) ||
+    invRt.itemDefsById?.get?.(String(effectiveItemInstance.itemDefId)) ||
     eqRt?.itemDefsById?.get?.(String(effectiveItemInstance.itemDefId)) ||
     effectiveItemInstance.def ||
     null;
   const nowPos = runtime.pos || { x: 0, y: 0, z: 0 };
   const dropPos = {
     x: Math.round(toNum(nowPos.x, 0) + 1.5),
-    y: Math.round(toNum(nowPos.y, 0)),
+    y: 0,
     z: Math.round(toNum(nowPos.z, 0)),
   };
   const sourceQty = Number(
@@ -187,15 +187,16 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
   ) || 1;
   const visualHint = resolveDropVisualHint(itemDef, effectiveItemInstance);
 
-    console.log("[DROP] service:resolved", {
-      userId,
-      itemInstanceId,
-      itemDefId: effectiveItemInstance?.itemDefId ?? null,
-      itemCode: itemDef?.code ?? null,
-      itemName: itemDef?.name ?? itemDef?.code ?? null,
-      sourceQty,
-      dropPos,
-      sourceKind: inventorySource ? "INVENTORY" : "EQUIPMENT",
+  console.log("[DROP] service:resolved", {
+    userId,
+    itemInstanceId,
+    itemDefId: effectiveItemInstance?.itemDefId ?? null,
+    itemCode: itemDef?.code ?? null,
+    itemName: itemDef?.name ?? itemDef?.code ?? null,
+    sourceQty,
+    dropPos,
+    sourceKind: inventorySource ? "INVENTORY" : "EQUIPMENT",
+    visualHint,
   });
 
   const run = async (tx) => {

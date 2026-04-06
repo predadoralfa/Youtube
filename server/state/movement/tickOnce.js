@@ -43,6 +43,7 @@ const { tickEnemyAI, getLastTickAttacks } = require("../enemies/enemyAI");
 const { loadPlayerCombatStats } = require("../runtime/combatLoader");
 const { executeAttack, loadEnemyCombatStats } = require("../../service/combatSystem");
 const { processAutoFoodTick, buildAutoFoodPayload } = require("../../service/autoFoodService");
+const { processResearchTick, buildResearchPayload } = require("../../service/researchService");
 
 async function resolveCarryWeightContext(userId) {
   let invRt = getInventory(userId);
@@ -595,6 +596,7 @@ async function tickOnce(io, nowMsValue) {
       timeFactor: worldTimeFactor,
     });
     const autoFoodResult = await processAutoFoodTick(rt, t);
+    const researchResult = await processResearchTick(rt, t, 50);
 
     const staminaState = shouldQueueStaminaPersist(
       rt,
@@ -602,7 +604,7 @@ async function tickOnce(io, nowMsValue) {
       rt?.staminaMax ?? rt?.stats?.staminaMax ?? rt?.combat?.staminaMax
     );
 
-    if (!staminaResult.changed && !hungerResult.changed && !autoFoodResult.changed) continue;
+    if (!staminaResult.changed && !hungerResult.changed && !autoFoodResult.changed && !researchResult.changed) continue;
 
     markStatsDirty(rt.userId, t);
     bumpRev(rt);
@@ -630,6 +632,10 @@ async function tickOnce(io, nowMsValue) {
           autoFood: buildAutoFoodPayload(rt),
         };
         socket.emit("inv:full", full);
+      }
+
+      if (researchResult.changed) {
+        socket.emit("research:full", buildResearchPayload(rt));
       }
     }
   }

@@ -48,11 +48,22 @@ import { createEntitiesStore } from "./state/entitiesStore";
 import { logInventory } from "@/inventory/inventoryProbe";
 import { IntentType } from "./input/intents";
 import { InventoryModal } from "@/components/models/inventory/InventoryModal";
+import { ResearchModal } from "@/components/models/research/ResearchModal";
 import { WorldClockPanel } from "@/world/ui/WorldClockPanel";
 
 const DEBUG_IDS = false;
 
 const toId = (raw) => (raw == null ? null : String(raw));
+
+function parseMaybeJsonObject(value) {
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
 
 function toNum(value, fallback = 0) {
   const n = Number(value);
@@ -236,10 +247,12 @@ export function GameShell() {
   const [sessionReplaced, setSessionReplaced] = useState(null);
 
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [researchOpen, setResearchOpen] = useState(false);
   const [inventorySnapshot, setInventorySnapshot] = useState(null);
   const [equipmentSnapshot, setEquipmentSnapshot] = useState(null);
   const [inventoryMessage, setInventoryMessage] = useState(null);
   const [equipmentMessage, setEquipmentMessage] = useState(null);
+  const [researchMessage, setResearchMessage] = useState(null);
   const [lootNotifications, setLootNotifications] = useState([]);
 
   const socketRef = useRef(null);
@@ -270,6 +283,15 @@ export function GameShell() {
     if (!joinedRef.current) return false;
 
     s.emit("inv:request_full", { reason: "ui_open" });
+    return true;
+  }, []);
+
+  const requestResearchFull = useCallback(() => {
+    const s = socketRef.current;
+    if (!s) return false;
+    if (!joinedRef.current) return false;
+
+    s.emit("research:request_full", { reason: "ui_open" });
     return true;
   }, []);
 
@@ -340,6 +362,35 @@ export function GameShell() {
 
       if (ack?.ok === false) {
         setInventoryMessage(ack?.message || ack?.code || "Falha ao atualizar inventário");
+      }
+    });
+
+    return true;
+  }, []);
+
+  const emitResearchStart = useCallback((researchCode) => {
+    const s = socketRef.current;
+    if (!s) return false;
+    if (!joinedRef.current) return false;
+
+    setResearchMessage(null);
+
+    s.emit("research:start", { researchCode: String(researchCode) }, (ack) => {
+      if (ack?.ok === true && ack?.research?.ok === true) {
+        setSnapshot((prev) =>
+          prev
+            ? {
+                ...prev,
+                research: ack.research,
+              }
+            : prev
+        );
+        setResearchMessage(null);
+        return;
+      }
+
+      if (ack?.ok === false) {
+        setResearchMessage(ack?.message || ack?.code || "Falha ao iniciar estudo");
       }
     });
 
@@ -479,6 +530,10 @@ export function GameShell() {
     setInventoryOpen(false);
   }, [emitInteractStop]);
 
+  const closeResearch = useCallback(() => {
+    setResearchOpen(false);
+  }, []);
+
   const onTargetSelect = useCallback((target) => {
     if (!target?.kind || target?.id == null) return;
 
@@ -510,6 +565,10 @@ export function GameShell() {
           const next = !prev;
 
           if (next) {
+            setResearchOpen(false);
+          }
+
+          if (next) {
             pendingInvRequestRef.current = true;
             const ok = requestInventoryFull();
             if (ok) pendingInvRequestRef.current = false;
@@ -520,8 +579,26 @@ export function GameShell() {
         return;
       }
 
+      if (intent.type === IntentType.UI_TOGGLE_RESEARCH) {
+        setResearchOpen((prev) => {
+          const next = !prev;
+          if (next) {
+            setInventoryOpen(false);
+            requestResearchFull();
+          }
+          return next;
+        });
+        return;
+      }
+
       if (intent.type === IntentType.UI_CANCEL) {
+        if (researchOpen) {
+          closeResearch();
+          return;
+        }
+
         if (inventoryOpen) {
+          closeInventory();
           return;
         }
 
@@ -591,7 +668,16 @@ export function GameShell() {
         return;
       }
     },
-    [requestInventoryFull, emitInteractStart, emitInteractStop, inventoryOpen, closeInventory]
+    [
+      requestInventoryFull,
+      requestResearchFull,
+      emitInteractStart,
+      emitInteractStop,
+      inventoryOpen,
+      researchOpen,
+      closeInventory,
+      closeResearch,
+    ]
   );
 
   useEffect(() => {
@@ -599,6 +685,7 @@ export function GameShell() {
     let localSocket = null;
 
     let onInvFull = null;
+    let onResearchFull = null;
     let onSocketReady = null;
     let onWorldBaseline = null;
     let onEntitySpawn = null;
@@ -669,6 +756,21 @@ export function GameShell() {
           }
         };
 
+        onResearchFull = (payload) => {
+          const research = payload?.ok === true ? payload : payload ?? { ok: false };
+          if (research?.ok === true) {
+            setSnapshot((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    research,
+                  }
+                : prev
+            );
+            setResearchMessage(null);
+          }
+        };
+
         onEquipmentFull = (payload) => {
           const equipment = payload?.ok === true ? payload : payload ?? { ok: false };
           if (equipment?.ok === true) {
@@ -682,7 +784,7 @@ export function GameShell() {
           const actorId = toId(actor?.id ?? actor?.actorId ?? actor?.actor_id ?? null);
           if (!actorId) return;
 
-          const normalizedState = actor?.state ?? actor?.state_json ?? null;
+          const normalizedState = parseMaybeJsonObject(actor?.state ?? actor?.state_json ?? null);
           const looksLikeItemDrop =
             normalizedState?.dropSource != null ||
             normalizedState?.sourceKind != null ||
@@ -706,6 +808,11 @@ export function GameShell() {
               z: Number(actor?.pos?.z ?? actor?.position?.z ?? 0),
             },
           };
+          console.log("[DROP_TRACE] world:object_spawn actor", {
+            actorId,
+            actorType: normalizedActor.actorType,
+            state: normalizedActor.state,
+          });
 
           setSnapshot((prev) => {
             if (!prev) return prev;
@@ -827,6 +934,16 @@ export function GameShell() {
               runtime: {
                 ...prev.runtime,
                 yaw: self.yaw ?? prev.runtime.yaw,
+                cameraPitch:
+                  payload?.runtime?.cameraPitch ??
+                  payload?.runtime?.camera_pitch ??
+                  prev.runtime.cameraPitch ??
+                  prev.runtime.camera_pitch,
+                cameraDistance:
+                  payload?.runtime?.cameraDistance ??
+                  payload?.runtime?.camera_distance ??
+                  prev.runtime.cameraDistance ??
+                  prev.runtime.camera_distance,
                 pos: {
                   x: self.pos?.x ?? prev.runtime.pos?.x ?? 0,
                   y: self.pos?.y ?? prev.runtime.pos?.y ?? 0,
@@ -932,6 +1049,16 @@ export function GameShell() {
               runtime: {
                 ...prev.runtime,
                 yaw: payload?.yaw ?? prev.runtime.yaw,
+                cameraPitch:
+                  payload?.cameraPitch ??
+                  payload?.camera_pitch ??
+                  prev.runtime.cameraPitch ??
+                  prev.runtime.camera_pitch,
+                cameraDistance:
+                  payload?.cameraDistance ??
+                  payload?.camera_distance ??
+                  prev.runtime.cameraDistance ??
+                  prev.runtime.camera_distance,
                 pos: {
                   x: x ?? prev.runtime.pos?.x ?? 0,
                   y: y ?? prev.runtime.pos?.y ?? 0,
@@ -1061,6 +1188,7 @@ export function GameShell() {
         socket.on("connect_error", onConnectError);
 
         socket.on("inv:full", onInvFull);
+        socket.on("research:full", onResearchFull);
         socket.on("equipment:full", onEquipmentFull);
         socket.on("world:object_spawn", onWorldObjectSpawn);
         socket.on("actor:collected", onActorCollected);
@@ -1094,6 +1222,7 @@ export function GameShell() {
         if (onConnectError) s.off("connect_error", onConnectError);
 
         if (onInvFull) s.off("inv:full", onInvFull);
+        if (onResearchFull) s.off("research:full", onResearchFull);
         if (onEquipmentFull) s.off("equipment:full", onEquipmentFull);
         if (onWorldObjectSpawn) s.off("world:object_spawn", onWorldObjectSpawn);
         if (onActorCollected) s.off("actor:collected", onActorCollected);
@@ -1133,8 +1262,8 @@ export function GameShell() {
 
       <WorldClockPanel worldClock={snapshot?.worldClock} />
 
-        <InventoryModal
-          open={inventoryOpen}
+      <InventoryModal
+        open={inventoryOpen}
           snapshot={inventorySnapshot}
           equipmentSnapshot={equipmentSnapshot}
           selfVitals={selfVitals}
@@ -1152,6 +1281,14 @@ export function GameShell() {
           onDropItemToWorld={emitInventoryDrop}
           onSetAutoFoodMacro={onSetAutoFoodMacro}
         />
+
+      <ResearchModal
+        open={researchOpen}
+        snapshot={snapshot?.research}
+        researchMessage={researchMessage}
+        onClose={closeResearch}
+        onStartStudy={emitResearchStart}
+      />
     </>
   );
 }

@@ -12,6 +12,9 @@ const defineGaUserProfile = require("./ga_user_profile");
 const defineGaUserStats = require("./ga_user_stats");
 const defineGaUserRuntime = require("./ga_user_runtime");
 const defineGaUserMacroConfig = require("./ga_user_macro_config");
+const defineGaResearchDef = require("./ga_research_def");
+const defineGaResearchLevelDef = require("./ga_research_level_def");
+const defineGaUserResearch = require("./ga_user_research");
 
 // SPAWN
 const defineGaSpawnEntry = require("./ga_spawn_entry");
@@ -66,6 +69,9 @@ const GaUserProfile = defineGaUserProfile(sequelize, DataTypes);
 const GaUserStats = defineGaUserStats(sequelize, DataTypes);
 const GaUserRuntime = defineGaUserRuntime(sequelize, DataTypes);
 const GaUserMacroConfig = defineGaUserMacroConfig(sequelize, DataTypes);
+const GaResearchDef = defineGaResearchDef(sequelize, DataTypes);
+const GaResearchLevelDef = defineGaResearchLevelDef(sequelize, DataTypes);
+const GaUserResearch = defineGaUserResearch(sequelize, DataTypes);
 
 // SPAWN MODELS
 const GaSpawnEntry = defineGaSpawnEntry(sequelize, DataTypes);
@@ -135,6 +141,9 @@ const models = {
   GaUserStats,
   GaUserRuntime,
   GaUserMacroConfig,
+  GaResearchDef,
+  GaResearchLevelDef,
+  GaUserResearch,
 
   // ACTOR
   GaActor,

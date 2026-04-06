@@ -68,6 +68,8 @@ function broadcastWASDResult({ socket, userId, runtime, nowMs }) {
     entityId: String(runtime.userId),
     pos: runtime.pos,
     yaw: runtime.yaw,
+    cameraPitch: runtime.cameraPitch,
+    cameraDistance: runtime.cameraDistance,
     rev: runtime.rev ?? 0,
     chunk: runtime.chunk ?? { cx, cz },
     vitals: delta.vitals,

@@ -1,8 +1,31 @@
 // src/world/scene/camera/camera.js
 import * as THREE from "three";
 
-export function setupCamera(container) {
-  if (!container) throw new Error("setupCamera: container é obrigatório");
+const DEFAULT_PITCH = THREE.MathUtils.degToRad(45);
+const DEFAULT_DISTANCE = 26;
+const MIN_DISTANCE = 6;
+const MAX_DISTANCE = 55;
+const MIN_PITCH = THREE.MathUtils.degToRad(15);
+const MAX_PITCH = THREE.MathUtils.degToRad(80);
+
+function clampPitch(value) {
+  return THREE.MathUtils.clamp(
+    Number.isFinite(Number(value)) ? Number(value) : DEFAULT_PITCH,
+    MIN_PITCH,
+    MAX_PITCH
+  );
+}
+
+function clampDistance(value) {
+  return THREE.MathUtils.clamp(
+    Number.isFinite(Number(value)) ? Number(value) : DEFAULT_DISTANCE,
+    MIN_DISTANCE,
+    MAX_DISTANCE
+  );
+}
+
+export function setupCamera(container, initialState = {}) {
+  if (!container) throw new Error("setupCamera: container e obrigatorio");
 
   const camera = new THREE.PerspectiveCamera(
     65,
@@ -12,22 +35,20 @@ export function setupCamera(container) {
   );
 
   // ===== Rig (Unreal-like) =====
-  const pivot = new THREE.Vector3(); // "bone" alvo (cabeça)
-  let yaw = 0;                       // rot horizontal
-  let pitch = THREE.MathUtils.degToRad(45); // 45° default
-  let distance = 35;
-
-  const minDistance = 10;
-  const maxDistance = 90;
-
-  const minPitch = THREE.MathUtils.degToRad(15);  // não deixa virar topdown puro
-  const maxPitch = THREE.MathUtils.degToRad(80);  // não deixa olhar de baixo
+  const pivot = new THREE.Vector3(); // "bone" alvo (cabeca)
+  let yaw = Number.isFinite(Number(initialState.yaw))
+    ? Number(initialState.yaw)
+    : 0;
+  let pitch = clampPitch(initialState.pitch);
+  let distance = clampDistance(initialState.distance);
+  let targetDistance = distance;
 
   const orbitSensitivity = 0.004; // ajuste fino
-  const zoomStep = 4.0;
+  const zoomStep = 2.4;
+  const zoomSmoothness = 12;
 
   function setBounds({ sizeX = 200, sizeZ = 200 } = {}) {
-    // só para primeira visão; não mexe em yaw/pitch/distance
+    // so para primeira visao; nao mexe em yaw/pitch/distance
     const max = Math.max(sizeX, sizeZ);
     const d = Math.min(120, Math.max(25, max * 0.12));
     camera.position.set(0, d * 0.6, d);
@@ -35,24 +56,46 @@ export function setupCamera(container) {
     camera.updateProjectionMatrix();
   }
 
-  function applyZoom(dir) {
-    distance = THREE.MathUtils.clamp(distance + dir * zoomStep, minDistance, maxDistance);
+  function normalizeZoomDelta(delta) {
+    if (!Number.isFinite(delta) || delta === 0) return 0;
+
+    // Wheel costuma vir em ~100/120 por passo; normalizamos para evitar saltos.
+    return THREE.MathUtils.clamp(delta / 120, -4, 4);
+  }
+
+  function applyZoom(delta) {
+    const zoomDelta = normalizeZoomDelta(delta);
+    if (zoomDelta === 0) return;
+
+    const dynamicStep = zoomStep + targetDistance * 0.06;
+    targetDistance = THREE.MathUtils.clamp(
+      targetDistance + zoomDelta * dynamicStep,
+      MIN_DISTANCE,
+      MAX_DISTANCE
+    );
   }
 
   function applyOrbit(deltaX, deltaY) {
     yaw -= deltaX * orbitSensitivity;
     pitch -= deltaY * orbitSensitivity;
-    pitch = THREE.MathUtils.clamp(pitch, minPitch, maxPitch);
+    pitch = clampPitch(pitch);
   }
 
   function update(hero, dt = 0) {
     if (!hero) return;
 
-    // "bone": cabeça do cilindro (ajuste fino)
+    const lerpAlpha = 1 - Math.exp(-zoomSmoothness * Math.max(0, dt || 0));
+    distance = THREE.MathUtils.lerp(
+      distance,
+      targetDistance,
+      dt > 0 ? lerpAlpha : 0.2
+    );
+
+    // "bone": cabeca do cilindro (ajuste fino)
     pivot.copy(hero.position);
     pivot.y += 2.2;
 
-    // offset esférico (orbit)
+    // offset esferico (orbit)
     const cosP = Math.cos(pitch);
     const sinP = Math.sin(pitch);
     const sinY = Math.sin(yaw);
@@ -64,7 +107,7 @@ export function setupCamera(container) {
       distance * cosP * cosY
     );
 
-    // atrás do alvo (invertendo Z do offset)
+    // atras do alvo (invertendo Z do offset)
     camera.position.copy(pivot).add(offset);
     camera.lookAt(pivot);
   }
@@ -76,17 +119,33 @@ export function setupCamera(container) {
     camera.updateProjectionMatrix();
   }
 
-  // Mantém compatibilidade com seu onWheel atual, se quiser
+  // Mantem compatibilidade com seu onWheel atual, se quiser
   function onWheel(e) {
     e.preventDefault();
-    applyZoom(Math.sign(e.deltaY));
+    applyZoom(e.deltaY);
   }
 
   function getYaw() {
-  return yaw;
-}
+    return yaw;
+  }
 
+  function getState() {
+    return {
+      yaw,
+      pitch,
+      distance: targetDistance,
+    };
+  }
 
-
-  return { camera, update, applyOrbit, applyZoom, onWheel, onResize, setBounds, getYaw };
+  return {
+    camera,
+    update,
+    applyOrbit,
+    applyZoom,
+    onWheel,
+    onResize,
+    setBounds,
+    getYaw,
+    getState,
+  };
 }

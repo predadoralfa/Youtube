@@ -22,6 +22,7 @@ const {
   DEFAULT_GROUND_COLOR,
 } = require("../config/worldVisualConstants");
 const { getWorldClockBootstrap } = require("./worldClockService");
+const { ensureResearchLoaded, buildResearchPayload } = require("./researchService");
 
 // ACTORS
 const { loadActorsForInstance } = require("./actorLoader");
@@ -54,6 +55,8 @@ const bootstrap = async (req, res) => {
         "pos_y",
         "pos_z",
         "yaw",
+        "camera_pitch",
+        "camera_distance",
         "connection_state",
         "disconnected_at",
         "offline_allowed_at",
@@ -232,6 +235,7 @@ const bootstrap = async (req, res) => {
     console.log(`[BOOTSTRAP] 📦 Preparando payload de resposta para userId=${userId}`);
 
     const worldClock = await getWorldClockBootstrap();
+    const research = await ensureResearchLoaded(userId);
 
     const responsePayload = {
       ok: true,
@@ -245,6 +249,8 @@ const bootstrap = async (req, res) => {
             z: runtime.pos_z,
           },
           yaw: runtime.yaw,
+          cameraPitch: Number(runtime.camera_pitch ?? Math.PI / 4),
+          cameraDistance: Number(runtime.camera_distance ?? 26),
 
           // Compatibilidade e HUD imediata
           vitals: {
@@ -285,6 +291,8 @@ const bootstrap = async (req, res) => {
             },
           },
         },
+
+        research: buildResearchPayload({ research }),
 
         instance: {
           id: instance.id,

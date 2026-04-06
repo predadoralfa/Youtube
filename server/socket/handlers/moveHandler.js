@@ -41,6 +41,8 @@ function registerMoveHandler(socket) {
         nowMs,
         dir: parsed.dir,
         yawDesired: parsed.yawDesired,
+        cameraPitch: parsed.cameraPitch,
+        cameraDistance: parsed.cameraDistance,
         isWASDActive,
       });
 
@@ -73,6 +75,7 @@ function registerMoveHandler(socket) {
       if (
         !result.moved &&
         !result.yawChanged &&
+        !result.cameraChanged &&
         !result.modeOrActionChanged &&
         !result.staminaChanged
       )

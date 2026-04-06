@@ -349,7 +349,7 @@ export function createDroppedItemMesh(actor) {
     loadAppleModelTemplate()
       .then((template) => {
         const model = template.clone(true);
-        model.scale.setScalar(0.55 * scaleBoost);
+        model.scale.setScalar(0.05 * scaleBoost);
         model.position.set(0, 0, 0);
         model.rotation.set(0, 0, 0);
 
@@ -388,7 +388,7 @@ export function createTreeMesh(actor) {
   loadTreeModelTemplate()
     .then((template) => {
       const model = template.clone(true);
-      model.scale.setScalar(1.8);
+      model.scale.setScalar(1.296);
       model.position.set(0, 0, 0);
       model.rotation.set(0, 0, 0);
 

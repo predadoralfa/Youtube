@@ -3,6 +3,21 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.sequelize.transaction(async (transaction) => {
+      const [[eraRow]] = await queryInterface.sequelize.query(
+        `
+        SELECT id
+        FROM ga_era_def
+        WHERE order_index = 1
+        LIMIT 1
+        `,
+        { transaction }
+      );
+
+      const eraMinId = Number(eraRow?.id ?? 0);
+      if (!eraMinId) {
+        throw new Error("Nao foi possivel localizar a Era 1 em ga_era_def.");
+      }
+
       const [itemRows] = await queryInterface.sequelize.query(
         `
         SELECT id
@@ -25,7 +40,7 @@ module.exports = {
               category: "CONSUMABLE",
               stack_max: 20,
               unit_weight: 0.2,
-              era_min_id: null,
+              era_min_id: eraMinId,
               is_active: true,
             },
           ],

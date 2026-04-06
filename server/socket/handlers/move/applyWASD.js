@@ -22,6 +22,23 @@ const {
   shouldQueueStaminaPersist,
 } = require("../../../state/movement/stamina");
 
+const MIN_CAMERA_PITCH = Math.PI / 12;
+const MAX_CAMERA_PITCH = (Math.PI * 4) / 9;
+const MIN_CAMERA_DISTANCE = 6;
+const MAX_CAMERA_DISTANCE = 55;
+
+function normalizeAngle(value) {
+  return Math.atan2(Math.sin(value), Math.cos(value));
+}
+
+function clampCameraPitch(value) {
+  return Math.min(MAX_CAMERA_PITCH, Math.max(MIN_CAMERA_PITCH, value));
+}
+
+function clampCameraDistance(value) {
+  return Math.min(MAX_CAMERA_DISTANCE, Math.max(MIN_CAMERA_DISTANCE, value));
+}
+
 async function resolveCarryWeightRatio(userId) {
   const invRt = await ensureInventoryLoaded(userId);
   const eqRt = await ensureEquipmentLoaded(userId);
@@ -36,7 +53,15 @@ async function resolveCarryWeightRatio(userId) {
  * - NÃO toca DB.
  * - Retorna um resumo do que mudou.
  */
-async function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }) {
+async function applyWASDIntent({
+  runtime,
+  nowMs,
+  dir,
+  yawDesired,
+  cameraPitch,
+  cameraDistance,
+  isWASDActive,
+}) {
   // dt autoritativo do servidor (não confia no client)
   const dt = computeDtSeconds(nowMs, runtime.wasdTickAtMs, DT_MAX);
   runtime.wasdTickAtMs = nowMs;
@@ -44,10 +69,27 @@ async function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }
   // yaw vem da camera (se veio)
   let yawChanged = false;
   if (yawDesired != null && isFiniteNumber(yawDesired)) {
-    const y = Math.atan2(Math.sin(yawDesired), Math.cos(yawDesired));
+    const y = normalizeAngle(yawDesired);
     if (runtime.yaw !== y) {
       runtime.yaw = y;
       yawChanged = true;
+    }
+  }
+
+  let cameraChanged = false;
+  if (cameraPitch != null && isFiniteNumber(cameraPitch)) {
+    const nextPitch = clampCameraPitch(cameraPitch);
+    if (runtime.cameraPitch !== nextPitch) {
+      runtime.cameraPitch = nextPitch;
+      cameraChanged = true;
+    }
+  }
+
+  if (cameraDistance != null && isFiniteNumber(cameraDistance)) {
+    const nextDistance = clampCameraDistance(cameraDistance);
+    if (runtime.cameraDistance !== nextDistance) {
+      runtime.cameraDistance = nextDistance;
+      cameraChanged = true;
     }
   }
 
@@ -101,6 +143,7 @@ async function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }
         ok: false,
         reason: "invalid_speed",
         yawChanged,
+        cameraChanged,
         moved: false,
         modeOrActionChanged,
         combatCancelled,
@@ -126,6 +169,7 @@ async function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }
         ok: false,
         reason: "missing_bounds",
         yawChanged,
+        cameraChanged,
         moved: false,
         modeOrActionChanged,
         combatCancelled,
@@ -146,6 +190,7 @@ async function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }
         ok: false,
         reason: movedResult.reason ?? "invalid_bounds",
         yawChanged,
+        cameraChanged,
         moved: false,
         modeOrActionChanged,
         combatCancelled,
@@ -178,6 +223,7 @@ async function applyWASDIntent({ runtime, nowMs, dir, yawDesired, isWASDActive }
     ok: true,
     reason: null,
     yawChanged,
+    cameraChanged,
     moved,
     modeOrActionChanged,
     combatCancelled,

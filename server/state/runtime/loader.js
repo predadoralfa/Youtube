@@ -164,6 +164,8 @@ async function ensureRuntimeLoaded(userId) {
       "pos_y",
       "pos_z",
       "yaw",
+      "camera_pitch",
+      "camera_distance",
       "connection_state",
       "disconnected_at",
       "offline_allowed_at",
@@ -201,6 +203,8 @@ async function ensureRuntimeLoaded(userId) {
       z: Number(row.pos_z ?? 0),
     },
     yaw: Number(row.yaw ?? 0),
+    cameraPitch: Number(row.camera_pitch ?? Math.PI / 4),
+    cameraDistance: Number(row.camera_distance ?? 26),
 
     // estado replicável mínimo
     hp: combatStats?.hpCurrent, // compat temporaria

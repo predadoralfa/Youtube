@@ -3,6 +3,16 @@
 
 const db = require("../models");
 
+function parseMaybeJsonObject(value) {
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
 /**
  * loadActorsForInstance(instanceId, opts?)
  *
@@ -47,7 +57,7 @@ async function loadActorsForInstance(instanceIdRaw, opts = {}) {
         z: Number(a.pos_y ?? 0),
       },
       status: a.status,
-      state: a.state_json ?? null,
+      state: parseMaybeJsonObject(a.state_json ?? null),
 
       // preenchido abaixo se includeContainers=true
       containers: [],
