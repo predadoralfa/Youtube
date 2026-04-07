@@ -444,6 +444,7 @@ async function tickOnce(io, nowMsValue) {
                   actorDisabled: result.actorDisabled,
                   inventory: result.inventoryFull,
                   loot: result.loot ?? null,
+                  actorUpdate: result.actorUpdate ?? null,
                   message: result.message ?? null,
                 });
               }

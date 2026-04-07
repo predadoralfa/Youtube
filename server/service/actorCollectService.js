@@ -9,6 +9,119 @@ const { loadCarryWeightStats } = require("../state/inventory/weight");
 const { getRuntime } = require("../state/runtime/store");
 const { ensureResearchLoaded, hasCapability } = require("./researchService");
 
+function parseMaybeJsonObject(value) {
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+async function buildLootSummaryFromSlots(slots, tx) {
+  const activeSlots = Array.isArray(slots)
+    ? slots.filter((slot) => slot?.item_instance_id != null && Number(slot.qty ?? 0) > 0)
+    : [];
+
+  if (activeSlots.length === 0) return null;
+
+  const itemInstanceIds = Array.from(
+    new Set(
+      activeSlots
+        .map((slot) => Number(slot.item_instance_id))
+        .filter((id) => Number.isFinite(id) && id > 0)
+    )
+  );
+
+  if (itemInstanceIds.length === 0) return null;
+
+  const itemInstances = await db.GaItemInstance.findAll({
+    where: { id: itemInstanceIds },
+    transaction: tx,
+    lock: tx.LOCK.UPDATE,
+  });
+
+  if (itemInstances.length === 0) return null;
+
+  const itemDefIds = Array.from(
+    new Set(
+      itemInstances
+        .map((row) => Number(row.item_def_id))
+        .filter((id) => Number.isFinite(id) && id > 0)
+    )
+  );
+
+  const itemDefs = itemDefIds.length
+    ? await db.GaItemDef.findAll({
+        where: { id: itemDefIds },
+        transaction: tx,
+        lock: tx.LOCK.UPDATE,
+      })
+    : [];
+
+  const itemInstancesById = new Map(itemInstances.map((row) => [Number(row.id), row.get({ plain: true })]));
+  const itemDefsById = new Map(itemDefs.map((row) => [Number(row.id), row.get({ plain: true })]));
+
+  const items = activeSlots
+    .map((slot) => {
+      const itemInstance = itemInstancesById.get(Number(slot.item_instance_id));
+      if (!itemInstance) return null;
+
+      const itemDef = itemDefsById.get(Number(itemInstance.item_def_id)) ?? null;
+      return {
+        itemInstanceId: Number(itemInstance.id),
+        itemDefId: Number(itemInstance.item_def_id),
+        code: itemDef?.code ?? null,
+        name: itemDef?.name ?? itemDef?.code ?? `Item ${itemInstance.item_def_id}`,
+        category: itemDef?.category ?? null,
+        qty: Number(slot.qty ?? 0),
+        slotIndex: Number(slot.slot_index ?? 0),
+      };
+    })
+    .filter(Boolean);
+
+  if (items.length === 0) return null;
+
+  return {
+    items,
+    totalQty: items.reduce((sum, item) => sum + Number(item.qty ?? 0), 0),
+    primaryItem: items[0],
+  };
+}
+
+function buildActorUpdateFromCollect(actor, lootSummary) {
+  const actorDef = actor.actorDef ?? null;
+  const spawn = actor.spawn ?? null;
+
+  return {
+    actorId: String(actor.id),
+    actor: {
+      id: String(actor.id),
+      actorType: actorDef?.code ?? null,
+      actorDefCode: actorDef?.code ?? null,
+      actorKind: actorDef?.actor_kind ?? null,
+      displayName: actorDef?.name ?? actorDef?.code ?? `Actor ${actor.id}`,
+      instanceId: Number(actor.instance_id),
+      spawnId: actor.actor_spawn_id == null ? null : Number(actor.actor_spawn_id),
+      pos: {
+        x: Number(actor.pos_x ?? 0),
+        y: Number(actor.pos_y ?? 0),
+        z: Number(actor.pos_z ?? 0),
+      },
+      status: actor.status,
+      rev: Number(actor.rev ?? 0),
+      visualHint: actorDef?.visual_hint ?? null,
+      state: {
+        ...(parseMaybeJsonObject(actorDef?.default_state_json ?? null) || {}),
+        ...(parseMaybeJsonObject(spawn?.state_override_json ?? null) || {}),
+        ...(parseMaybeJsonObject(actor.state_json ?? null) || {}),
+      },
+      lootSummary: lootSummary ?? null,
+    },
+  };
+}
+
 /**
  * attemptCollectFromActor(userId, actorId)
  *
@@ -431,6 +544,7 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     );
 
     const actorDisabled = shouldDespawnWhenEmpty && actorWouldBeEmpty;
+    const refreshedLootSummary = actorDisabled ? null : await buildLootSummaryFromSlots(remainingSlots, tx);
 
     if (actorDisabled) {
       const lootContainer = lootOwner.container;
@@ -513,6 +627,7 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
 
     const eqRt = await ensureEquipmentLoaded(userId);
     const inventoryFull = buildInventoryFull(invRt, eqRt);
+    const actorUpdate = actorDisabled ? null : buildActorUpdateFromCollect(actor, refreshedLootSummary);
 
     console.log("[COLLECT] ✅ Coleta bem-sucedida!", {
       userId,
@@ -525,6 +640,7 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
       ok: true,
       actorDisabled,
       inventoryFull,
+      actorUpdate,
       loot: {
         itemDefId: String(itemDef.id),
         itemName: itemDef.name ?? itemDef.code ?? null,

@@ -11,6 +11,7 @@ const {
   flushUserStatsImmediate,
 } = require("./state/persistenceManager"); // 👈 add stop
 const { startMovementTick, stopMovementTick } = require("./state/movementTick"); // ✅ NOVO
+const { startResourceRegenLoop, stopResourceRegenLoop } = require("./state/resourceRegen/resourceRegenLoop");
 const { getAllRuntimes } = require("./state/runtimeStore");
 
 const db = require("./models");
@@ -70,6 +71,7 @@ async function bootstrap() {
 
     // ✅ inicia tick autoritativo de movimento (click-to-move)
     startMovementTick(io);
+    startResourceRegenLoop(io);
     //db.sequelize.sync();
 
     httpServer.listen(5100, () => {
@@ -82,6 +84,7 @@ async function bootstrap() {
       console.log(`[SERVER] shutdown signal=${signal}`);
       try {
         stopMovementTick();   // ✅ NOVO
+        stopResourceRegenLoop();
         stopPersistenceLoop();
         for (const rt of getAllRuntimes()) {
           await flushUserRuntimeImmediate(rt.userId);

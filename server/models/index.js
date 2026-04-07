@@ -15,6 +15,8 @@ const defineGaUserMacroConfig = require("./ga_user_macro_config");
 const defineGaResearchDef = require("./ga_research_def");
 const defineGaResearchLevelDef = require("./ga_research_level_def");
 const defineGaUserResearch = require("./ga_user_research");
+const defineGaActorResourceRuleDef = require("./ga_actor_resource_rule_def");
+const defineGaActorResourceState = require("./ga_actor_resource_state");
 
 // SPAWN
 const defineGaSpawnEntry = require("./ga_spawn_entry");
@@ -74,6 +76,8 @@ const GaUserMacroConfig = defineGaUserMacroConfig(sequelize, DataTypes);
 const GaResearchDef = defineGaResearchDef(sequelize, DataTypes);
 const GaResearchLevelDef = defineGaResearchLevelDef(sequelize, DataTypes);
 const GaUserResearch = defineGaUserResearch(sequelize, DataTypes);
+const GaActorResourceRuleDef = defineGaActorResourceRuleDef(sequelize, DataTypes);
+const GaActorResourceState = defineGaActorResourceState(sequelize, DataTypes);
 
 // SPAWN MODELS
 const GaSpawnEntry = defineGaSpawnEntry(sequelize, DataTypes);
@@ -148,6 +152,8 @@ const models = {
   GaResearchDef,
   GaResearchLevelDef,
   GaUserResearch,
+  GaActorResourceRuleDef,
+  GaActorResourceState,
 
   // ACTOR
   GaActorDef,

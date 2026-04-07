@@ -149,6 +149,34 @@ function buildLootNotifications(prevSnapshot, nextSnapshot) {
   return messages;
 }
 
+function mergeSnapshotActor(prevSnapshot, actorUpdate) {
+  if (!prevSnapshot || !actorUpdate) return prevSnapshot;
+
+  const actorId = toId(actorUpdate?.id ?? actorUpdate?.actorId ?? actorUpdate?.actor?.id ?? null);
+  if (!actorId) return prevSnapshot;
+
+  const nextActorPatch = actorUpdate?.actor ?? actorUpdate;
+  const actors = Array.isArray(prevSnapshot.actors) ? prevSnapshot.actors : [];
+  let changed = false;
+
+  const nextActors = actors.map((actor) => {
+    if (toId(actor?.id ?? null) !== actorId) return actor;
+    changed = true;
+    return {
+      ...actor,
+      ...nextActorPatch,
+      id: actor?.id ?? nextActorPatch?.id ?? actorId,
+    };
+  });
+
+  if (!changed) return prevSnapshot;
+
+  return {
+    ...prevSnapshot,
+    actors: nextActors,
+  };
+}
+
 function debugIds(...args) {
   if (!DEBUG_IDS) return;
   // console.log(...args);
@@ -726,6 +754,7 @@ export function GameShell() {
     let onWorldObjectSpawn = null;
     let onEquipmentFull = null;
     let onActorCollected = null;
+    let onActorUpdated = null;
 
     const token = localStorage.getItem("token");
 
@@ -918,16 +947,28 @@ export function GameShell() {
           }
 
           setSnapshot((prev) => {
-            if (!prev) return prev;
-            if (!actorDisabled) return prev;
-            const actors = Array.isArray(prev.actors) ? prev.actors : [];
-            if (!actors.some((a) => String(a.id) === String(actorId))) return prev;
+            let next = prev;
+
+            if (payload?.actorUpdate) {
+              next = mergeSnapshotActor(next, payload.actorUpdate);
+            }
+
+            if (!next) return next;
+            if (!actorDisabled) return next;
+
+            const actors = Array.isArray(next.actors) ? next.actors : [];
+            if (!actors.some((a) => String(a.id) === String(actorId))) return next;
 
             return {
-              ...prev,
+              ...next,
               actors: actors.filter((a) => String(a.id) !== String(actorId)),
             };
           });
+        };
+
+        onActorUpdated = (payload) => {
+          const actorUpdate = payload?.actor ?? payload?.entity ?? payload ?? null;
+          setSnapshot((prev) => mergeSnapshotActor(prev, actorUpdate));
         };
 
         onSocketReady = (payload) => {
@@ -1223,6 +1264,7 @@ export function GameShell() {
         socket.on("equipment:full", onEquipmentFull);
         socket.on("world:object_spawn", onWorldObjectSpawn);
         socket.on("actor:collected", onActorCollected);
+        socket.on("actor:updated", onActorUpdated);
         socket.on("combat:enemy_attack", onEnemyAttack);
       } catch (err) {
         if (!mounted) return;
@@ -1257,6 +1299,7 @@ export function GameShell() {
         if (onEquipmentFull) s.off("equipment:full", onEquipmentFull);
         if (onWorldObjectSpawn) s.off("world:object_spawn", onWorldObjectSpawn);
         if (onActorCollected) s.off("actor:collected", onActorCollected);
+        if (onActorUpdated) s.off("actor:updated", onActorUpdated);
         if (onEnemyAttack) s.off("combat:enemy_attack", onEnemyAttack);
       }
 
