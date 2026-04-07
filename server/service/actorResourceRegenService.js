@@ -255,11 +255,11 @@ async function processActorResourceRule(actor, rule, nowMs, io, tx) {
 
   let changed = false;
   let newQty = currentQty;
+  let effectiveItemInstance = null;
 
   if (due && missingQty > 0) {
     const amountToAdd = Math.min(refillAmount, missingQty);
     let targetSlot = sourceSlot;
-    let effectiveItemInstance = null;
 
     if (!targetSlot) {
       targetSlot = slots.find((slot) => slot.item_instance_id == null) ?? null;
