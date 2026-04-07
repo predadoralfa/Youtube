@@ -12,7 +12,7 @@ export function TreeActor({ actor }) {
   const trunkRef = useRef();
   const leavesRef = useRef();
   const [hovered, setHovered] = useState(false);
-  const config = getActorConfig("TREE");
+  const config = getActorConfig(actor?.actorType ?? "TREE");
 
   // Vento suave: movimento das folhas
   useFrame(({ clock }) => {

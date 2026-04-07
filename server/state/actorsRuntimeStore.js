@@ -1,47 +1,22 @@
-// server/state/actorsRuntimeStore.js
-
 /**
  * Runtime store autoritativo para ACTORS.
  *
- * Regras:
- * - NÃO acessa banco.
- * - NÃO importa loader/serviço.
- * - NÃO depende de socket.
- * - Apenas cache em memória para consulta rápida (ex: interact).
- *
- * Shape do actor:
- * {
- *   id: string,
- *   actorType: string,
- *   instanceId: string,
- *   pos: { x, y, z },
- *   status: "ACTIVE" | "DISABLED",
- *   state: object|null,
- *   containers: [{
- *     slotRole: string,
- *     containerId: number,
- *     containerDefId: number,
- *     state: string,
- *     rev: number
- *   }]
- * }
- *
- * Fonte da verdade de carga:
- * - worldService.bootstrap (carrega via service/actorLoader e chama addActor)
- *
- * Evolução:
- * - Quando houver spawn/despawn/move de actor, atualize aqui via API.
+ * Mantem o cache em memoria das instancias de actor ja resolvidas pelo backend.
+ * O contrato novo diferencia:
+ * - actorDefCode: tipo estavel cadastrado em ga_actor_def
+ * - actorKind: familia ampla (OBJECT, LOOT, NPC, RESOURCE_NODE...)
+ * - spawnId: origem fixa do mapa quando existir
  */
 
-const actorsById = new Map(); // actorId(string) -> { id, instanceId, pos:{x,y,z}, status, containers:[] }
-const actorsByInstance = new Map(); // instanceId(string) -> Set(actorId)
+const actorsById = new Map();
+const actorsByInstance = new Map();
 
-function toKey(v) {
-  return String(v);
+function toKey(value) {
+  return String(value);
 }
 
-function toNum(v, fallback = 0) {
-  const n = Number(v);
+function toNum(value, fallback = 0) {
+  const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
 
@@ -50,19 +25,22 @@ function addActor(actor) {
 
   const id = toKey(actor.id);
   const instanceId = toKey(actor.instanceId);
-
-  // Normaliza containers (vem de actorLoader.js já populado)
-  const containers = (actor.containers ?? []).map((c) => ({
-    slotRole: String(c.slotRole ?? ""),
-    containerId: toNum(c.containerId, 0),
-    containerDefId: c.containerDefId == null ? null : toNum(c.containerDefId, 0),
-    state: String(c.state ?? "ACTIVE"),
-    rev: toNum(c.rev, 0),
+  const containers = (actor.containers ?? []).map((container) => ({
+    slotRole: String(container.slotRole ?? ""),
+    containerId: toNum(container.containerId, 0),
+    containerDefId: container.containerDefId == null ? null : toNum(container.containerDefId, 0),
+    state: String(container.state ?? "ACTIVE"),
+    rev: toNum(container.rev, 0),
   }));
 
   const record = {
     id,
-    actorType: actor.actorType ?? actor.actor_type ?? null,
+    actorType: actor.actorType ?? actor.actorDefCode ?? null,
+    actorDefCode: actor.actorDefCode ?? actor.actorType ?? null,
+    actorKind: actor.actorKind ?? null,
+    displayName: actor.displayName ?? null,
+    visualHint: actor.visualHint ?? null,
+    spawnId: actor.spawnId == null ? null : toKey(actor.spawnId),
     instanceId,
     pos: {
       x: toNum(actor.pos?.x, 0),
@@ -70,8 +48,10 @@ function addActor(actor) {
       z: toNum(actor.pos?.z, 0),
     },
     status: actor.status ?? "ACTIVE",
+    rev: toNum(actor.rev, 0),
     state: actor.state ?? actor.state_json ?? null,
-    containers, // ✅ NOVO
+    containers,
+    lootSummary: actor.lootSummary ?? actor.loot_summary ?? null,
   };
 
   actorsById.set(id, record);
@@ -94,6 +74,7 @@ function updateActorPos(actorId, pos) {
     y: toNum(pos?.y, actor.pos?.y ?? 0),
     z: toNum(pos?.z, actor.pos?.z ?? 0),
   };
+  actor.rev += 1;
   return true;
 }
 
@@ -103,7 +84,6 @@ function removeActor(actorId) {
   if (!actor) return false;
 
   actorsById.delete(id);
-
   const set = actorsByInstance.get(actor.instanceId);
   if (set) {
     set.delete(id);
@@ -128,8 +108,8 @@ function getActorsForInstance(instanceId) {
 
   const out = [];
   for (const id of set) {
-    const a = actorsById.get(id);
-    if (a) out.push(a);
+    const actor = actorsById.get(id);
+    if (actor) out.push(actor);
   }
   return out;
 }

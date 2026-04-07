@@ -209,10 +209,19 @@ const bootstrap = async (req, res) => {
       
       addActor({
         id: a.id,
+        actorType: a.actorType,
+        actorDefCode: a.actorDefCode ?? a.actorType,
+        actorKind: a.actorKind ?? null,
+        displayName: a.displayName ?? null,
+        visualHint: a.visualHint ?? null,
+        spawnId: a.spawnId ?? null,
         instanceId: runtime.instance_id,
         pos: aPos,
         status: a.status ?? "ACTIVE",
+        rev: a.rev ?? 0,
+        state: a.state ?? null,
         containers: a.containers ?? [],
+        lootSummary: a.lootSummary ?? null,
       });
     }
 

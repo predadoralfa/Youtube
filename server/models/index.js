@@ -56,6 +56,8 @@ const defineGaContainerSlot = require("./ga_container_slot");
 const defineGaContainerOwner = require("./ga_container_owner");
 
 // ACTORS
+const defineGaActorDef = require("./ga_actor_def");
+const defineGaActorSpawn = require("./ga_actor_spawn");
 const defineGaActor = require("./ga_actor");
 
 // =====================================
@@ -114,6 +116,8 @@ const GaContainerSlot = defineGaContainerSlot(sequelize, DataTypes);
 const GaContainerOwner = defineGaContainerOwner(sequelize, DataTypes);
 
 // ACTORS
+const GaActorDef = defineGaActorDef(sequelize, DataTypes);
+const GaActorSpawn = defineGaActorSpawn(sequelize, DataTypes);
 const GaActor = defineGaActor(sequelize, DataTypes);
 
 
@@ -146,6 +150,8 @@ const models = {
   GaUserResearch,
 
   // ACTOR
+  GaActorDef,
+  GaActorSpawn,
   GaActor,
 
   // WORLD

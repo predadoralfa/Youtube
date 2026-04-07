@@ -21,6 +21,7 @@ import { getSocket } from "@/services/Socket";
 import { createPlayerMesh } from "../entities/character/player";
 import { createActorMesh } from "../entities/actors/ActorFactory";
 import { TargetMarker } from "./TargetMarker";
+import { TargetLootCard } from "./TargetLootCard";
 import { FloatingDamageText } from "./FloatingDamageText";
 import { FloatingLootText } from "./FloatingLootText";
 import { HPBar } from "./HPBar";
@@ -272,6 +273,7 @@ export function GameCanvas({
   const [marker, setMarker] = useState({ visible: false, x: 0, y: 0 });
   const [floatingDamages, setFloatingDamages] = useState([]);
   const [targetHpBar, setTargetHpBar] = useState(null);
+  const [targetLootCard, setTargetLootCard] = useState(null);
   const [selfHpBar, setSelfHpBar] = useState(null);
 
   const entityVitalsRef = useRef(new Map());
@@ -412,6 +414,7 @@ export function GameCanvas({
       seenDamageEventIdsRef.current.clear();
       setFloatingDamages([]);
       setTargetHpBar(null);
+      setTargetLootCard(null);
     };
 
     socket.on("combat:damage_taken", onDamageTaken);
@@ -603,6 +606,7 @@ export function GameCanvas({
 
       setMarker((prev) => (prev.visible ? { ...prev, visible: false } : prev));
       setTargetHpBar(null);
+      setTargetLootCard(null);
 
       onTargetClear?.();
       onInputIntent?.({ type: IntentType.TARGET_CLEAR });
@@ -776,10 +780,13 @@ export function GameCanvas({
           mesh.userData.actorId = mesh.userData.actorId ?? actorId;
           mesh.userData.actorType =
             mesh.userData.actorType ?? actor.actorType ?? actor.actor_type ?? null;
+          mesh.userData.lootSummary = actor.lootSummary ?? null;
 
           meshByActorIdRef.current.set(actorId, mesh);
           scene.add(mesh);
         }
+
+        mesh.userData.lootSummary = actor.lootSummary ?? null;
 
         const { x, y, z, yaw } = readPosYawFromEntity(actor);
         mesh.position.set(x, y ?? 0, z);
@@ -1102,8 +1109,37 @@ export function GameCanvas({
               });
             }
           }
+        } else if (selected?.kind === "ACTOR") {
+          const mesh = meshByActorIdRef.current.get(String(selected.id));
+          const lootSummary = mesh?.userData?.lootSummary ?? null;
+
+          if (!mesh || !lootSummary || !Array.isArray(lootSummary.items) || lootSummary.items.length === 0) {
+            setTargetLootCard(null);
+          } else {
+            const worldPos = new THREE.Vector3();
+            mesh.getWorldPosition(worldPos);
+            worldPos.y += 1.15;
+
+            const screenPos = projectWorldToScreenPx(
+              worldPos,
+              camera,
+              renderer.domElement
+            );
+
+            if (!screenPos) {
+              setTargetLootCard(null);
+            } else {
+              setTargetLootCard({
+                id: String(selected.id),
+                x: screenPos.x,
+                y: screenPos.y,
+                lootSummary,
+              });
+            }
+          }
         } else {
           setTargetHpBar(null);
+          setTargetLootCard(null);
         }
       }
 
@@ -1193,6 +1229,7 @@ export function GameCanvas({
 
       setMarker({ visible: false, x: 0, y: 0 });
       setTargetHpBar(null);
+      setTargetLootCard(null);
       setSelfHpBar(null);
     };
   }, [onInputIntent, onTargetSelect, onTargetClear, worldStoreRef]);
@@ -1239,6 +1276,14 @@ export function GameCanvas({
         }}
       >
         <TargetMarker visible={marker.visible} x={marker.x} y={marker.y} />
+        {targetLootCard ? (
+          <TargetLootCard
+            visible={true}
+            x={targetLootCard.x}
+            y={targetLootCard.y}
+            lootSummary={targetLootCard.lootSummary}
+          />
+        ) : null}
 
         {selfHpBar ? (
           <div

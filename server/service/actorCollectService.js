@@ -81,6 +81,12 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     // 1) VALIDAR ACTOR E CONTAINER LOOT
     // ================================================================
     const actor = await db.GaActor.findByPk(actorId, {
+      include: [
+        {
+          association: "actorDef",
+          required: false,
+        },
+      ],
       transaction: tx,
       lock: tx.LOCK.UPDATE,
     });
@@ -89,8 +95,10 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
       return { ok: false, error: "ACTOR_NOT_FOUND" };
     }
 
-    const actorType = String(actor.actor_type ?? "").trim().toUpperCase();
-    const shouldDespawnWhenEmpty = actorType !== "TREE";
+    const actorDefCode = String(actor.actorDef?.code ?? "").trim().toUpperCase();
+    const actorKind = String(actor.actorDef?.actor_kind ?? "").trim().toUpperCase();
+    const shouldDespawnWhenEmpty =
+      actorDefCode === "GROUND_LOOT" || actorKind === "LOOT";
 
     // ✅ CORRIGIDO: slot_role está em ga_container, não em ga_container_owner!
     const lootOwner = await db.GaContainerOwner.findOne({
@@ -179,7 +187,7 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     }
 
     const collectUnlockCode =
-      String(actorType) === "TREE" &&
+      actorDefCode === "TREE_APPLE" &&
       String(actorState?.resourceType ?? "").toUpperCase() === "APPLE_TREE"
         ? "actor.collect:APPLE_TREE"
         : null;
@@ -436,7 +444,8 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     } else if (actorWouldBeEmpty) {
       console.log("[COLLECT] Actor permaneceu no mundo mesmo vazio", {
         actorId,
-        actorType,
+        actorDefCode,
+        actorKind,
       });
     }
 

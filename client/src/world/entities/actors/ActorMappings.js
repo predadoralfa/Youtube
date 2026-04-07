@@ -20,6 +20,8 @@ export function getActorComponent(actorType) {
     BAU: ChestActor,
     CHEST: ChestActor,
     GROUND_LOOT: DefaultActor,
+    TREE_APPLE: TreeActor,
+    APPLE_TREE: TreeActor,
     TREE: TreeActor,
     NPC: NPCActor,
     // Adicione mais tipos aqui conforme necessário
@@ -54,6 +56,18 @@ export const ACTOR_CONFIG = {
     scale: 2,
     interactive: false,
     label: "Árvore",
+    color: 0x228b22,
+  },
+  TREE_APPLE: {
+    scale: 2,
+    interactive: false,
+    label: "Árvore de maçã",
+    color: 0x228b22,
+  },
+  APPLE_TREE: {
+    scale: 2,
+    interactive: false,
+    label: "Árvore de maçã",
     color: 0x228b22,
   },
   NPC: {

@@ -31,6 +31,7 @@ function normalizeActorType(actorType) {
   switch (raw) {
     case "BAU":
     case "CHEST":
+    case "CHEST_TEST":
     case "CONTAINER":
       return "CHEST";
     case "GROUND_LOOT":
@@ -38,6 +39,8 @@ function normalizeActorType(actorType) {
     case "DROP":
     case "LOOT_DROP":
       return "ITEM_DROP";
+    case "TREE_APPLE":
+    case "APPLE_TREE":
     case "TREE":
       return "TREE";
     case "NPC":
@@ -47,8 +50,19 @@ function normalizeActorType(actorType) {
   }
 }
 
+function normalizeActorKind(actorKind) {
+  const raw = String(actorKind ?? "").trim().toUpperCase();
+  return raw || null;
+}
+
 function resolveRenderActorType(actor) {
-  const normalizedActorType = normalizeActorType(actor?.actorType ?? actor?.actor_type ?? null);
+  const normalizedActorType = normalizeActorType(
+    actor?.actorDefCode ??
+    actor?.actorType ??
+    actor?.actor_type ??
+    null
+  );
+  const normalizedActorKind = normalizeActorKind(actor?.actorKind ?? null);
   const hasDroppedItemMetadata =
     actor?.state?.itemInstanceId != null ||
     actor?.state?.itemDefId != null ||
@@ -57,7 +71,7 @@ function resolveRenderActorType(actor) {
     actor?.state?.sourceKind != null ||
     actor?.state?.dropSource != null;
 
-  if (normalizedActorType === "ITEM_DROP" || hasDroppedItemMetadata) {
+  if (normalizedActorType === "ITEM_DROP" || normalizedActorKind === "LOOT" || hasDroppedItemMetadata) {
     return "ITEM_DROP";
   }
 
@@ -67,7 +81,9 @@ function resolveRenderActorType(actor) {
 function applyActorUserData(root, actor, interactive) {
   const baseUserData = {
     actorId: actor.id,
-    actorType: actor.actorType,
+    actorType: actor.actorDefCode ?? actor.actorType,
+    actorKind: actor.actorKind ?? null,
+    visualHint: actor.visualHint ?? null,
     interactive,
   };
 
@@ -229,11 +245,11 @@ async function loadTreeModelTemplate() {
 }
 
 function resolveDroppedItemVisual(actor) {
-  const visualHint = String(actor?.state?.visualHint ?? "").trim().toUpperCase();
-  if (visualHint === "ROCK") {
+  const explicitVisualHint = String(actor?.visualHint ?? "").trim().toUpperCase();
+  if (explicitVisualHint === "ROCK") {
     return "ROCK";
   }
-  if (visualHint === "APPLE") {
+  if (explicitVisualHint === "APPLE") {
     return "APPLE";
   }
 
@@ -248,7 +264,12 @@ function resolveDroppedItemVisual(actor) {
     return "APPLE";
   }
 
-  const normalizedActorType = normalizeActorType(actor?.actorType ?? actor?.actor_type ?? null);
+  const normalizedActorType = normalizeActorType(
+    actor?.actorDefCode ??
+    actor?.actorType ??
+    actor?.actor_type ??
+    null
+  );
   if (normalizedActorType === "ITEM_DROP") {
     return "ROCK";
   }

@@ -823,11 +823,14 @@ export function GameShell() {
           const normalizedActor = {
             ...actor,
             id: actorId,
-            actorType: actor?.actorType === "GROUND_LOOT" || actor?.actor_type === "GROUND_LOOT"
+            actorType: actor?.actorDefCode === "GROUND_LOOT" || actor?.actorType === "GROUND_LOOT" || actor?.actor_type === "GROUND_LOOT"
               ? "GROUND_LOOT"
               : looksLikeItemDrop
               ? "ITEM_DROP"
-              : (actor?.actorType ?? actor?.actor_type ?? "CHEST"),
+              : (actor?.actorDefCode ?? actor?.actorType ?? actor?.actor_type ?? "CHEST"),
+            actorDefCode: actor?.actorDefCode ?? actor?.actorType ?? actor?.actor_type ?? null,
+            actorKind: actor?.actorKind ?? null,
+            visualHint: actor?.visualHint ?? null,
             instanceId: Number(actor?.instanceId ?? actor?.instance_id ?? store.instanceId ?? 0),
             state: normalizedState,
             pos: {

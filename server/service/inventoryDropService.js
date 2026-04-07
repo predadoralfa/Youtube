@@ -2,7 +2,7 @@
 
 const db = require("../models");
 const { getRuntime } = require("../state/runtimeStore");
-const { createActorWithContainer } = require("./actorService");
+const { createActorWithContainer, resolveActorDef } = require("./actorService");
 function toNum(v, fallback = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
@@ -206,7 +206,10 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
       hasTx: !!tx,
     });
 
-    const lootContainerDef = await resolveLootContainerDef(tx);
+    const actorDef = await resolveActorDef({ actorDefCode: "GROUND_LOOT" }, tx);
+    const lootContainerDef = Number(actorDef?.default_container_def_id ?? 0) > 0
+      ? await db.GaContainerDef.findByPk(Number(actorDef.default_container_def_id), { transaction: tx })
+      : await resolveLootContainerDef(tx);
 
     if (!lootContainerDef) {
       console.warn("[DROP] loot container def missing", { userId, itemInstanceId });
@@ -225,10 +228,11 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
     });
 
     const created = await createActorWithContainer({
-      actorType: "GROUND_LOOT",
+      actorDefCode: "GROUND_LOOT",
       instanceId: Number(runtime.instanceId),
       posX: dropPos.x,
-      posY: dropPos.z,
+      posY: dropPos.y,
+      posZ: dropPos.z,
       stateJson: {
         dropSource: inventorySource ? "inventory" : "equipment",
         userId,
@@ -237,7 +241,6 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
         itemCode: itemDef?.code ?? null,
         itemName: itemDef?.name ?? itemDef?.code ?? null,
         qty: sourceQty,
-        visualHint,
         sourceKind: inventorySource ? "INVENTORY" : "EQUIPMENT",
       },
       status: "ACTIVE",
@@ -387,6 +390,10 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
       actor: {
         id: actorId,
         actorType: "GROUND_LOOT",
+        actorDefCode: "GROUND_LOOT",
+        actorKind: "LOOT",
+        displayName: actorDef?.name ?? "Ground Loot",
+        visualHint,
         instanceId: Number(runtime.instanceId),
         pos: dropPos,
         status: "ACTIVE",
@@ -398,7 +405,6 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
           itemCode: itemDef?.code ?? null,
           itemName: itemDef?.name ?? itemDef?.code ?? null,
           qty: sourceQty,
-          visualHint,
           sourceKind: inventorySource ? "INVENTORY" : "EQUIPMENT",
         },
         containers: [

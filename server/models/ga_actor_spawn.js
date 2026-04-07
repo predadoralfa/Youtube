@@ -1,31 +1,21 @@
 "use strict";
 
 module.exports = (sequelize, DataTypes) => {
-  const GaActor = sequelize.define(
-    "GaActor",
+  const GaActorSpawn = sequelize.define(
+    "GaActorSpawn",
     {
       id: {
         type: DataTypes.BIGINT,
         primaryKey: true,
         autoIncrement: true,
       },
-      actor_def_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-      },
-      actor_spawn_id: {
-        type: DataTypes.BIGINT,
-        allowNull: true,
-      },
       instance_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: {
-          model: "ga_instance",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "RESTRICT",
+      },
+      actor_def_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
       },
       pos_x: {
         type: DataTypes.DECIMAL(10, 3),
@@ -42,14 +32,14 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0,
       },
-      state_json: {
+      state_override_json: {
         type: DataTypes.JSON,
         allowNull: true,
       },
-      status: {
-        type: DataTypes.ENUM("ACTIVE", "DISABLED"),
+      is_active: {
+        type: DataTypes.BOOLEAN,
         allowNull: false,
-        defaultValue: "ACTIVE",
+        defaultValue: true,
       },
       rev: {
         type: DataTypes.BIGINT,
@@ -58,40 +48,37 @@ module.exports = (sequelize, DataTypes) => {
       },
     },
     {
-      tableName: "ga_actor",
+      tableName: "ga_actor_spawn",
       timestamps: true,
       underscored: true,
       indexes: [
-        { fields: ["actor_def_id"] },
-        { fields: ["actor_spawn_id"] },
         { fields: ["instance_id"] },
-        { fields: ["status"] },
+        { fields: ["actor_def_id"] },
+        { fields: ["is_active"] },
       ],
     }
   );
 
-  GaActor.associate = (models) => {
-    GaActor.belongsTo(models.GaActorDef, {
+  GaActorSpawn.associate = (models) => {
+    GaActorSpawn.belongsTo(models.GaInstance, {
+      foreignKey: "instance_id",
+      as: "instance",
+      onUpdate: "CASCADE",
+      onDelete: "CASCADE",
+    });
+
+    GaActorSpawn.belongsTo(models.GaActorDef, {
       foreignKey: "actor_def_id",
       as: "actorDef",
       onUpdate: "CASCADE",
       onDelete: "RESTRICT",
     });
 
-    GaActor.belongsTo(models.GaActorSpawn, {
+    GaActorSpawn.hasMany(models.GaActor, {
       foreignKey: "actor_spawn_id",
-      as: "spawn",
-      onUpdate: "CASCADE",
-      onDelete: "SET NULL",
-    });
-
-    GaActor.belongsTo(models.GaInstance, {
-      foreignKey: "instance_id",
-      as: "instance",
-      onUpdate: "CASCADE",
-      onDelete: "RESTRICT",
+      as: "runtimeActors",
     });
   };
 
-  return GaActor;
+  return GaActorSpawn;
 };
