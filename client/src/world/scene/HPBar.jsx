@@ -126,6 +126,9 @@ export function HPBar({
   showHungerText = false,
   showStamina = false,
   showHunger = false,
+  hpTextFontSize = "11px",
+  staminaTextFontSize = "10px",
+  hungerTextFontSize = "10px",
 
   // cores
   hpColorHigh = "#ef4444",
@@ -189,7 +192,7 @@ export function HPBar({
         borderColor={borderColor}
         showText={showHpText}
         textColor={textColor}
-        fontSize="11px"
+        fontSize={hpTextFontSize}
         label=""
       />
 
@@ -204,7 +207,7 @@ export function HPBar({
           borderColor={borderColor}
           showText={showStaminaText}
           textColor={textColor}
-          fontSize="10px"
+          fontSize={staminaTextFontSize}
           label=""
         />
       ) : null}
@@ -220,7 +223,7 @@ export function HPBar({
           borderColor={borderColor}
           showText={showHungerText}
           textColor={textColor}
-          fontSize="10px"
+          fontSize={hungerTextFontSize}
           label=""
         />
       ) : null}

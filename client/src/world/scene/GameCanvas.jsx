@@ -22,6 +22,7 @@ import { createPlayerMesh } from "../entities/character/player";
 import { createActorMesh } from "../entities/actors/ActorFactory";
 import { TargetMarker } from "./TargetMarker";
 import { TargetLootCard } from "./TargetLootCard";
+import { TargetEnemyCard } from "./TargetEnemyCard";
 import { FloatingDamageText } from "./FloatingDamageText";
 import { FloatingLootText } from "./FloatingLootText";
 import { HPBar } from "./HPBar";
@@ -1104,6 +1105,9 @@ export function GameCanvas({
                 id: String(selected.id),
                 x: screenPos.x,
                 y: screenPos.y,
+                displayName:
+                  meshByEnemyIdRef.current.get(String(selected.id))?.userData?.displayName ??
+                  `Enemy ${String(selected.id)}`,
                 hpCurrent: Math.max(0, vitals.hpCurrent ?? 0),
                 hpMax: vitals.hpMax ?? 0,
               });
@@ -1321,17 +1325,13 @@ export function GameCanvas({
         ) : null}
 
         {targetHpBar ? (
-          <HPBar
+          <TargetEnemyCard
             visible={true}
             x={targetHpBar.x}
             y={targetHpBar.y}
+            enemyName={targetHpBar.displayName}
             hpCurrent={targetHpBar.hpCurrent}
             hpMax={targetHpBar.hpMax}
-            mode="world"
-            width={70}
-            hpHeight={8}
-            showHpText={true}
-            showStamina={false}
           />
         ) : null}
       </div>
