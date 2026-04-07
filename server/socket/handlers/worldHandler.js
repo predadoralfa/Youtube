@@ -6,6 +6,8 @@ const { ensureInventoryLoaded } = require("../../state/inventory/loader");
 const { ensureEquipmentLoaded } = require("../../state/equipment/loader");
 const { buildInventoryFull } = require("../../state/inventory/fullPayload");
 const { loadCarryWeightStats } = require("../../state/inventory/weight");
+const { getRuntime } = require("../../state/runtimeStore");
+const { buildAutoFoodPayload } = require("../../service/autoFoodService");
 const { ensureResearchLoaded, buildResearchPayload } = require("../../service/researchService");
 
 function emitBaseline(socket, baseline) {
@@ -51,6 +53,12 @@ async function emitInventoryFull(socket) {
     });
   }
   const inv = buildInventoryFull(invRt, eqRt);
+  const rt = getRuntime(userId);
+  if (rt) {
+    inv.macro = {
+      autoFood: buildAutoFoodPayload(rt),
+    };
+  }
   socket.emit("inv:full", inv);
   logWorld("emitInventoryFull", {
     userId,

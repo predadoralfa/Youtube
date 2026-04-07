@@ -22,6 +22,16 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function parseMaybeJsonObject(value) {
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 function getFoodMacroState(rt) {
   if (!rt.autoFood || typeof rt.autoFood !== "object") {
     rt.autoFood = {
@@ -44,7 +54,8 @@ function getFoodMacroState(rt) {
 }
 
 function normalizePersistedAutoFoodConfig(row, hungerMax = 100) {
-  const config = row?.config_json ?? row?.configJson ?? {};
+  const rawConfig = row?.config_json ?? row?.configJson ?? {};
+  const config = parseMaybeJsonObject(rawConfig) ?? {};
   return {
     itemInstanceId:
       config?.itemInstanceId == null || config?.itemInstanceId === "" ? null : String(config.itemInstanceId),
@@ -83,30 +94,56 @@ async function persistAutoFoodConfig(userId, autoFood) {
   const itemInstanceId =
     autoFood?.itemInstanceId == null || autoFood?.itemInstanceId === "" ? null : String(autoFood.itemInstanceId);
   const hungerThreshold = toFiniteNumber(autoFood?.hungerThreshold, 0);
+  const where = {
+    user_id: Number(userId),
+    macro_code: "AUTO_FOOD",
+  };
+
+  const existing = await db.GaUserMacroConfig.findOne({ where });
 
   if (!itemInstanceId) {
-    console.log("[AUTO_FOOD][DB] clearing config", {
+    console.log("[AUTO_FOOD][DB] deactivating config", {
       userId,
       macroCode: "AUTO_FOOD",
     });
-    await db.GaUserMacroConfig.destroy({
-      where: {
-        user_id: Number(userId),
-        macro_code: "AUTO_FOOD",
-      },
-    });
+
+    if (existing) {
+      await existing.update({
+        is_active: false,
+        config_json: null,
+        state_json: null,
+      });
+    } else {
+      await db.GaUserMacroConfig.create({
+        ...where,
+        is_active: false,
+        config_json: null,
+        state_json: null,
+      });
+    }
     return;
   }
 
-  console.log("[AUTO_FOOD][DB] upserting config", {
+  console.log("[AUTO_FOOD][DB] updating config", {
     userId,
     macroCode: "AUTO_FOOD",
     itemInstanceId,
     hungerThreshold,
   });
-  await db.GaUserMacroConfig.upsert({
-    user_id: Number(userId),
-    macro_code: "AUTO_FOOD",
+  if (existing) {
+    await existing.update({
+      is_active: true,
+      config_json: {
+        itemInstanceId,
+        hungerThreshold,
+      },
+      state_json: null,
+    });
+    return;
+  }
+
+  await db.GaUserMacroConfig.create({
+    ...where,
     is_active: true,
     config_json: {
       itemInstanceId,
@@ -409,6 +446,7 @@ async function processAutoFoodTick(rt, nowMs) {
     autoFood.itemInstanceId = null;
     autoFood.activeConsumption = null;
     autoFood.cooldownUntilMs = 0;
+    await persistAutoFoodConfig(rt.userId, autoFood);
     markRuntimeDirty(rt.userId, now);
     return { changed: true, inventoryChanged: false };
   }
@@ -419,6 +457,7 @@ async function processAutoFoodTick(rt, nowMs) {
     autoFood.itemInstanceId = null;
     autoFood.activeConsumption = null;
     autoFood.cooldownUntilMs = 0;
+    await persistAutoFoodConfig(rt.userId, autoFood);
     markRuntimeDirty(rt.userId, now);
     return { changed: true, inventoryChanged: false };
   }
@@ -443,6 +482,7 @@ async function processAutoFoodTick(rt, nowMs) {
     autoFood.itemInstanceId = null;
     autoFood.activeConsumption = null;
     autoFood.cooldownUntilMs = 0;
+    await persistAutoFoodConfig(rt.userId, autoFood);
     markRuntimeDirty(rt.userId, now);
     return { changed: true, inventoryChanged: false };
   }

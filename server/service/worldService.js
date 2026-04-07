@@ -23,6 +23,7 @@ const {
 } = require("../config/worldVisualConstants");
 const { getWorldClockBootstrap } = require("./worldClockService");
 const { ensureResearchLoaded, buildResearchPayload } = require("./researchService");
+const { loadPersistedAutoFoodConfig } = require("./autoFoodService");
 
 // ACTORS
 const { loadActorsForInstance } = require("./actorLoader");
@@ -188,6 +189,12 @@ const bootstrap = async (req, res) => {
     const invRt = await ensureInventoryLoaded(userId);
     const eqRt = await ensureEquipmentLoaded(userId);
     const inventory = buildInventoryFull(invRt, eqRt);
+    inventory.macro = {
+      autoFood: await loadPersistedAutoFoodConfig(
+        userId,
+        Math.max(0, Number(hungerMax ?? 100) || 100)
+      ),
+    };
     const equipment = inventory.equipment;
     console.log(`[BOOTSTRAP] ✅ Inventory: ${inventory?.containers?.length ?? 0} containers`);
 

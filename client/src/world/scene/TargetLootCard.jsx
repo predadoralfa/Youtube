@@ -21,6 +21,7 @@ export function TargetLootCard({
   x = null,
   y = null,
   lootSummary = null,
+  actorName = "Container",
   width = 190,
 }) {
   if (!visible) return null;
@@ -65,7 +66,7 @@ export function TargetLootCard({
           fontWeight: 700,
         }}
       >
-        Container
+        {String(actorName ?? "Container").trim() || "Container"}
       </div>
 
       <div

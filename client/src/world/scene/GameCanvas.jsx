@@ -781,12 +781,16 @@ export function GameCanvas({
           mesh.userData.actorId = mesh.userData.actorId ?? actorId;
           mesh.userData.actorType =
             mesh.userData.actorType ?? actor.actorType ?? actor.actor_type ?? null;
+          mesh.userData.displayName =
+            actor.displayName ?? actor.display_name ?? actor.actorType ?? actor.actor_type ?? null;
           mesh.userData.lootSummary = actor.lootSummary ?? null;
 
           meshByActorIdRef.current.set(actorId, mesh);
           scene.add(mesh);
         }
 
+        mesh.userData.displayName =
+          actor.displayName ?? actor.display_name ?? actor.actorType ?? actor.actor_type ?? null;
         mesh.userData.lootSummary = actor.lootSummary ?? null;
 
         const { x, y, z, yaw } = readPosYawFromEntity(actor);
@@ -1137,6 +1141,10 @@ export function GameCanvas({
                 id: String(selected.id),
                 x: screenPos.x,
                 y: screenPos.y,
+                actorName:
+                  mesh?.userData?.displayName ??
+                  mesh?.userData?.actorType ??
+                  `Actor ${String(selected.id)}`,
                 lootSummary,
               });
             }
@@ -1285,6 +1293,7 @@ export function GameCanvas({
             visible={true}
             x={targetLootCard.x}
             y={targetLootCard.y}
+            actorName={targetLootCard.actorName}
             lootSummary={targetLootCard.lootSummary}
           />
         ) : null}
