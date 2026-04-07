@@ -46,7 +46,7 @@ async function ensureRuntimeActorsForSpawns(instanceId, tx) {
   if (spawnRows.length === 0) return;
 
   const spawnIds = spawnRows.map((row) => Number(row.id));
-  const runtimeRows = await db.GaActor.findAll({
+  const runtimeRows = await db.GaActorRuntime.findAll({
     where: {
       instance_id: instanceId,
       actor_spawn_id: spawnIds,
@@ -353,7 +353,7 @@ async function attachContainersAndLoot(actors, tx) {
       )
       .filter((id) => id != null);
 
-    await db.GaActor.destroy({ where: { id: staleActorIds }, transaction: tx }).catch(() => {});
+    await db.GaActorRuntime.destroy({ where: { id: staleActorIds }, transaction: tx }).catch(() => {});
     if (staleContainerIds.length > 0) {
       await db.GaContainer.destroy({ where: { id: staleContainerIds }, transaction: tx }).catch(() => {});
     }
@@ -377,7 +377,7 @@ async function loadActorsForInstance(instanceIdRaw, opts = {}) {
     const where = { instance_id: instanceId };
     if (status != null) where.status = status;
 
-    const actorRows = await db.GaActor.findAll({
+    const actorRows = await db.GaActorRuntime.findAll({
       where,
       include: [
         {

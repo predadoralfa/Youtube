@@ -1,11 +1,16 @@
 # Estrutura Consolidada do Projeto
 
-Este documento consolida a arquitetura atual descrita nos arquivos da pasta `MD`, com foco em:
+## Objetivo
 
-- frontend como camada de renderizacao e input por intencao
-- backend como fonte autoritativa do estado
-- fluxo de actors baseado em definicao, spawn e runtime
-- sistemas de coleta, fome, ciclo visual e research
+Este arquivo e um resumo estrutural rapido do projeto.
+Ele existe para orientar leitura, onboarding e manutencao sem repetir em detalhe tudo que ja esta no [document.md](/D:/JS-Projects/Youtube/MD/document.md).
+
+Use este arquivo quando a pergunta for:
+
+- como o projeto esta dividido
+- onde fica cada responsabilidade
+- quais sao os modulos centrais
+- quais documentos aprofundam cada tema
 
 ---
 
@@ -13,227 +18,310 @@ Este documento consolida a arquitetura atual descrita nos arquivos da pasta `MD`
 
 Regra central do projeto:
 
-- backend decide estado real do mundo
-- cliente renderiza snapshot e envia intents
-- replicacao usa `rev` monotono e baseline para cura de divergencia
+- backend e a fonte da verdade
+- frontend renderiza estado confirmado e envia intents
+- runtime vivo acontece principalmente no servidor
+- banco guarda modelos, configuracoes e estados persistentes
 
-Fluxo de alto nivel:
+Fluxo macro:
 
-1. login via HTTP
-2. bootstrap inicial via `GET /world/bootstrap`
-3. conexao Socket.IO apos snapshot
-4. atualizacoes incrementais por eventos de mundo/movimento/interacao
+1. autenticacao HTTP
+2. bootstrap inicial do mundo
+3. conexao Socket.IO autenticada
+4. entrada em instancia
+5. processamento autoritativo de movimento, combate, interacao e loops
+6. replicacao incremental para o cliente
 
 ---
 
-## Estrutura de Pastas (Resumo)
+## Estrutura de Pastas
 
 ```text
 Youtube/
 |-- MD/
 |   |-- document.md
-|   |-- estudo-arquitetural-actors-spawn.md
-|   |-- guia-registro-actors.md
-|   |-- guia-registro-itens.md
-|   |-- implementacao-ciclo-visual-dia-noite.md
-|   |-- implementacao-sistema-de-fome.md
-|   |-- modulo-research.md
-|   `-- struct.md
+|   |-- struct.md
+|   |-- CIDs/
+|   `-- implementacoes/
 |
 |-- client/
-|   |-- src/
-|   |   |-- pages/
-|   |   |   `-- AuthPage.jsx
-|   |   |-- components/
-|   |   |   |-- modals/
-|   |   |   `-- overlays/
-|   |   |-- services/
-|   |   |   |-- Auth.js
-|   |   |   |-- Socket.js
-|   |   |   `-- WorldBootstrap.js
-|   |   |-- World/
-|   |   |   |-- WorldRoot.jsx
-|   |   |   |-- GameShell.jsx
-|   |   |   |-- hooks/
-|   |   |   |   `-- useActorCollection.js
-|   |   |   |-- components/
-|   |   |   |   `-- CooldownBar.jsx
-|   |   |   |-- state/
-|   |   |   |   `-- entitiesStore.js
-|   |   |   `-- entities/
-|   |   `-- input/
-|   |       |-- inputBus.js
-|   |       |-- inputs.js
-|   |       `-- intents.js
-|   `-- ...
+|   `-- src/
+|       |-- components/
+|       |-- pages/
+|       |-- services/
+|       |-- style/
+|       `-- world/
 |
 `-- server/
-    |-- server.js
     |-- config/
-    |-- middlewares/
+    |-- migrations/
     |-- models/
-    |   |-- ga_actor_def.js
-    |   |-- ga_actor_spawn.js
-    |   |-- ga_actor.js
-    |   |-- ga_item_def.js
-    |   |-- ga_item_def_component.js
-    |   |-- ga_item_instance.js
-    |   |-- ga_user_stats.js
-    |   `-- ...
+    |-- router/
     |-- service/
-    |   |-- worldService.js
-    |   |-- actorLoader.js
-    |   |-- actorService.js
-    |   |-- actorCollectService.js
-    |   `-- inventoryService.js
     |-- socket/
-    |   |-- index.js
-    |   |-- sessionIndex.js
-    |   |-- wiring/
-    |   `-- handlers/
-    `-- state/
-        |-- runtime/
-        |-- movement/
-        |-- presence/
-        |-- persistence/
-        |-- actorsRuntimeStore.js
-        `-- ...
+    |-- state/
+    `-- server.js
 ```
 
----
+Leitura rapida:
 
-## Frontend (Client)
-
-Principios:
-
-- nao simular gameplay autoritativo
-- nao calcular estado final de movimento/coleta
-- aplicar apenas estado confirmado do servidor
-
-Pecas principais:
-
-- `WorldRoot.jsx`: gate entre autenticacao e mundo
-- `GameShell.jsx`: orquestra bootstrap, socket e atualizacao de snapshot
-- `useActorCollection.js`: escuta `actor:collected` e aplica atualizacao local
-- `CooldownBar.jsx` (opcional): feedback visual de cooldown
-- `entitiesStore.js`: store replicado com protecao por `rev`
-- `input/*`: somente intents (`MOVE_DIRECTION`, `INTERACT_PRESS`, `INTERACT_RELEASE`, etc.)
+- `MD/`: documentacao funcional e arquitetural
+- `client/src/`: interface, cena, input e estado cliente
+- `server/`: regras autoritativas, runtime, persistencia e schema
 
 ---
 
-## Backend (Server)
+## Pasta MD
 
-Principios:
+Organizacao atual:
 
-- estado vivo em runtime memory + persistencia em batch
-- movimento/coleta executados no servidor
-- cliente nao escolhe visibilidade por interesse
+- `document.md`: documento mestre
+- `struct.md`: resumo estrutural
+- `MD/CIDs`: guias de cadastro e identificadores estaveis
+- `MD/implementacoes`: estudos arquiteturais e planos tecnicos
 
-Pecas principais:
+Documentos principais:
 
-- `worldService.js`: monta snapshot HTTP autoritativo
-- `socket/handlers/*`: eventos de mundo, movimento, interacao e inventario
-- `state/movement/tickOnce.js`: loop de movimento e hold-to-collect
-- `actorCollectService.js`: coleta transacional por actor
-- `inventoryService.js`: busca stack incompleto ou slot vazio
-- `actorsRuntimeStore.js`: cache quente de actors com containers
-- `state/presence/*`: interest management por chunks
-- `state/persistence/*`: flush de runtime/stats/inventario/actor
-
----
-
-## Modelo de Actors
-
-Separacao atual recomendada:
-
-1. `ga_actor_def`: definicao global do tipo de actor
-2. `ga_actor_spawn`: colocacao fixa no mapa
-3. `ga_actor`: estado runtime da instancia
-
-Regras:
-
-- actor fixo de cenario nasce de spawn
-- actor transitorio pode nascer direto no runtime (`ga_actor`)
-- inventario/loot de actor continua em container (`ga_container*`)
+- [document.md](/D:/JS-Projects/Youtube/MD/document.md)
+- [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
+- [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
+- [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
+- [estudo-arquitetural-actors-spawn.md](/D:/JS-Projects/Youtube/MD/implementacoes/estudo-arquitetural-actors-spawn.md)
+- [plano-tecnico-respawn-inimigos-por-instancia.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-respawn-inimigos-por-instancia.md)
 
 ---
 
-## Sistemas Funcionais Consolidadores
+## Frontend
 
-### Coleta
+O frontend vive em `client/src` e se divide em cinco blocos principais:
 
-- evento de interacao inicia/paralisa hold (`interact:start/stop`)
-- tick autoritativo tenta coleta respeitando cooldown server-side
-- coleta atualiza slot, instancia, actor e inventario final
-- client recebe `actor:collected` para refletir UI/cena
+- `pages/`: entrada da aplicacao
+- `components/`: modais e overlays
+- `services/`: HTTP e socket
+- `style/`: CSS
+- `world/`: jogo em si
+
+Centro do front:
+
+- `App.jsx`
+- `pages/AuthPage.jsx`
+- `services/Auth.js`
+- `services/Socket.js`
+- `services/World.js`
+- `world/WorldRoot.jsx`
+- `world/GameShell.jsx`
+
+Subestrutura de `world/`:
+
+- `entities/character`: jogadores
+- `entities/enemies`: inimigos
+- `entities/actors`: actors do mundo
+- `hooks/`: sincronizacao com eventos do servidor
+- `input/`: intents e barramento de input
+- `scene/`: camera, luz, ambiente e HUD de cena
+- `state/`: store cliente
+- `ui/`: paineis auxiliares
+
+Regra do front:
+
+- cliente nao resolve gameplay
+- cliente nao calcula visibilidade por conta propria
+- cliente reflete bootstrap, delta, spawn e despawn enviados pelo servidor
+
+---
+
+## Backend
+
+O backend vive em `server/` e concentra a logica autoritativa.
+
+Estrutura funcional:
+
+- `config/`: constantes e parametros globais
+- `migrations/`: schema e seeds
+- `models/`: models Sequelize
+- `router/`: rotas HTTP
+- `service/`: regra de negocio
+- `socket/`: eventos do multiplayer
+- `state/`: runtime em memoria e loops
+
+Arquivo de entrada:
+
+- `server.js`
+
+Loops e managers principais:
+
+- `state/movementTick.js`
+- `state/spawnManager.js`
+- `state/resourceRegen/resourceRegenLoop.js`
+- `state/persistenceManager.js`
+
+Regra do backend:
+
+- calcula estado final
+- valida interacao
+- processa combate
+- decide spawn, respawn, coleta e persistencia
+
+---
+
+## Modelos Centrais do Banco
+
+### Mundo
+
+- `ga_local`
+- `ga_instance`
+- `ga_local_geometry`
+- `ga_local_visual`
+- `ga_world_clock`
+- `ga_world_month_def`
+
+### Jogador
+
+- `ga_user`
+- `ga_user_profile`
+- `ga_user_runtime`
+- `ga_user_stats`
+- `ga_user_macro_config`
+
+### Actors
+
+- `ga_actor_def`
+- `ga_actor_spawn`
+- `ga_actor_runtime`
+- `ga_actor_resource_rule_def`
+- `ga_actor_resource_state`
+
+### Containers e Itens
+
+- `ga_container_def`
+- `ga_container`
+- `ga_container_owner`
+- `ga_container_slot`
+- `ga_item_def`
+- `ga_item_def_component`
+- `ga_item_instance`
+
+### Inimigos e Spawn
+
+- `ga_enemy_def`
+- `ga_enemy_def_stats`
+- `ga_spawn_point`
+- `ga_spawn_entry`
+- `ga_enemy_instance`
+- `ga_enemy_instance_stats`
+- `ga_instance_spawn_config`
+
+### Research e Equipamento
+
+- `ga_research_def`
+- `ga_research_level_def`
+- `ga_user_research`
+- `ga_equipment_slot_def`
+- `ga_equipped_item`
+
+---
+
+## Sistemas Principais
+
+### Bootstrap do mundo
+
+- rota HTTP entrega snapshot inicial
+- `worldService.js` monta payload autoritativo
+- cliente usa isso para entrar no mundo antes dos deltas
+
+### Runtime e presenca
+
+- runtime de jogador em memoria
+- interest management por chunks
+- deltas emitidos por instancia/interesse
+
+### Movimento
+
+- intents do cliente entram pelo socket
+- `state/movement/tickOnce.js` processa o tick
+- servidor atualiza posicao, stamina, fome, combate automatico e interacao
+
+### Actors e coleta
+
+- actors usam definicao, spawn e runtime separados
+- coleta e validada no servidor
+- containers sustentam recursos, loot e baus
+
+### Inimigos e respawn
+
+- inimigos possuem definicao, spawn point e runtime
+- respawn respeita `dead_at` e `respawn_at`
+- instancia pode aplicar configuracao propria via `ga_instance_spawn_config`
+
+### Regeneracao de recursos
+
+- rules de recurso caminham para um modelo guiado por banco
+- loop proprio repoe conteudo ou estado de actors elegiveis
 
 ### Fome
 
-- dreno continuo ao longo de tempo real (meta: zerar em 8h reais)
-- progresso e calculo feitos no servidor
-- stats com valor fracionario e persistencia dirty/batch
-
-### Dia e Noite (visual)
-
-- cliente usa `worldClock` como entrada
-- somente efeito visual (luz, fog, ceu, exposicao)
-- sem mover regra de gameplay para o front
+- dreno por tempo real
+- calculo autoritativo no servidor
+- suporte a auto food por macro
 
 ### Research
 
-- desbloqueio de capacidades por estudo e nivel
-- progresso apenas quando jogador conectado
-- item no inventario nao implica saber usar
-- integra bootstrap + eventos socket de research
+- progresso persistente por jogador
+- desbloqueio de capacidades por nivel
+- progresso somente enquanto o jogador esta online
+
+### Ciclo visual
+
+- cliente interpreta relogio do mundo
+- efeito visual sem autoridade de gameplay
 
 ---
 
-## Eventos e Contratos Principais
+## Contratos de Comunicacao
 
-HTTP:
+### HTTP
 
 - `POST /auth/register`
 - `POST /auth/login`
 - `GET /world/bootstrap`
 
-Socket:
+### Socket
 
-- `world:join`, `world:resync`, `world:baseline`
-- `entity:spawn`, `entity:delta`, `entity:despawn`
-- `move:intent`, `move:click`, `move:state`
-- `interact:start`, `interact:stop`
-- `actor:collected`
-- `research:request_full`, `research:start`, `research:full`
-- `session:replaced`
+- `world:*`
+- `entity:*`
+- `move:*`
+- `interact:*`
+- `combat:*`
+- `inventory:*`
+- `research:*`
+- `session:*`
 
----
+Regra:
 
-## Invariantes do Projeto
-
-- backend e a fonte da verdade do mundo
-- cliente envia intents e renderiza confirmacao
-- `rev` monotono governa consistencia de replicacao
-- baseline substitui e corrige divergencia
-- presence/interest e calculado no servidor
-- persistencia e desacoplada por dirty + loop
-
-Invariantes de coleta:
-
-- slot vazio: `item_instance_id = NULL` e `qty = 0`
-- slot preenchido: `item_instance_id != NULL` e `qty > 0`
-- stacking por `item_def` (nao por mesma instancia)
-- actor de recurso pode migrar de `ACTIVE` para `DISABLED` quando depletado
+- cliente envia intencao
+- servidor devolve estado confirmado ou evento autoritativo
 
 ---
 
-## Fontes de Referencia
+## Invariantes
 
-Este `struct.md` foi consolidado a partir de:
+- backend sempre vence em caso de divergencia
+- frontend nunca deve inventar estado final
+- toda entidade importante precisa de contrato claro de persistencia e runtime
+- `rev` e baseline servem para cura de inconsistencias
+- configuracao por instancia deve viver no banco quando a regra variar por mapa
 
-- `MD/document.md`
-- `MD/estudo-arquitetural-actors-spawn.md`
-- `MD/guia-registro-actors.md`
-- `MD/guia-registro-itens.md`
-- `MD/implementacao-ciclo-visual-dia-noite.md`
-- `MD/implementacao-sistema-de-fome.md`
-- `MD/modulo-research.md`
+---
+
+## Documentos de Aprofundamento
+
+- documento mestre: [document.md](/D:/JS-Projects/Youtube/MD/document.md)
+- actors: [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
+- itens: [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
+- CID de container: [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
+- actors e spawns: [estudo-arquitetural-actors-spawn.md](/D:/JS-Projects/Youtube/MD/implementacoes/estudo-arquitetural-actors-spawn.md)
+- fome: [implementacao-sistema-de-fome.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-sistema-de-fome.md)
+- research: [modulo-research.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-research.md)
+- ciclo visual: [implementacao-ciclo-visual-dia-noite.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-ciclo-visual-dia-noite.md)
+- regeneracao de recursos: [plano-regeneracao-recursos.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-regeneracao-recursos.md)
+- respawn por instancia: [plano-tecnico-respawn-inimigos-por-instancia.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-respawn-inimigos-por-instancia.md)

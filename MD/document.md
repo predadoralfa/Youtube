@@ -1,614 +1,548 @@
-### PROJETO YOUTUBE — model.md (resumo disciplinado do "resumo de arquivos")
+# Projeto Youtube - Documento Mestre
 
-> **Princípio estrutural**: **Backend é a fonte da verdade**.
-> Cliente **não simula mundo**, apenas **renderiza snapshot** e envia **intenções** (inputs).
-> Multiplayer usa **interest management por chunks** + replicação incremental com **rev monotônico**.
+## Objetivo
 
----
+Este arquivo funciona como o documento central da pasta `MD`.
+Ele resume a arquitetura atual do projeto, explica o papel de cada grande sistema e aponta para os documentos mais especificos que detalham cadastro, estudos arquiteturais e planos de implementacao.
 
-## FRONT (src)
+Ele deve responder, de forma rapida:
 
-### `src/pages/AuthPage.jsx`
-
-**Papel:** Controlar fluxo de autenticação.
-**Faz:** alterna `LoginModal` / `RegisterModal`, repassa `onLoggedIn`.
-**Não faz:** bootstrap de mundo, socket, Three.js.
-
----
-
-### `src/components/modals/LoginModal.jsx`
-
-**Papel:** UI de login (email/senha).
-**Contrato:**
-
-* chama `loginUser(payload)`
-* se retorno tem `token` → `onLoggedIn(token)`
-* bloqueia reenvio com `isSubmitting`
-* mostra `LoadingOverlay` durante request
-  **Não faz:** armazenar token global por conta própria (delegado ao pai).
+- como o projeto esta organizado
+- quais sao as fontes da verdade do mundo
+- como frontend e backend se dividem
+- onde ficam os guias de cadastro
+- onde ficam os planejamentos de implementacao
 
 ---
 
-### `src/components/modals/RegisterModal.jsx`
+## Principios do Projeto
 
-**Papel:** UI de registro (nome/email/senha).
-**Contrato:**
+- o backend e a fonte autoritativa da verdade
+- o cliente renderiza snapshot e envia intents
+- movement, combat, coleta, inventario e respawn sao decididos no servidor
+- replicacao usa runtime em memoria + `rev` monotono + baseline/resync
+- banco guarda definicoes, configuracoes persistentes e estados que precisam sobreviver ao runtime
 
-* chama `registerUser(payload)`
-* exibe mensagem de sucesso
-* alterna para login via `onSwitch()`
-  **Não faz:** login automático (por design atual).
+Em outras palavras:
 
----
-
-### `src/components/overlays/LoadingOverlay.jsx`
-
-**Papel:** overlay global de bloqueio.
-**Contrato:** `LoadingOverlay({ message = "Carregando..." })`
-**Faz:** bloqueia UI + texto de status + ARIA básico.
-**Uso típico:** login, bootstrap, carregar snapshot.
+- o cliente nao decide resultado final de gameplay
+- o cliente nao escolhe quem esta visivel por interesse
+- o servidor calcula e replica o estado confirmado
 
 ---
 
-### `src/services/Auth.js`
+## Mapa da Pasta MD
 
-**Papel:** camada HTTP de autenticação.
-**Faz:** `POST /auth/register`, `POST /auth/login` e retorna JSON.
-**Não faz:** armazenar token, estado global, UI.
+Estrutura atual:
 
----
-
-### `src/services/Socket.js`
-
-**Papel:** gerenciar Socket.IO client (singleton).
-**Contrato:**
-
-* `connectSocket(token)` cria conexão com `auth: { token }`, transporte websocket
-* `getSocket()`, `disconnectSocket()`
-  **Não faz:** regras de gameplay, handlers de mundo (só ciclo de vida).
-
----
-
-### `src/services/WorldBootstrap.js`
-
-**Papel:** buscar snapshot inicial autoritativo.
-**Contrato:**
-
-* `GET /world/bootstrap` com `Authorization`
-* timeout via `AbortController` (10s)
-* padroniza erros (`ok:false`, etc.)
-* **✨ NOVO:** retorna `snapshot.actors[]` com containers linkados
-  **Não faz:** setar estado global, render, socket.
-
----
-
-### `src/World/WorldRoot.jsx`
-
-**Papel:** gate de autenticação do "mundo".
-**Faz:** se tem token → `GameShell`, senão → `AuthPage`.
-**Não faz:** bootstrap/socket/render.
-
----
-
-### `src/World/GameShell.jsx`
-
-**Papel:** orquestrador do runtime no cliente.
-**Faz:**
-
-* lê token do `localStorage`
-* chama `bootstrapWorld(token)` → obtém snapshot inicial
-* trata 401: remove token e recarrega
-* **após snapshot existir**, conecta Socket.IO
-* escuta `move:state` e atualiza **somente** `snapshot.runtime` (imutável)
-* **✨ NOVO:** escuta `actor:collected` via `useActorCollection` hook
-  * atualiza `snapshot.actors[]` (remove se disabled)
-  * atualiza `inventorySnapshot` via callback
-* mostra `LoadingOverlay` enquanto carrega
-* entrega `{ snapshot, socket, worldStoreRef }` ao `GameCanvas`
-  **Não faz:** simular movimento, calcular posição final, física, lógica de coleta.
-
----
-
-### `src/World/hooks/useActorCollection.js` (✨ NOVO)
-
-**Papel:** gerenciar escuta do evento de coleta no client.
-**Contrato:**
-
-```javascript
-useActorCollection({
-  socket,                    // Socket.IO instance
-  onInventoryUpdate,         // (inventory) => void
-  onActorCollected,          // (actorId, disabled) => void
-  onSnapshotUpdate,          // (updater) => void
-})
+```text
+MD/
+|-- document.md
+|-- struct.md
+|-- CIDs/
+|   |-- guia-cid-container-actors.md
+|   |-- guia-registro-actors.md
+|   `-- guia-registro-itens.md
+`-- implementacoes/
+    |-- estudo-arquitetural-actors-spawn.md
+    |-- implementacao-ciclo-visual-dia-noite.md
+    |-- implementacao-sistema-de-fome.md
+    |-- modulo-research.md
+    |-- plano-regeneracao-recursos.md
+    `-- plano-tecnico-respawn-inimigos-por-instancia.md
 ```
 
-**Faz:**
+Papel de cada area:
 
-* escuta `actor:collected` do socket
-* chama `onInventoryUpdate` com novo payload
-* chama `onActorCollected` para feedback visual
-* chama `onSnapshotUpdate` para remover ator se disabled
-  **Não faz:** render, decisões de gameplay, lógica de coleta (tudo no servidor).
-
----
-
-### `src/World/components/CooldownBar.jsx` (✨ NOVO, opcional)
-
-**Papel:** exibir barra visual de cooldown entre coletas.
-**Contrato:** `CooldownBar({ visible, onComplete })`
-**Faz:**
-
-* anima 100% → 0% em 1 segundo quando `visible=true`
-* desaparece ao terminar
-* callback ao completar
-  **Não faz:** lógica de cooldown (no servidor), decisão de quando aparecer (em GameShell).
+- `document.md`: documento mestre e ponto de entrada
+- `struct.md`: consolidado estrutural resumido
+- `MD/CIDs`: guias operacionais de cadastro e identificadores estaveis
+- `MD/implementacoes`: estudos arquiteturais, modulos e planos tecnicos
 
 ---
 
-### Entidades/render
+## Leitura Recomendada
 
-#### `src/world/entities/character/CharacterEntity.js`
+Para entender o projeto rapidamente:
 
-**Papel:** wrapper OO do mesh do personagem.
-**Faz:** cria cilindro padrão e `sync(runtime)` aplicando `pos`/`yaw` vindos do servidor.
-**Não faz:** movimento preditivo.
+1. ler `document.md`
+2. ler `struct.md`
+3. ler os guias em `MD/CIDs`
+4. ler os planos em `MD/implementacoes` conforme o sistema em foco
 
-#### `src/world/entities/character/player.jsx`
+Atalhos:
 
-**Papel:** helpers funcionais de mesh do player.
-**Faz:** `createPlayerMesh` + `syncPlayer(mesh, runtime)` (aplica estado confirmado).
-**Não faz:** simulação.
-
-#### `src/world/entities/actors/` (✨ ATUALIZADO)
-
-**Papel:** renderizar actors na cena (BAU, árvores, NPCs).
-**Contrato:**
-
-* `ActorsLayer.jsx`: itera `snapshot.actors[]` e renderiza via factory
-* `ActorFactory.js`: cria mesh correto por `actor.actorType` + serializa `userData.containers`
-  **✨ NOVO:** `snapshot.actors` agora contém `containers` array com info de LOOT
-  **Faz:** remover mesh da cena quando `actor.status === "DISABLED"` (sinalizador de coleta completa)
-  **Não faz:** lógica de coleta, cálculo de interesse.
+- actors: [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
+- itens: [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
+- container CID: [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
+- actors e spawn: [estudo-arquitetural-actors-spawn.md](/D:/JS-Projects/Youtube/MD/implementacoes/estudo-arquitetural-actors-spawn.md)
+- research: [modulo-research.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-research.md)
+- fome: [implementacao-sistema-de-fome.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-sistema-de-fome.md)
+- ciclo visual: [implementacao-ciclo-visual-dia-noite.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-ciclo-visual-dia-noite.md)
+- regeneracao de recursos: [plano-regeneracao-recursos.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-regeneracao-recursos.md)
+- respawn por instancia: [plano-tecnico-respawn-inimigos-por-instancia.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-respawn-inimigos-por-instancia.md)
 
 ---
 
-### Input (intenção, não ação)
+## Estrutura Geral do Projeto
 
-#### `src/input/inputBus.js`
+Partes principais:
 
-**Papel:** pub/sub de intents.
-**API:** `emit(intent)`, `on(fn)->unsubscribe`, `clear()`
-**Não faz:** ler teclado/mouse, nem enviar ao servidor diretamente.
+- `client/`: interface, cena 3D, HUD, bootstrap do mundo e renderizacao
+- `server/`: API HTTP, Socket.IO, regras autoritativas, workers e persistencia
+- `MD/`: documentacao funcional e arquitetural
 
-#### `src/input/inputs.js`
+Fluxo de alto nivel:
 
-**Papel:** bindings de dispositivo → intents.
-**Faz:**
-
-* RMB drag → `CAMERA_ORBIT(dx,dy)`
-* wheel → `CAMERA_ZOOM`
-* WASD → `MOVE_DIRECTION` (vetor X/Z) quando muda
-* **✨ NOVO:** SPACE hold → `INTERACT_PRESS` / `INTERACT_RELEASE`
-  **Não faz:** mover personagem, coletar itens.
-
-#### `src/input/intents.js`
-
-**Papel:** modelo unificado de intents.
-**Tipos:**
-
-* `CAMERA_ZOOM`
-* `CAMERA_ORBIT`
-* `MOVE_DIRECTION`
-* **✨ NOVO:** `INTERACT_PRESS` (SPACE down)
-* **✨ NOVO:** `INTERACT_RELEASE` (SPACE up)
+1. login via HTTP
+2. bootstrap inicial via `GET /world/bootstrap`
+3. abertura do socket autenticado
+4. entrada do jogador na instancia
+5. runtime em memoria passa a receber intents, processar ticks e emitir deltas
 
 ---
 
-### Estado replicado (client-side)
+## Frontend
 
-#### `cliente/src/World/state/entitiesStore.js` (documentado em `entitiesStore.md`)
+O frontend vive principalmente em `client/src`.
 
-**Papel:** store autoritativo de **entidades replicadas** no cliente (baseline/spawn/delta/despawn).
-**Garantias:**
+Blocos principais:
 
-* `Map` O(1)
-* normaliza IDs (`String`) para evitar `1` vs `"1"`
-* `rev` monotônico por entidade (rejeita pacote fora de ordem)
-* baseline sempre vence (replace completo)
-* protege contra "self como other" e "despawn do self"
-  **Não faz:** predição, interpolação, colisão, cálculo de interest.
+- `pages/`: telas de entrada, como autenticacao
+- `components/models/`: modais de auth, build, inventory e research
+- `components/overlays/`: overlays globais
+- `services/`: HTTP, socket e bootstrap
+- `world/`: jogo em si
 
----
+Pecas centrais do front:
 
-## SERVER
+- `App.jsx`: root da aplicacao
+- `pages/AuthPage.jsx`: fluxo de login/registro
+- `services/Auth.js`: chamadas de auth
+- `services/Socket.js`: cliente Socket.IO
+- `services/World.js`: bootstrap inicial do mundo
+- `world/WorldRoot.jsx`: gate entre autenticacao e mundo
+- `world/GameShell.jsx`: orquestracao do bootstrap, socket e estado do jogo
+- `world/state/entitiesStore.js`: store cliente para entidades replicadas
+- `world/scene/GameCanvas.jsx`: cena principal
 
-### `config/config.js` (Sequelize)
+Camadas do mundo:
 
-**Papel:** parâmetros de conexão MySQL por ambiente via `.env`.
-**Não faz:** conectar diretamente, nem lógica de domínio.
+- `world/entities/character`: jogadores
+- `world/entities/enemies`: inimigos
+- `world/entities/actors`: actors de mundo
+- `world/hooks`: sincronizacao com eventos do servidor
+- `world/input`: intents e barramento de input
+- `world/scene`: camera, ambiente, luz e HUD diegetico
+- `world/ui`: paineis como o relogio do mundo
 
----
+Regras do frontend:
 
-### `src/middlewares/requireAuth.js`
-
-**Papel:** guardião JWT no HTTP.
-**Faz:** valida `Bearer`, `jwt.verify`, injeta `req.user`.
-**Não faz:** consultar DB, renovar token.
-
----
-
-### `Service/worldService.js` (contrato do snapshot HTTP, ✨ ATUALIZADO)
-
-**Snapshot consolidado:**
-
-* `snapshot.runtime`: `user_id`, `instance_id`, `pos`, `yaw`
-* `snapshot.instance`: contexto de instância
-* `snapshot.localTemplateVersion`: versionamento para cache
-* `snapshot.localTemplate`: `local`, `geometry(size_x,size_z)`, `visual(...)`, `debug(bounds)`
-* **✨ NOVO:** `snapshot.actors[]` com:
-  * `id`, `actorType`, `pos`, `status` (ACTIVE/DISABLED)
-  * `containers[]` com `{ slotRole, containerId, containerDefId }`
-    **Papel:** entregar template declarativo + runtime + atores com containers num pacote autoritativo.
+- renderizar o que o backend autorizou
+- nao inventar HP, loot, cooldown, fome ou respawn
+- manter a cena sincronizada com snapshot, spawn, delta e despawn
 
 ---
 
-### `service/actorCollectService.js` (✨ NOVO)
+## Backend
 
-**Papel:** lógica transacional de coleta de 1 item do BAU.
-**Contrato:**
+O backend vive em `server/` e concentra a regra autoritativa do jogo.
 
-```javascript
-attemptCollectFromActor(userId, actorId) 
-  → { ok: true, actorDisabled: boolean, inventoryFull: {...} }
-  → { ok: false, error: "ACTOR_NO_LOOT_CONTAINER" | "PLAYER_INVENTORY_FULL" | ... }
-```
+Camadas principais:
 
-**Faz:**
+- `server.js`: bootstrap do servidor HTTP, socket e loops
+- `router/`: rotas HTTP
+- `middleware/`: auth e filtros
+- `models/`: schema Sequelize
+- `service/`: regras de negocio
+- `socket/`: handlers e wiring dos eventos
+- `state/`: runtime em memoria, loops e stores quentes
+- `migrations/`: evolucao do schema e seeds de dados
 
-* 1) valida actor e container LOOT (slot_role = "LOOT")
-* 2) busca primeiro item não-vazio
-* 3) busca containers equipados do player (dinâmico, não hardcoded)
-* 4) procura por **MESMO item_def com qty < stackMax** (não mesma instância!)
-* 5) se não achar, procura slot vazio (`item_instance_id = NULL`)
-* 6) se slot vazio: cria **nova** `GaItemInstance` (por causa do UNIQUE constraint)
-* 7) se stack incompleto: soma qty
-* 8) decrementa qty do BAU
-* 9) se BAU vazio → marca actor como `status = DISABLED`
-* 10) incrementa `rev` dos containers tocados
-* 11) reconstrói inventário completo do player
-  **Não faz:** lógica de cooldown (em tickOnce), spawn do ator (em worldService), UI.
+Loops e managers relevantes:
 
----
+- `state/movementTick.js`: inicia o loop de movimento
+- `state/spawnManager.js`: inicia o spawn de inimigos
+- `state/resourceRegen/resourceRegenLoop.js`: loop de regeneracao de recursos
+- `state/persistenceManager.js`: flush de runtime e stats
 
-### `service/inventoryService.js` (✨ NOVO)
+Pecas muito importantes:
 
-**Papel:** utilitário genérico para inserir item no inventário (usado por coleta, venda, drops, etc).
-**Contrato:**
-
-```javascript
-findOrCreateSlotForItem(userId, itemDefId, stackMax, playerContainerIds, tx)
-  → { ok: true, slot, type: "STACK" | "EMPTY" }
-  → { ok: false, error: "PLAYER_INVENTORY_FULL" }
-```
-
-**Faz:**
-
-* 1) procura stack incompleto (mesmo item_def, qty > 0 && qty < stackMax)
-* 2) se não achar, procura slot vazio (`item_instance_id = NULL`)
-* 3) retorna tipo de slot encontrado e o slot mesmo
-  **Padrão de uso:** caller decide se soma qty (STACK) ou cria nova instância (EMPTY).
-  **Não faz:** fazer UPDATE, deletar itens, lógica de venda/descarte.
+- `service/worldService.js`: monta o bootstrap autoritativo
+- `socket/index.js`: registro dos sockets
+- `state/runtimeStore.js`: runtime quente dos jogadores
+- `state/presenceIndex.js`: interest management por chunks
+- `state/movement/tickOnce.js`: coracao do tick de jogo
 
 ---
 
-## SOCKET (Servidor)
+## Dominio do Mundo
 
-### `server/socket/index.js`
+### Local e Instancia
 
-**Papel:** ponto central do Socket.IO.
-**Faz:**
+O mundo separa:
 
-* instala auth middleware
-* instala persistence hooks
-* aplica sessão única por userId
-* marca CONNECTED
-* registra handlers (world/move/interact/etc)
-* disconnect com grace period
-  **Não faz:** gameplay específico dentro dele (wiring).
+- `ga_local`: definicao geografica/logica do lugar
+- `ga_instance`: instancia concreta daquele local
+- `ga_local_geometry`: dados geometricos do mapa
+- `ga_local_visual`: configuracao visual do local
 
----
+Isso permite:
 
-### `server/socket/sessionIndex.js`
+- varios mapas ou variantes de um mesmo local
+- regras diferentes por instancia
+- configuracoes futuras por shard, fase, evento ou ambiente
 
-**Papel:** índice em memória `userId -> socket` (primitivas O(1)).
-**Não faz:** política ativa sozinho (quem aplica é o wiring).
+### Relogio do Mundo
 
----
+O tempo do jogo e controlado por:
 
-### Wiring
+- `ga_world_clock`
+- `ga_world_month_def`
+- `service/worldClockService.js`
 
-#### `server/socket/wiring/auth.js`
-
-**Papel:** autenticar socket via JWT e preencher `socket.data.userId`.
-
-#### `server/socket/wiring/session.js`
-
-**Papel:** impor **sessão única**.
-
-* derruba socket antigo
-* marca `_skipDisconnectPending` para evitar pending falso
-* limpa sessão com proteção contra race no disconnect
-
-#### `server/socket/wiring/persistenceHooks.js`
-
-**Papel:** traduz eventos internos de persistência (ex: despawn OFFLINE) em broadcast no socket.
-
-#### `server/socket/wiring/lifecycle.js`
-
-**Papel:** transições CONNECTED ↔ DISCONNECTED_PENDING ↔ OFFLINE, com flush imediato nas viradas.
+O servidor calcula o tempo autoritativo.
+O cliente usa isso para render visual e paines de tempo.
 
 ---
 
-## World via Socket
+## Sistema de Actors
 
-### `server/socket/handlers/worldHandler.js` (visão macro)
+O sistema de actors foi redesenhado para separar responsabilidades.
 
-**Eventos:** `world:join`, `world:resync`, emite `world:baseline`.
-**Regras:**
+Modelo atual:
 
-* cliente não escolhe chunk/visibilidade
-* baseline nunca inclui OFFLINE
-* hot path para terceiros não consulta DB
+- `ga_actor_def`: definicao do tipo de actor
+- `ga_actor_spawn`: colocacao fixa no mapa
+- `ga_actor_runtime`: estado runtime da entidade
 
-**Refatoração/estrutura atual detalhada:**
+Conceito:
 
-* `handlers/world/baseline.js`: constrói baseline `{ you, others, chunk }`
-* `handlers/world/join.js`: fluxo autoritativo de join
-* `handlers/world/resync.js`: reancoragem/recuperação
-* `handlers/world/rooms.js`: aplica rooms autoritativas (instância + chunks)
+- `def` responde "o que isso e"
+- `spawn` responde "onde isso nasce de forma fixa"
+- `runtime` responde "qual o estado vivo agora"
 
----
+Exemplos:
 
-### `server/socket/handlers/interactHandler.js` (✨ NOVO)
+- uma cadeira de cenario pode ser `OBJECT`
+- uma arvore pode ser `RESOURCE_NODE`
+- um bau pode ser `CHEST`
+- um loot no chao pode ser `LOOT`
+- um NPC pode ser `NPC`
 
-**Papel:** gerenciar início/fim de interact (SPACE hold).
-**Contrato:**
+Observacoes importantes:
 
-* `interact:start { target: { kind: "ACTOR", id } }` → carrega `collectCooldownMs` de `ga_user_stats`, seta `rt.interact` ativo
-* `interact:stop {}` → limpa `rt.interact`
-  **Faz:** validação mínima, carrega cooldown dinâmico, delega coleta ao tick
-  **Não faz:** lógica de coleta, movimento.
+- `actor_kind` hoje e string, porque o projeto ainda esta em prototipo
+- `code` identifica o actor de forma estavel
+- `default_state_json` deve guardar estado base da definicao
+- estado mutavel runtime deve ficar no `state_json` do runtime
 
----
+Documentos de apoio:
 
-## Movimento autoritativo + replicação
-
-### `server/socket/handlers/moveHandler.js` (WASD em hot path, visão macro)
-
-**Papel:** processar `move:intent` (WASD) de forma autoritativa.
-**Faz:**
-
-* validações, rate limit, dt clamp
-* speed strict (sem fallback silencioso)
-* atualiza runtime em memória
-* `rev++`, marca dirty
-* chunk transition + rooms + spawn/despawn
-* `entity:delta` para outros e `move:state` para self
-  **Risco apontado:** import direto de estruturas internas do presence (preferir API pública).
-
-**Estrutura modular detalhada (fase atual):**
-
-* `handlers/move/applyWASD.js`: aplica intent no runtime (sem emit)
-* `handlers/move/broadcast.js`: rev/dirty + chunk transition + delta + move:state
+- [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
+- [estudo-arquitetural-actors-spawn.md](/D:/JS-Projects/Youtube/MD/implementacoes/estudo-arquitetural-actors-spawn.md)
 
 ---
 
-### Click-to-move + Hold-to-Collect (✨ ATUALIZADO)
+## Containers e Loot
 
-#### `server/socket/handlers/clickMoveHandler.js`
+O sistema de container foi separado do actor.
 
-**Papel:** receber `move:click` e atualizar apenas target/mode no runtime.
-**Movimento real:** acontece no tick autoritativo (loop).
+Pecas principais:
 
-#### `server/state/movement/tickOnce.js` (✨ ATUALIZADO)
+- `ga_container_def`: definicao do container
+- `ga_container`: instancia concreta do container
+- `ga_container_owner`: dono logico do container
+- `ga_container_slot`: slots e conteudo
 
-**Papel:** coração do click-to-move autoritativo + **hold-to-collect** (novo).
+No contexto de actors:
 
-**Faz:**
+- um actor pode apontar para um container
+- um bau fixo pode nascer com container proprio
+- um recurso pode usar container para armazenar o que sera coletado
+- loot de chao pode ter representacao actor + dados de item em runtime
 
-* dt server-side
-* bounds obrigatórios
-* speed strict
-* move/stop server-side
-* `rev++`, dirty
-* delta para interest, move:state para self
-* chunk transition + rooms + spawn/despawn
+Documento principal:
 
-**✨ NOVO - Hold-to-Collect Loop:**
-
-* enquanto `rt.interact?.active && rt.interact?.kind === "ACTOR"` e dist <= stopR:
-  * se `t >= lastCollectAtMs + cooldownMs`:
-    * `rt.lastCollectAtMs = t`
-    * chama `attemptCollectFromActor()` (fire-and-forget)
-    * emite `actor:collected` se ok
-  * **mantém moveTarget ativo** (não para até soltar SPACE)
-  * continua loop no próximo tick
-    **Não faz:** lógica de validação, decisão de interesse.
-
-#### `server/state/movement/loop.js`
-
-**Papel:** scheduler do tick (intervalo fixo), chama `tickOnce`.
-
-#### `server/state/movement/math.js`
-
-**Papel:** funções puras (clamp, normalize2D, clampPosToBounds).
-
-#### `server/state/movement/entity.js`
-
-**Papel:** `bumpRev(rt)` + serialização replicável (`toEntity`, e deltas quando aplicável).
-
-#### `server/state/movement/chunkTransition.js`
-
-**Papel:** spawn/despawn incremental ao mudar chunk:
-
-* A) outros veem você (broadcast rooms)
-* B) você vê outros (spawns diretos, despawn conservador com `visibleNow`)
+- [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
 
 ---
 
-## Runtime autoritativo (Servidor)
+## Itens, Equipamentos e Inventario
 
-### `server/state/runtimeStore.js` (visão macro)
+Modelo base de item:
 
-**Papel:** cache quente do estado vivo do jogador.
-**Conteúdo:** pos/yaw/hp/action/rev/chunk/speed/connectionState/dirty/antiflood.
-**Faz:** `ensureRuntimeLoaded`, marca dirty, connection state, computeChunk.
-**Não faz:** flush no DB, nem socket.
+- `ga_item_def`: identidade e categoria do item
+- `ga_item_def_component`: capacidades do item
+- `ga_item_instance`: instancia concreta do item
 
-**Refatoração/estrutura detalhada atual:**
+Camadas relacionadas:
 
-* `server/state/runtime/store.js`: Map e API básica (get/set/delete/iter)
-* `server/state/runtime/loader.js`: `ensureRuntimeLoaded` (carrega runtime+stats+bounds)
-* `server/state/runtime/dirty.js`: `markRuntimeDirty`, `markStatsDirty`, `setConnectionState`
-* `server/state/runtime/inputPolicy.js`: regra WASD ativo por timeout, prioridade WASD > CLICK
+- `ga_equipment_slot_def`: slots de equipamento
+- `ga_equipped_item`: item equipado
+- `state/inventory/*`: runtime e operacoes de inventario
+- `state/equipment/*`: runtime e payload de equipamento
 
-### `server/state/actorsRuntimeStore.js` (✨ ATUALIZADO)
+Uso pratico:
 
-**Papel:** cache quente de actors em memória.
-**Conteúdo:** `{ id, instanceId, pos, status, containers[] }`
-**Faz:**
+- um item nasce como definicao
+- uma instancia concreta vai para inventario, container ou mundo
+- componentes definem comportamento como consumo, arma, material etc.
 
-* `addActor(actor)` com containers
-* `getActor(actorId)` O(1)
-* `getActorContainers(actorId)` helper
-  **Não faz:** persistência, lógica de coleta.
+Documento principal:
+
+- [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
 
 ---
 
-## Presence + Interest (Chunks)
+## Inimigos, Spawn e Respawn
 
-### `server/state/presenceIndex.js` (facade pública)
+O sistema de inimigos tem tres blocos:
 
-**Papel:** contrato único do presence/interest.
-**Faz:** reexporta mutação/leitura/cálculo, expõe `CHUNK_SIZE/RADIUS`.
-**Regra:** identidade é `userId`, cliente não decide interest.
+- definicao: `ga_enemy_def` e `ga_enemy_def_stats`
+- pontos de spawn: `ga_spawn_point` e `ga_spawn_entry`
+- runtime: `ga_enemy_instance` e `ga_enemy_instance_stats`
 
-**Internos:**
+Arquivos chave:
 
-* `presence/store.js`: `presenceByInstance`, `usersByChunk`, `userIndex`
-* `presence/mutate.js`: add/move/remove, calcula interestRooms, retorna diff entered/left
-* `presence/read.js`: leituras seguras (cópias), `getUsersInChunks`, `getUsersInRoom(s)`
-* `presence/math.js`: `computeChunkFromPos`
+- `service/enemyLoader.js`
+- `service/combatSystem.js`
+- `service/enemyRespawnService.js`
+- `state/enemies/*`
+- `state/spawn/spawnConfig.js`
+- `state/spawn/spawnLoop.js`
+- `state/spawn/spawnTick.js`
 
----
+Evolucao atual:
 
-## Persistência (Hot + Batch)
+- o respawn passou a considerar `dead_at` e `respawn_at`
+- existe configuracao macro por instancia em `ga_instance_spawn_config`
+- o loop reaproveita inimigos mortos quando possivel
+- a ideia e permitir mapas com ritmos diferentes de regeneracao
 
-### `server/state/persistenceManager.js`
+Documento principal:
 
-**Papel:** facade pública da persistência.
-
-* start/stop loop
-* tickDisconnects
-* flushDirtyBatch
-* writers
-* eventos internos + checkpoint imediato (disconnect)
-
-### `server/state/persistence/loop.js`
-
-**Papel:** scheduler da persistência, evita overlap, chama:
-
-* `tickDisconnects`
-* `flushDirtyBatch`
-
-### `server/state/persistence/disconnects.js`
-
-**Papel:** finalizar `DISCONNECTED_PENDING` → `OFFLINE` definitivo:
-
-* bumpRev
-* flush imediato
-* remove do presence
-* emite evento interno `entity:despawn`
-* eviction do runtime
-
-### `server/state/persistence/writers.js` (✨ ATUALIZADO)
-
-**Papel:** tocar o banco.
-
-* `flushUserRuntime`: UPDATE ga_user_runtime, limpa dirtyRuntime
-* `flushUserStats`: UPDATE ga_user_stats (agora inclui dirtyRuntime com `collect_cooldown_ms`)
-* **✨ NOVO:** atualizar `ga_container_slot` (qty, item_instance_id) quando coleta/venda
-* **✨ NOVO:** UPDATE `ga_actor` status (DISABLED quando vazio)
+- [plano-tecnico-respawn-inimigos-por-instancia.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-respawn-inimigos-por-instancia.md)
 
 ---
 
-## Bootstrap do backend
+## Coleta e Regeneracao de Recursos
 
-### `server/server.js`
+O projeto ja possui uma base funcional de coleta de actors e esta evoluindo a regeneracao.
 
-**Papel:** entrypoint.
+Pecas principais:
 
-* inicia Express + rotas
-* cria HTTP server + Socket.IO
-* registra socket pipeline
-* inicia persistence loop (e movimento, se habilitado)
-* escuta porta
+- `service/actorCollectService.js`
+- `service/actorResourceRegenService.js`
+- `state/actorsRuntimeStore.js`
+- `state/resourceRegen/resourceRegenLoop.js`
+- `models/ga_actor_resource_rule_def.js`
+- `models/ga_actor_resource_state.js`
 
----
+Objetivo dessa linha:
 
-## Glossário de eventos (contratos mínimos)
+- permitir recurso coletavel persistente
+- esvaziar o recurso no momento da coleta
+- repor conteudo com regra automatizada
+- variar a regra por actor, spawn ou mapa no futuro
 
-**HTTP**
+Documento principal:
 
-* `POST /auth/register`
-* `POST /auth/login`
-* `GET /world/bootstrap` → snapshot autoritativo (runtime + template + **actors com containers**)
-
-**Socket**
-
-* `world:join` → responde com `world:baseline`
-* `world:resync` → responde com `world:baseline`
-* `entity:spawn | entity:delta | entity:despawn` → replicação incremental
-* `move:intent` (WASD) → servidor aplica e replica
-* `move:click` (click-to-move) → seta target, tick move
-* `move:state` → confirmação para o próprio jogador
-* **✨ NOVO:** `interact:start { target }` → inicia hold-to-collect
-* **✨ NOVO:** `interact:stop {}` → para hold-to-collect
-* **✨ NOVO:** `actor:collected { actorId, actorDisabled, inventory }` → cliente atualiza UI
-* `session:replaced` → sessão antiga derrubada
+- [plano-regeneracao-recursos.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-regeneracao-recursos.md)
 
 ---
 
-## Invariantes do projeto (as "leis da física" 🧱)
+## Fome e Auto Food
 
-* Cliente envia **intents**, servidor produz **estado confirmado**.
-* `rev` monotônico é a régua de consistência no cliente.
-* Baseline "cura" divergência (replace completo).
-* Presence/interest é calculado no servidor (chunks/rooms).
-* Persistência é desacoplada: gameplay marca dirty, loop faz flush.
+O sistema de fome ja tem desenho fechado e parte relevante implementada.
+
+Ideias centrais:
+
+- a fome e drenada por tempo real
+- o servidor calcula a perda
+- os valores ficam em `ga_user_stats`
+- auto food depende de configuracao de macro do jogador
+
+Arquivos relacionados:
+
+- `service/autoFoodService.js`
+- `models/ga_user_macro_config.js`
+- `models/ga_user_stats.js`
+- `state/runtime/*`
+- `state/movement/tickOnce.js`
+
+Documento principal:
+
+- [implementacao-sistema-de-fome.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-sistema-de-fome.md)
+
+---
+
+## Research
+
+Research e um modulo de desbloqueio de conhecimento do jogador.
+
+Ideia principal:
+
+- ter item nao implica saber usar
+- progresso e persistido por jogador
+- progresso so avanca online
+- cada nivel desbloqueia capacidade concreta
+
+Pecas principais:
+
+- `ga_research_def`
+- `ga_research_level_def`
+- `ga_user_research`
+- `service/researchService.js`
+- `socket/handlers/researchHandler.js`
+- `components/models/research/ResearchModal.jsx`
+
+Documento principal:
+
+- [modulo-research.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-research.md)
 
 ---
 
-## ✨ Invariantes de Coleta (novas)
+## Ciclo Visual de Dia e Noite
 
-* **Slot invariante:** `(item_instance_id != NULL) ⟺ (qty > 0)`
-  * Slot vazio: ambos NULL/0
-  * Slot com item: ambos NOT NULL e qty > 0
-  * **Nunca:** `item_instance_id != NULL && qty = 0`
+Esse sistema e visual e vive do lado do cliente.
 
-* **Container fixo:** número de slots é definido por `container_def.slot_count`, **nunca muda**
-  * Venda/descarte → UPDATE (limpa campos), nunca DELETE slot
+Regra:
 
-* **Stacking dinâmico:** ao coletar, procura **MESMO item_def (não instância)** com qty < stackMax
-  * Se acha stack incompleto → soma qty
-  * Se não acha → cria **nova instância** em slot vazio (por causa UNIQUE em item_instance_id)
+- o servidor envia o relogio autoritativo
+- o cliente converte isso em luz, atmosfera e transicao visual
+- nenhuma regra de gameplay sai do servidor
 
-* **Cooldown server-side:** `collectCooldownMs` carregado de `ga_user_stats`, validado em tickOnce
-  * Cliente pode sugerir target, servidor decide quando coleta
-  * Hold-to-Collect mantém moveTarget enquanto SPACE pressionado e cooldown passou
+Arquivos importantes:
 
-* **Actor ciclo-vida:** status ACTIVE → DISABLED (quando vazio), nunca reslota exceto respawn
-  * Client remove ator da cena quando `status === "DISABLED"` (sinalizado em `actor:collected`)
+- `world/hooks/useWorldClock.js`
+- `world/scene/light/dayNightCycle.js`
+- `world/scene/light/light.js`
+- `world/ui/WorldClockPanel.jsx`
+
+Documento principal:
+
+- [implementacao-ciclo-visual-dia-noite.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-ciclo-visual-dia-noite.md)
 
 ---
+
+## Movimento, Presenca e Replicacao
+
+O jogo multiplayer depende fortemente desta espinha dorsal:
+
+- `state/runtimeStore.js`: runtime dos jogadores
+- `state/presenceIndex.js`: chunks e interesse
+- `state/movement/*`: simulacao autoritativa de movimento
+- `socket/handlers/world/*`: join, baseline, resync e rooms
+- `world/state/entitiesStore.js`: store cliente com `rev`
+
+Regras chave:
+
+- cliente envia input
+- servidor processa
+- servidor replica somente o necessario
+- `baseline` corrige divergencia
+
+Esse e o nucleo que sustenta:
+
+- players
+- enemies
+- actors
+- combate
+- interacao
+
+---
+
+## Persistencia
+
+O projeto usa a combinacao:
+
+- runtime quente em memoria
+- dirty flags
+- flush por loop
+- persistencia final em shutdown quando necessario
+
+Arquivos chave:
+
+- `state/persistenceManager.js`
+- `state/persistence/*`
+- `socket/wiring/persistenceHooks.js`
+
+Essa escolha reduz escrita constante e mantem o jogo responsivo.
+
+---
+
+## Eventos e Contratos Mais Importantes
+
+### HTTP
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /world/bootstrap`
+
+### Socket
+
+- `world:join`
+- `world:baseline`
+- `world:resync`
+- `entity:spawn`
+- `entity:delta`
+- `entity:despawn`
+- `move:intent`
+- `move:click`
+- `interact:start`
+- `interact:stop`
+- `research:request_full`
+- `research:start`
+- `combat:*`
+- `inventory:*`
+
+Observacao:
+
+- nomes e payloads podem evoluir, mas a regra central continua sendo "cliente envia intencao, servidor responde com estado confirmado"
+
+---
+
+## Invariantes Arquiteturais
+
+- backend e a unica fonte de verdade do mundo
+- frontend nao toma decisoes autoritativas
+- toda entidade de mundo importante precisa de modelo claro entre definicao, colocacao e runtime
+- regras de longa duracao precisam sair de hardcode e ir para banco sempre que fizer sentido
+- qualquer sistema novo deve nascer preparado para ser observado, persistido e expandido por instancia
+
+---
+
+## Quando Atualizar Este Documento
+
+Atualizar `document.md` quando acontecer pelo menos uma destas mudancas:
+
+- nova subpasta relevante em `MD`
+- mudanca estrutural grande no frontend
+- mudanca estrutural grande no backend
+- criacao de novo modulo persistente de gameplay
+- troca de modelo arquitetural de actors, spawn, inventario ou research
+
+Quando a mudanca for local de um sistema especifico, atualizar tambem o documento especialista correspondente.
+
+---
+
+## Estado Atual da Documentacao
+
+Hoje a pasta `MD` cobre principalmente:
+
+- cadastro de actors, itens e CIDs
+- arquitetura nova de actors
+- modulo de research
+- sistema de fome
+- ciclo visual de dia e noite
+- regeneracao de recursos
+- respawn de inimigos por instancia
+
+Lacunas que ainda podem virar documentos proprios no futuro:
+
+- combate completo
+- inventario/equipment em profundidade
+- fluxo de bootstrap e sincronizacao multiplayer
+- arquitetura de persistencia e dirty flags
+- convencoes de migrations e seeds

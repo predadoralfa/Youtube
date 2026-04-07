@@ -21,6 +21,7 @@
 const db = require("../models");
 const { getRuntime, markStatsDirty } = require("../state/runtimeStore");
 const { loadPlayerCombatStats: loadStrictPlayerCombatStats } = require("../state/runtime/combatLoader");
+const { markEnemyDead } = require("./enemyRespawnService");
 const {
   COMBAT_BASE_COOLDOWN_MS,
   MELEE_ATTACK_STAMINA_COST,
@@ -370,10 +371,7 @@ async function executeAttack(params) {
 
         // Marcar inimigo como morto se HP = 0
         if (newHP <= 0) {
-          await db.GaEnemyInstance.update(
-            { status: "DEAD", dead_at: new Date() },
-            { where: { id: targetId } }
-          );
+          await markEnemyDead(targetId, nowMs);
           targetDied = true;
         }
 

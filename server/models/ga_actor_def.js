@@ -65,7 +65,7 @@ module.exports = (sequelize, DataTypes) => {
       as: "spawns",
     });
 
-    GaActorDef.hasMany(models.GaActor, {
+    GaActorDef.hasMany(models.GaActorRuntime, {
       foreignKey: "actor_def_id",
       as: "runtimeActors",
     });

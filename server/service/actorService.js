@@ -149,7 +149,7 @@ async function createRuntimeActor(params) {
       throw new Error(`createRuntimeActor: ga_instance not found id=${instanceId}`);
     }
 
-    const actor = await db.GaActor.create(
+    const actor = await db.GaActorRuntime.create(
       {
         actor_def_id: actorDef.id,
         actor_spawn_id: Number.isInteger(actorSpawnId) && actorSpawnId > 0 ? actorSpawnId : null,

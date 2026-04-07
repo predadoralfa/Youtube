@@ -167,12 +167,12 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
 
   return await db.sequelize.transaction(async (tx) => {
     async function destroyActorAndLootContainer(actorIdToDestroy, lootContainerIdToDestroy, lootContainerRow) {
-      await db.GaActor.update(
+      await db.GaActorRuntime.update(
         { status: "DISABLED" },
         { where: { id: actorIdToDestroy }, transaction: tx }
       );
 
-      await db.GaActor.destroy({
+      await db.GaActorRuntime.destroy({
         where: { id: actorIdToDestroy },
         transaction: tx,
       });
@@ -193,7 +193,7 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     // ================================================================
     // 1) VALIDAR ACTOR E CONTAINER LOOT
     // ================================================================
-    const actor = await db.GaActor.findByPk(actorId, {
+    const actor = await db.GaActorRuntime.findByPk(actorId, {
       include: [
         {
           association: "actorDef",

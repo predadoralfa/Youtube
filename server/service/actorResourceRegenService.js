@@ -440,7 +440,7 @@ async function processActorResourceRegenTick(io, nowMsValue) {
   let processed = 0;
 
   for (const rule of activeRules) {
-    const actorRows = await db.GaActor.findAll({
+    const actorRows = await db.GaActorRuntime.findAll({
       where: {
         actor_def_id: Number(rule.actor_def_id),
         status: "ACTIVE",
@@ -462,7 +462,7 @@ async function processActorResourceRegenTick(io, nowMsValue) {
       processed += 1;
 
       const result = await db.sequelize.transaction(async (tx) => {
-        const lockedActor = await db.GaActor.findByPk(actor.id, {
+        const lockedActor = await db.GaActorRuntime.findByPk(actor.id, {
           include: [
             {
               association: "actorDef",

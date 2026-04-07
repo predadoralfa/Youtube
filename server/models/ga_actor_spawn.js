@@ -74,7 +74,7 @@ module.exports = (sequelize, DataTypes) => {
       onDelete: "RESTRICT",
     });
 
-    GaActorSpawn.hasMany(models.GaActor, {
+    GaActorSpawn.hasMany(models.GaActorRuntime, {
       foreignKey: "actor_spawn_id",
       as: "runtimeActors",
     });

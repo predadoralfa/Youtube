@@ -12,8 +12,8 @@ const { startSpawnLoop, stopSpawnLoop } = require("./spawn/spawnLoop");
  *   stopSpawnManager()
  */
 
-function startSpawnManager() {
-  startSpawnLoop();
+function startSpawnManager(io = null) {
+  startSpawnLoop(io);
 }
 
 function stopSpawnManager() {

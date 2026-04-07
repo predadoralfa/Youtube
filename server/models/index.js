@@ -37,6 +37,7 @@ const defineGaMaterial = require("./ga_material");
 const defineGaInstance = require("./ga_instance");
 const defineGaWorldClock = require("./ga_world_clock");
 const defineGaWorldMonthDef = require("./ga_world_month_def");
+const defineGaInstanceSpawnConfig = require("./ga_instance_spawn_config");
 
 // RENDER (NOVO)
 const defineGaRenderMaterial = require("./ga_render_material");
@@ -60,7 +61,7 @@ const defineGaContainerOwner = require("./ga_container_owner");
 // ACTORS
 const defineGaActorDef = require("./ga_actor_def");
 const defineGaActorSpawn = require("./ga_actor_spawn");
-const defineGaActor = require("./ga_actor");
+const defineGaActorRuntime = require("./ga_actor_runtime");
 
 // =====================================
 // 2. Definições de modelos
@@ -99,6 +100,7 @@ const GaMaterial = defineGaMaterial(sequelize, DataTypes);
 const GaInstance = defineGaInstance(sequelize, DataTypes);
 const GaWorldClock = defineGaWorldClock(sequelize, DataTypes);
 const GaWorldMonthDef = defineGaWorldMonthDef(sequelize, DataTypes);
+const GaInstanceSpawnConfig = defineGaInstanceSpawnConfig(sequelize, DataTypes);
 
 // RENDER MODELS (NOVO)
 const GaRenderMaterial = defineGaRenderMaterial(sequelize, DataTypes);
@@ -122,7 +124,7 @@ const GaContainerOwner = defineGaContainerOwner(sequelize, DataTypes);
 // ACTORS
 const GaActorDef = defineGaActorDef(sequelize, DataTypes);
 const GaActorSpawn = defineGaActorSpawn(sequelize, DataTypes);
-const GaActor = defineGaActor(sequelize, DataTypes);
+const GaActorRuntime = defineGaActorRuntime(sequelize, DataTypes);
 
 
 // =====================================
@@ -158,7 +160,7 @@ const models = {
   // ACTOR
   GaActorDef,
   GaActorSpawn,
-  GaActor,
+  GaActorRuntime,
 
   // WORLD
   GaLocal,
@@ -168,6 +170,7 @@ const models = {
 
   // INSTANCE
   GaInstance,
+  GaInstanceSpawnConfig,
   GaWorldClock,
   GaWorldMonthDef,
 

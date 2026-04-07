@@ -42,6 +42,7 @@ const { getEnemiesForInstance, getEnemy } = require("../enemies/enemiesRuntimeSt
 const { tickEnemyAI, getLastTickAttacks } = require("../enemies/enemyAI");
 const { loadPlayerCombatStats } = require("../runtime/combatLoader");
 const { executeAttack, loadEnemyCombatStats } = require("../../service/combatSystem");
+const { markEnemyDead } = require("../../service/enemyRespawnService");
 const { processAutoFoodTick, buildAutoFoodPayload } = require("../../service/autoFoodService");
 const { processResearchTick, buildResearchPayload } = require("../../service/researchService");
 
@@ -141,10 +142,7 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
       await enemyStatsRow.update({ hp_current: combatResult.targetHPAfter, hp_max: combatResult.targetHPMax });
     }
     if (combatResult.targetDied) {
-      await db.GaEnemyInstance.update(
-        { status: "DEAD" },
-        { where: { id: targetEnemy.id } }
-      );
+      await markEnemyDead(targetEnemy.id, nowMs);
     }
   } catch (err) {
     console.error(`[COMBAT] Failed to persist enemy hp for enemy=${targetEnemy.id}:`, err);

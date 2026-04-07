@@ -51,7 +51,7 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   GaActorResourceState.associate = (models) => {
-    GaActorResourceState.belongsTo(models.GaActor, {
+    GaActorResourceState.belongsTo(models.GaActorRuntime, {
       foreignKey: "actor_id",
       as: "actor",
       onUpdate: "CASCADE",

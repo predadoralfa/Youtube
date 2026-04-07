@@ -1,8 +1,8 @@
 "use strict";
 
 module.exports = (sequelize, DataTypes) => {
-  const GaActor = sequelize.define(
-    "GaActor",
+  const GaActorRuntime = sequelize.define(
+    "GaActorRuntime",
     {
       id: {
         type: DataTypes.BIGINT,
@@ -58,7 +58,7 @@ module.exports = (sequelize, DataTypes) => {
       },
     },
     {
-      tableName: "ga_actor",
+      tableName: "ga_actor_runtime",
       timestamps: true,
       underscored: true,
       indexes: [
@@ -70,22 +70,22 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
-  GaActor.associate = (models) => {
-    GaActor.belongsTo(models.GaActorDef, {
+  GaActorRuntime.associate = (models) => {
+    GaActorRuntime.belongsTo(models.GaActorDef, {
       foreignKey: "actor_def_id",
       as: "actorDef",
       onUpdate: "CASCADE",
       onDelete: "RESTRICT",
     });
 
-    GaActor.belongsTo(models.GaActorSpawn, {
+    GaActorRuntime.belongsTo(models.GaActorSpawn, {
       foreignKey: "actor_spawn_id",
       as: "spawn",
       onUpdate: "CASCADE",
       onDelete: "SET NULL",
     });
 
-    GaActor.belongsTo(models.GaInstance, {
+    GaActorRuntime.belongsTo(models.GaInstance, {
       foreignKey: "instance_id",
       as: "instance",
       onUpdate: "CASCADE",
@@ -93,5 +93,5 @@ module.exports = (sequelize, DataTypes) => {
     });
   };
 
-  return GaActor;
+  return GaActorRuntime;
 };
