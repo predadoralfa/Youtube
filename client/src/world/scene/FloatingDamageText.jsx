@@ -63,11 +63,19 @@ export function FloatingDamageText({ damages }) {
               style={{
                 fontSize: text.isCrit ? "28px" : "20px",
                 fontWeight: "bold",
-                color: text.isCrit ? "#ffff00" : "#ff6b35",
+                color: text.isCrit
+                  ? "#ffff00"
+                  : text.kind === "INCOMING_ENEMY"
+                    ? "#38bdf8"
+                    : "#ff6b35",
                 textShadow: `
                   0 0 2px rgba(0,0,0,0.8),
                   0 0 4px rgba(0,0,0,0.6),
-                  0 0 8px rgba(255,107,53,0.4)
+                  0 0 8px ${
+                    text.kind === "INCOMING_ENEMY"
+                      ? "rgba(56,189,248,0.4)"
+                      : "rgba(255,107,53,0.4)"
+                  }
                 `,
                 whiteSpace: "nowrap",
                 transform: text.isCrit ? "scale(1.3)" : "scale(1)",

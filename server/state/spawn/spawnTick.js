@@ -119,7 +119,7 @@ async function findRespawnableDeadEnemies(spawnInstanceId, nowMs) {
       {
         association: "spawnDefComponent",
         required: true,
-        attributes: ["id", "enemy_def_id", "spawn_def_id", "alive_limit"],
+        attributes: ["id", "enemy_def_id", "spawn_def_id", "quantity", "sort_order"],
       },
       {
         association: "enemyDef",

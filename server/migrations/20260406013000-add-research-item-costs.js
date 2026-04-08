@@ -5,14 +5,24 @@ function levelCostQty(level) {
 }
 
 function buildRequirements(level, itemCode) {
+  if (itemCode === "FOOD-APPLE" && level === 2) {
+    return {
+      requiresLevel: 1,
+      itemCosts: [],
+    };
+  }
+
   return {
     requiresLevel: level > 1 ? level - 1 : null,
-    itemCosts: [
-      {
-        itemCode,
-        qty: levelCostQty(level),
-      },
-    ],
+    itemCosts:
+      level > 1
+        ? [
+            {
+              itemCode,
+              qty: levelCostQty(level),
+            },
+          ]
+        : [],
   };
 }
 

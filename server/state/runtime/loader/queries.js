@@ -41,10 +41,10 @@ async function loadBoundsForInstance(instanceId) {
   }
 
   return {
-    minX: -sizeX / 2,
-    maxX: sizeX / 2,
-    minZ: -sizeZ / 2,
-    maxZ: sizeZ / 2,
+    minX: 0,
+    maxX: sizeX,
+    minZ: 0,
+    maxZ: sizeZ,
     sizeX,
     sizeZ,
   };

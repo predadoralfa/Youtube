@@ -31,10 +31,7 @@ const COLOR_SELF = "#ff2d55";
 const COLOR_OTHER = "#2d7dff";
 
 const ENEMY_COLORS = {
-  WILD_RABBIT: 0xff6b35,
-  GOBLIN: 0x4ade80,
-  WOLF: 0xef4444,
-  DEFAULT: 0x94a3b8,
+  DEFAULT: 0xff6b35,
 };
 
 function toNum(value, fallback = 0) {
@@ -49,13 +46,6 @@ function toDisplayInt(value, fallback = 0) {
 }
 
 function getEnemyColor(displayName) {
-  if (!displayName) return ENEMY_COLORS.DEFAULT;
-
-  const name = String(displayName).toUpperCase();
-  if (name.includes("RABBIT")) return ENEMY_COLORS.WILD_RABBIT;
-  if (name.includes("GOBLIN")) return ENEMY_COLORS.GOBLIN;
-  if (name.includes("WOLF")) return ENEMY_COLORS.WOLF;
-
   return ENEMY_COLORS.DEFAULT;
 }
 
@@ -300,7 +290,7 @@ export function GameCanvas({
     const socket = getSocket();
     if (!socket) return;
 
-    const applyDamageEvent = (data) => {
+    const applyDamageEvent = (data, fallbackKind = "DEFAULT") => {
       if (!data) return;
 
       const { eventId, targetId, damage, targetHPAfter, targetHPMax } = data;
@@ -363,12 +353,20 @@ export function GameCanvas({
         `hp=${Number.isFinite(Number(targetHPAfter)) ? Number(targetHPAfter) : "n/a"}/${Number.isFinite(Number(targetHPMax)) ? Number(targetHPMax) : "n/a"}`
       );
 
+      const resolvedDamageKind =
+        String(data?.targetKind ?? "").toUpperCase() === "PLAYER"
+          ? "INCOMING_ENEMY"
+          : String(data?.targetKind ?? "").toUpperCase() === "ENEMY"
+            ? "OUTGOING_PLAYER"
+            : fallbackKind;
+
       setFloatingDamages((prev) => [
         ...prev,
         {
           id: String(eventId ?? `${String(targetId)}:${Date.now()}:${Math.random()}`),
           targetId: targetKey,
           damage: exactDamageText,
+          kind: resolvedDamageKind,
           screenX,
           screenY,
           startedAt: Date.now(),
@@ -399,7 +397,7 @@ export function GameCanvas({
     };
 
     const onDamageTaken = (data) => {
-      applyDamageEvent(data);
+      applyDamageEvent(data, "OUTGOING_PLAYER");
     };
 
     const onAttackResult = (data) => {
@@ -408,7 +406,7 @@ export function GameCanvas({
     };
 
     const onEnemyAttack = (data) => {
-      applyDamageEvent(data);
+      applyDamageEvent(data, "INCOMING_ENEMY");
     };
 
     const onCombatCancelled = () => {
@@ -868,6 +866,12 @@ export function GameCanvas({
             scene.add(mesh);
 
           }
+
+          const nextEnemyColor = getEnemyColor(enemy.displayName);
+          if (mesh.material?.color) {
+            mesh.material.color.set(nextEnemyColor);
+          }
+          mesh.userData.displayName = enemy.displayName ?? mesh.userData.displayName ?? null;
 
           const { x, z, yaw } = readPosYawFromEntity(enemy);
 

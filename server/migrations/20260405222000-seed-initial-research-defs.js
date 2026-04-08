@@ -49,18 +49,22 @@ module.exports = {
             {
               level: 1,
               title: "Edible Basics",
-              description: "Unlock eating apples.",
+              description: "Unlock eating apples and collecting them from trees.",
               grants: {
-                unlock: ["item.consume:FOOD-APPLE", "macro.auto_food:FOOD-APPLE"],
+                unlock: [
+                  "item.consume:FOOD-APPLE",
+                  "macro.auto_food:FOOD-APPLE",
+                  "actor.collect:APPLE_TREE",
+                ],
               },
               requirements: null,
             },
             {
               level: 2,
-              title: "Tree Harvesting",
-              description: "Unlock collecting apples from trees.",
-              grants: { unlock: ["actor.collect:APPLE_TREE"] },
-              requirements: { requiresLevel: 1 },
+              title: "Orchard Study",
+              description: "Prepare the next step of apple research after harvesting.",
+              grants: { unlock: [] },
+              requirements: { requiresLevel: 1, itemCosts: [] },
             },
             { level: 3, title: "Apple Crafting I", description: "Prepare the first future crafting techniques that use apples.", grants: { unlock: [] }, requirements: { requiresLevel: 2 } },
             { level: 4, title: "Apple Crafting II", description: "Deepen your understanding of processed apple recipes and advanced use.", grants: { unlock: [] }, requirements: { requiresLevel: 3 } },

@@ -1165,10 +1165,9 @@ export function GameShell() {
           setSnapshot((prev) => {
             if (!prev || !prev.runtime) return prev;
 
-            const preservedVitals = prev?.ui?.self?.vitals
-              ? normalizeVitals(prev.ui.self)
-              : null;
-            const nextVitals = preservedVitals ?? normalizeVitals(self);
+            const nextVitals = payload?.vitals
+              ? normalizeVitals({ vitals: payload.vitals })
+              : normalizeVitals(self);
 
             return {
               ...prev,

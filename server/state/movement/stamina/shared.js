@@ -17,7 +17,8 @@ const DEFAULT_STAMINA_REGEN_MULTIPLIER = 1.0;
 const DEFAULT_HP_REGEN_MULTIPLIER = 1.0;
 const DEFAULT_HUNGER_ITEM_RECOVERY = 0;
 const HUNGER_TICK_INTERVAL_MS = 60 * 1000;
-const HUNGER_WORLD_HOURS_TO_EMPTY = 24;
+// Uma barra cheia de fome dura 8 horas do mundo, para forçar 3 refeições por dia.
+const HUNGER_WORLD_HOURS_TO_EMPTY = 8;
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));

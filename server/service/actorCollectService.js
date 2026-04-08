@@ -7,6 +7,7 @@ const { buildInventoryFull } = require("../state/inventory/fullPayload");
 const { ensureEquipmentLoaded } = require("../state/equipment/loader");
 const { loadCarryWeightStats } = require("../state/inventory/weight");
 const { getRuntime } = require("../state/runtime/store");
+const { ensureStarterInventory } = require("./inventoryProvisioning");
 const { ensureResearchLoaded, hasCapability } = require("./researchService");
 
 function parseMaybeJsonObject(value) {
@@ -307,7 +308,7 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
 
     if (collectUnlockCode) {
       const rt = getRuntime(userId);
-      const research = await ensureResearchLoaded(userId, rt ?? { userId });
+      const research = await ensureResearchLoaded(userId, rt ?? { userId }, { forceReload: true });
       if (!hasCapability(rt ?? { research }, collectUnlockCode)) {
         return {
           ok: false,
@@ -343,15 +344,31 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     });
 
     if (!playerOwners.length) {
-      return { ok: false, error: "PLAYER_NO_CONTAINERS" };
+      await ensureStarterInventory(userId, tx);
+
+      const repairedOwners = await db.GaContainerOwner.findAll({
+        where: {
+          owner_kind: "PLAYER",
+          owner_id: userId,
+        },
+        transaction: tx,
+        lock: tx.LOCK.UPDATE,
+        order: [["slot_role", "ASC"]],
+      });
+
+      if (!repairedOwners.length) {
+        return { ok: false, error: "PLAYER_NO_CONTAINERS" };
+      }
+
+      playerOwners.push(...repairedOwners);
     }
 
-    const playerContainerIds = playerOwners.map((o) => Number(o.container_id));
+    let playerContainerIds = playerOwners.map((o) => Number(o.container_id));
 
     // ================================================================
     // 5) BUSCAR TODOS OS SLOTS DO PLAYER (em todos containers)
     // ================================================================
-    const playerSlots = await db.GaContainerSlot.findAll({
+    let playerSlots = await db.GaContainerSlot.findAll({
       where: { container_id: playerContainerIds },
       transaction: tx,
       lock: tx.LOCK.UPDATE,
@@ -360,6 +377,38 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
         ["slot_index", "ASC"],
       ],
     });
+
+    if (!playerSlots.length) {
+      await ensureStarterInventory(userId, tx);
+
+      const repairedOwners = await db.GaContainerOwner.findAll({
+        where: {
+          owner_kind: "PLAYER",
+          owner_id: userId,
+        },
+        transaction: tx,
+        lock: tx.LOCK.UPDATE,
+        order: [["slot_role", "ASC"]],
+      });
+
+      playerContainerIds = repairedOwners.map((o) => Number(o.container_id));
+      playerSlots = await db.GaContainerSlot.findAll({
+        where: { container_id: playerContainerIds },
+        transaction: tx,
+        lock: tx.LOCK.UPDATE,
+        order: [
+          ["container_id", "ASC"],
+          ["slot_index", "ASC"],
+        ],
+      });
+
+      if (!playerSlots.length) {
+        console.error("[COLLECT] Inventário ainda vazio após provisionamento", {
+          userId,
+        });
+        return { ok: false, error: "PLAYER_INVENTORY_FULL" };
+      }
+    }
 
     // ================================================================
     // 5b) CARREGAR INSTÂNCIAS DO PLAYER para comparar item_def

@@ -60,18 +60,6 @@ function EnemyEntity({ entity }) {
   const x = Number(entity?.pos?.x ?? 0);
   const z = Number(entity?.pos?.z ?? 0);
   const yaw = Number(entity?.yaw ?? 0);
-  const displayName = entity?.displayName ?? "Enemy";
-
-  // Cores por tipo de inimigo
-  const getColor = () => {
-    const name = String(displayName || "").toUpperCase();
-    
-    if (name.includes("RABBIT")) return "#ff6b35"; // Laranja
-    if (name.includes("GOBLIN")) return "#4ade80"; // Verde
-    if (name.includes("WOLF")) return "#ef4444";   // Vermelho
-    
-    return "#94a3b8"; // Cinza padrão
-  };
 
   return (
     <group
@@ -83,7 +71,7 @@ function EnemyEntity({ entity }) {
       <mesh castShadow receiveShadow>
         <sphereGeometry args={[0.5, 16, 16]} />
         <meshStandardMaterial
-          color={getColor()}
+          color={"#ff6b35"}
           metalness={0.3}
           roughness={0.6}
         />

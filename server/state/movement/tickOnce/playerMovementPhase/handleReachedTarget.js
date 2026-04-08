@@ -17,6 +17,9 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
 
       attemptCollectFromActor(rt.userId, interactActorId)
         .then((result) => {
+          const activeSocket = getActiveSocket(rt.userId);
+          const roomName = rt.instanceId != null ? `inst:${Number(rt.instanceId)}` : null;
+
           if (!result?.ok) {
             if (result?.error === "ACTOR_NOT_FOUND") {
               rt.interact = null;
@@ -24,7 +27,6 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
               rt.moveMode = "STOP";
               rt.action = "idle";
 
-              const activeSocket = getActiveSocket(rt.userId);
               if (activeSocket) {
                 activeSocket.emit("actor:collected", {
                   actorId: String(interactActorId),
@@ -36,7 +38,6 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
             }
 
             if (result?.error === "ACTOR_LOOT_EMPTY") {
-              const activeSocket = getActiveSocket(rt.userId);
               if (activeSocket) {
                 activeSocket.emit("actor:collected", {
                   actorId: String(interactActorId),
@@ -61,7 +62,6 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
             rt.action = "idle";
           }
 
-          const activeSocket = getActiveSocket(rt.userId);
           if (activeSocket) {
             activeSocket.emit("actor:collected", {
               actorId: String(interactActorId),
@@ -70,6 +70,13 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
               loot: result.loot ?? null,
               actorUpdate: result.actorUpdate ?? null,
               message: result.message ?? null,
+            });
+          }
+
+          if (result?.actorUpdate && roomName && activeSocket) {
+            activeSocket.broadcast.to(roomName).emit("actor:updated", {
+              actorId: String(interactActorId),
+              actor: result.actorUpdate,
             });
           }
         })

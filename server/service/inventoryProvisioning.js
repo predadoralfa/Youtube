@@ -21,12 +21,14 @@ const db = require("../models");
  */
 async function ensureStarterInventory(userIdRaw, tx) {
   const userId = String(userIdRaw);
+  const queryOptions = tx ? { transaction: tx } : {};
+  const lockOptions = tx ? { transaction: tx, lock: tx.LOCK.UPDATE } : {};
 
   async function getDefByCode(code) {
     const def = await db.GaContainerDef.findOne({
       where: { code },
-      transaction: tx,
-      lock: tx.LOCK.SHARE, // só leitura consistente
+      ...queryOptions,
+      ...(tx ? { lock: tx.LOCK.SHARE } : {}),
     });
 
     if (!def) throw new Error(`Missing seed: ga_container_def code=${code}`);
@@ -43,11 +45,10 @@ async function ensureStarterInventory(userIdRaw, tx) {
     const { def, slotCount } = await getDefByCode(defCode);
 
     // 1) ownership único por (PLAYER, userId, slotRole)
-    let owner = await db.GaContainerOwner.findOne({
-      where: { owner_kind: "PLAYER", owner_id: userId, slot_role: slotRole },
-      transaction: tx,
-      lock: tx.LOCK.UPDATE,
-    });
+      let owner = await db.GaContainerOwner.findOne({
+        where: { owner_kind: "PLAYER", owner_id: userId, slot_role: slotRole },
+        ...lockOptions,
+      });
 
     // 2) se não existir, cria container + owner
     if (!owner) {
@@ -57,7 +58,7 @@ async function ensureStarterInventory(userIdRaw, tx) {
           state: "ACTIVE",
           rev: 1,
         },
-        { transaction: tx }
+        queryOptions
       );
 
       owner = await db.GaContainerOwner.create(
@@ -67,7 +68,7 @@ async function ensureStarterInventory(userIdRaw, tx) {
           owner_id: userId,
           slot_role: slotRole,
         },
-        { transaction: tx }
+        queryOptions
       );
     }
 
@@ -83,7 +84,7 @@ async function ensureStarterInventory(userIdRaw, tx) {
           item_instance_id: null,
           qty: 0,
         },
-        transaction: tx,
+        ...queryOptions,
       });
     }
 
