@@ -138,7 +138,7 @@ async function consumeAttackerStamina(attackerId, attackerKind, attackRange) {
  */
 async function loadEnemyCombatStats(enemyInstanceId) {
   try {
-    const enemyInstance = await db.GaEnemyInstance.findByPk(enemyInstanceId, {
+    const enemyRuntime = await db.GaEnemyRuntime.findByPk(enemyInstanceId, {
       include: [
         {
           association: "stats",
@@ -172,8 +172,8 @@ async function loadEnemyCombatStats(enemyInstanceId) {
       ],
     });
 
-    const stats = enemyInstance?.stats;
-    const baseStats = enemyInstance?.enemyDef?.baseStats;
+    const stats = enemyRuntime?.stats;
+    const baseStats = enemyRuntime?.enemyDef?.baseStats;
     if (!stats || !baseStats) return null;
 
     return {
@@ -186,7 +186,7 @@ async function loadEnemyCombatStats(enemyInstanceId) {
       attackRange: Number(baseStats.attack_range),
     };
   } catch (err) {
-    console.error(`[COMBAT] Error loading enemy stats for ${enemyInstanceId}:`, err);
+    console.error(`[COMBAT] Error loading enemy runtime stats for ${enemyInstanceId}:`, err);
     return null;
   }
 }
@@ -358,8 +358,7 @@ async function executeAttack(params) {
         }
       }
     } else if (targetKind === "ENEMY") {
-      // Atualizar HP do enemy no banco
-      const stats = await db.GaEnemyInstanceStats.findByPk(targetId);
+      const stats = await db.GaEnemyRuntimeStats.findByPk(targetId);
       if (stats) {
         targetHPBefore = Number(stats.hp_current);
         targetHPMax = Number(stats.hp_max);
@@ -375,7 +374,9 @@ async function executeAttack(params) {
           targetDied = true;
         }
 
-        console.log(`[COMBAT] Enemy ${targetId} took ${damage} damage (${targetHPBefore} -> ${targetHPAfter})`);
+        console.log(
+          `[COMBAT] Enemy ${targetId} took ${damage} damage (${targetHPBefore} -> ${targetHPAfter}) source=runtime`
+        );
       }
     }
   } catch (err) {

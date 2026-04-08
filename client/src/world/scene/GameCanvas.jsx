@@ -554,7 +554,7 @@ export function GameCanvas({
       groundMaterial
     );
     groundMesh.rotation.x = -Math.PI / 2;
-    groundMesh.position.set(0, 0, 0);
+    groundMesh.position.set(sizeX / 2, 0, sizeZ / 2);
     groundMesh.receiveShadow = true;
     scene.add(groundMesh);
 
@@ -711,14 +711,12 @@ export function GameCanvas({
     });
 
     const yLine = 0.2;
-    const halfX = sizeX / 2;
-    const halfZ = sizeZ / 2;
 
     const pts = [
-      new THREE.Vector3(-halfX, yLine, -halfZ),
-      new THREE.Vector3(halfX, yLine, -halfZ),
-      new THREE.Vector3(halfX, yLine, halfZ),
-      new THREE.Vector3(-halfX, yLine, halfZ),
+      new THREE.Vector3(0, yLine, 0),
+      new THREE.Vector3(sizeX, yLine, 0),
+      new THREE.Vector3(sizeX, yLine, sizeZ),
+      new THREE.Vector3(0, yLine, sizeZ),
     ];
 
     const boundsGeometry = new THREE.BufferGeometry().setFromPoints(pts);

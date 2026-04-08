@@ -34,8 +34,8 @@ function updateEnemyMovement(enemy, nowMs, dt) {
     console.warn(`[ENEMY_MOVE] Enemy ${enemy.id} sem moveSpeed válido`);
     return false;
   }
-  const homeX = Number(enemy.homePos?.x) || 0;
-  const homeZ = Number(enemy.homePos?.z) || 0;
+  const homeX = Number(enemy.spawnOriginPos?.x ?? enemy.homePos?.x) || 0;
+  const homeZ = Number(enemy.spawnOriginPos?.z ?? enemy.homePos?.z) || 0;
   const radius = Number(enemy.patrolRadius);
   if (!Number.isFinite(radius) || radius <= 0) {
     console.warn(`[ENEMY_MOVE] Enemy ${enemy.id} sem patrolRadius válido`);

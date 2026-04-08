@@ -36,7 +36,8 @@ module.exports = (sequelize, DataTypes) => {
       },
       spawn_tick_ms: {
         type: DataTypes.INTEGER,
-        allowNull: true,
+        allowNull: false,
+        defaultValue: 60000,
       },
     },
     {

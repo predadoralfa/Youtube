@@ -205,10 +205,11 @@ Regra do backend:
 
 - `ga_enemy_def`
 - `ga_enemy_def_stats`
+- `ga_spawn_def`
+- `ga_spawn_def_entry`
 - `ga_spawn_point`
-- `ga_spawn_entry`
-- `ga_enemy_instance`
-- `ga_enemy_instance_stats`
+- `ga_enemy_runtime`
+- `ga_enemy_runtime_stats`
 - `ga_instance_spawn_config`
 
 ### Research e Equipamento
@@ -249,7 +250,8 @@ Regra do backend:
 
 ### Inimigos e respawn
 
-- inimigos possuem definicao, spawn point e runtime
+- inimigos possuem definicao, receita de spawn, ponto de colocacao e runtime
+- o mesmo spawner deve poder ser reutilizado em varias instancias
 - respawn respeita `dead_at` e `respawn_at`
 - instancia pode aplicar configuracao propria via `ga_instance_spawn_config`
 

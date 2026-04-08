@@ -63,8 +63,8 @@ function resolveInstanceSpawnConfig(instance) {
   return normalizeInstanceSpawnConfig(rawConfig);
 }
 
-function computeEffectiveRespawnMs(spawnPoint, instanceSpawnConfig) {
-  const baseRespawnMs = Math.max(0, clampFloorInt(spawnPoint?.respawn_ms, 30000));
+function computeEffectiveRespawnMs(spawnSource, instanceSpawnConfig) {
+  const baseRespawnMs = Math.max(0, clampFloorInt(spawnSource?.respawn_ms, 30000));
   const multiplier = Math.max(
     0,
     toNum(instanceSpawnConfig?.respawnMultiplier, DEFAULT_INSTANCE_RESPAWN_MULTIPLIER)
@@ -73,8 +73,8 @@ function computeEffectiveRespawnMs(spawnPoint, instanceSpawnConfig) {
   return Math.max(0, Math.floor(baseRespawnMs * multiplier));
 }
 
-function computeEffectiveMaxAlive(spawnPoint, instanceSpawnConfig) {
-  const baseMaxAlive = Math.max(0, clampFloorInt(spawnPoint?.max_alive, 1));
+function computeEffectiveMaxAlive(spawnSource, instanceSpawnConfig) {
+  const baseMaxAlive = Math.max(0, clampFloorInt(spawnSource?.max_alive, 1));
   const multiplier = Math.max(
     0,
     toNum(instanceSpawnConfig?.maxAliveMultiplier, DEFAULT_INSTANCE_MAX_ALIVE_MULTIPLIER)
@@ -94,14 +94,18 @@ function computeEffectiveSpawnQuantity(desiredQuantity, instanceSpawnConfig, rem
   return Math.min(effectiveDesired, Math.max(0, clampFloorInt(remainingCapacity, 0)));
 }
 
-async function markEnemyDead(enemyInstanceId, nowMs = Date.now(), tx = null) {
+async function markEnemyDead(enemyId, nowMs = Date.now(), tx = null) {
   const run = async (transaction) => {
-    const enemyInstance = await db.GaEnemyInstance.findByPk(enemyInstanceId, {
+    const enemyRuntime = await db.GaEnemyRuntime.findByPk(enemyId, {
       include: [
         {
-          association: "spawnPoint",
+          association: "spawnInstance",
           required: true,
           include: [
+            {
+              association: "spawnDef",
+              required: true,
+            },
             {
               association: "instance",
               required: false,
@@ -118,13 +122,13 @@ async function markEnemyDead(enemyInstanceId, nowMs = Date.now(), tx = null) {
       transaction,
     });
 
-    if (!enemyInstance?.spawnPoint) {
+    if (!enemyRuntime?.spawnInstance?.spawnDef) {
       return null;
     }
 
-    const instanceSpawnConfig = resolveInstanceSpawnConfig(enemyInstance.spawnPoint.instance);
+    const instanceSpawnConfig = resolveInstanceSpawnConfig(enemyRuntime.spawnInstance.instance);
     const effectiveRespawnMs = computeEffectiveRespawnMs(
-      enemyInstance.spawnPoint,
+      enemyRuntime.spawnInstance.spawnDef,
       instanceSpawnConfig
     );
 
@@ -132,7 +136,7 @@ async function markEnemyDead(enemyInstanceId, nowMs = Date.now(), tx = null) {
     const respawnAt =
       effectiveRespawnMs > 0 ? new Date(nowMs + effectiveRespawnMs) : deadAt;
 
-    await enemyInstance.update(
+    await enemyRuntime.update(
       {
         status: "DEAD",
         dead_at: deadAt,
@@ -142,8 +146,8 @@ async function markEnemyDead(enemyInstanceId, nowMs = Date.now(), tx = null) {
     );
 
     return {
-      enemyInstanceId: Number(enemyInstance.id),
-      spawnPointId: Number(enemyInstance.spawn_point_id),
+      enemyInstanceId: Number(enemyRuntime.id),
+      spawnInstanceId: Number(enemyRuntime.spawn_instance_id),
       deadAt,
       respawnAt,
       effectiveRespawnMs,

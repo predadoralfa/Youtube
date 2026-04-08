@@ -54,7 +54,7 @@ function toEntity(enemy) {
   return {
     entityId: `enemy_${enemy.id}`,  // ✨ PREFIXO ADICIONADO
     kind: "ENEMY",
-    displayName: enemy.enemyDefCode ?? enemy.displayName ?? "Enemy",
+    displayName: enemy.displayName ?? enemy.enemyDefName ?? enemy.enemyDefCode ?? "Enemy",
     pos: enemy.pos ?? { x: 0, z: 0 },
     yaw: Number(enemy.yaw ?? 0),
     hp: hpCurrent, // compat legado

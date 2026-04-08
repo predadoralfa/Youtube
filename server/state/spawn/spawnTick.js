@@ -1,25 +1,12 @@
 "use strict";
 
 const db = require("../../models");
-const {
-  getAliveEnemiesForSpawnPoint,
-  getAliveEnemiesForSpawnEntry,
-  addEnemy,
-} = require("../enemies/enemiesRuntimeStore");
+const { addEnemy } = require("../enemies/enemiesRuntimeStore");
 const { emitEnemySpawn } = require("../enemies/enemyEmit");
-const {
-  DEFAULT_SPAWN_SHAPE_KIND,
-  DEFAULT_SPAWN_RADIUS,
-  DEFAULT_SPAWN_MAX_ALIVE,
-  DEFAULT_SPAWN_QUANTITY_MIN,
-  DEFAULT_SPAWN_QUANTITY_MAX,
-} = require("./spawnConfig");
-const {
-  resolveInstanceSpawnConfig,
-  computeEffectiveRespawnMs,
-  computeEffectiveMaxAlive,
-  computeEffectiveSpawnQuantity,
-} = require("../../service/enemyRespawnService");
+const { DEFAULT_SPAWN_SHAPE_KIND, DEFAULT_SPAWN_RADIUS } = require("./spawnConfig");
+const { resolveInstanceSpawnConfig } = require("../../service/enemyRespawnService");
+
+const _lastSpawnerTickAtMs = new Map();
 
 function requireNum(value, label, entityId) {
   const n = Number(value);
@@ -34,7 +21,10 @@ function generatePointPos(baseX, baseZ) {
 }
 
 function generateCirclePos(baseX, baseZ, radius) {
-  const r = Number.isFinite(Number(radius)) && Number(radius) > 0 ? Number(radius) : DEFAULT_SPAWN_RADIUS;
+  const r =
+    Number.isFinite(Number(radius)) && Number(radius) > 0
+      ? Number(radius)
+      : DEFAULT_SPAWN_RADIUS;
   const angle = Math.random() * 2 * Math.PI;
   const dist = Math.random() * r;
   return {
@@ -43,40 +33,12 @@ function generateCirclePos(baseX, baseZ, radius) {
   };
 }
 
-function selectWeightedEntry(candidateEntries) {
-  if (!candidateEntries || candidateEntries.length === 0) return null;
-
-  const totalWeight = candidateEntries.reduce(
-    (sum, entry) => sum + requireNum(entry.weight, "weight", entry.id),
-    0
-  );
-  if (totalWeight <= 0) return null;
-
-  let random = Math.random() * totalWeight;
-  for (const entry of candidateEntries) {
-    const weight = requireNum(entry.weight, "weight", entry.id);
-    if (random < weight) return entry;
-    random -= weight;
-  }
-
-  return null;
-}
-
-function determineSpawnQuantity(entry, instanceSpawnConfig, remainingCapacity) {
-  const qMinRaw = Number(entry.quantity_min);
-  const qMaxRaw = Number(entry.quantity_max);
-  const qMin = Number.isFinite(qMinRaw) ? qMinRaw : DEFAULT_SPAWN_QUANTITY_MIN;
-  const qMax = Number.isFinite(qMaxRaw) ? qMaxRaw : DEFAULT_SPAWN_QUANTITY_MAX;
-  const desired = Math.floor(Math.random() * (qMax - qMin + 1)) + qMin;
-
-  return computeEffectiveSpawnQuantity(desired, instanceSpawnConfig, remainingCapacity);
-}
-
 function buildEnemyRuntimeData({
-  enemyInstance,
+  enemyRuntime,
   enemyDef,
-  selectedEntry,
-  instanceId,
+  selectedComponent,
+  spawnInstance,
+  spawnDef,
   hpCurrent,
   hpMax,
   moveSpeed,
@@ -84,27 +46,30 @@ function buildEnemyRuntimeData({
   attackPower,
   defense,
   attackRange,
-  patrolRadius,
-  patrolWaitMs,
-  patrolStopRadius,
 }) {
+  const originPos = {
+    x: Number(spawnInstance.pos_x),
+    z: Number(spawnInstance.pos_z),
+  };
+
   return {
-    id: enemyInstance.id,
-    instanceId: String(instanceId),
-    spawnPointId: enemyInstance.spawn_point_id,
-    spawnEntryId: selectedEntry.id,
+    id: enemyRuntime.id,
+    instanceId: String(spawnInstance.instance_id),
+    spawnInstanceId: enemyRuntime.spawn_instance_id,
+    spawnDefComponentId: selectedComponent.id,
+    spawnPointId: enemyRuntime.spawn_instance_id,
+    spawnEntryId: selectedComponent.id,
     enemyDefId: enemyDef.id,
     enemyDefCode: enemyDef.code,
+    enemyDefName: enemyDef.name ?? enemyDef.code,
     displayName: enemyDef.name || enemyDef.code,
     pos: {
-      x: Number(enemyInstance.pos_x),
-      z: Number(enemyInstance.pos_z),
+      x: Number(enemyRuntime.pos_x),
+      z: Number(enemyRuntime.pos_z),
     },
-    yaw: Number(enemyInstance.yaw ?? 0),
-    homePos: {
-      x: Number(enemyInstance.home_x),
-      z: Number(enemyInstance.home_z),
-    },
+    spawnOriginPos: originPos,
+    yaw: Number(enemyRuntime.yaw ?? 0),
+    homePos: originPos,
     status: "ALIVE",
     stats: {
       hpCurrent,
@@ -115,9 +80,9 @@ function buildEnemyRuntimeData({
       defense,
       attackRange,
     },
-    patrolRadius,
-    patrolWaitMs,
-    patrolStopRadius,
+    patrolRadius: requireNum(spawnDef.patrol_radius, "patrol_radius", spawnDef.id),
+    patrolWaitMs: requireNum(spawnDef.patrol_wait_ms, "patrol_wait_ms", spawnDef.id),
+    patrolStopRadius: requireNum(spawnDef.patrol_stop_radius, "patrol_stop_radius", spawnDef.id),
     rev: 0,
     dirty: false,
   };
@@ -141,10 +106,10 @@ async function loadEnemyDefBundle(enemyDefId) {
   });
 }
 
-async function findRespawnableDeadEnemies(spawnPointId, nowMs) {
-  return db.GaEnemyInstance.findAll({
+async function findRespawnableDeadEnemies(spawnInstanceId, nowMs) {
+  return db.GaEnemyRuntime.findAll({
     where: {
-      spawn_point_id: Number(spawnPointId),
+      spawn_instance_id: Number(spawnInstanceId),
       status: "DEAD",
       respawn_at: {
         [db.Sequelize.Op.lte]: new Date(nowMs),
@@ -152,9 +117,9 @@ async function findRespawnableDeadEnemies(spawnPointId, nowMs) {
     },
     include: [
       {
-        association: "spawnEntry",
+        association: "spawnDefComponent",
         required: true,
-        attributes: ["id", "enemy_def_id", "spawn_point_id"],
+        attributes: ["id", "enemy_def_id", "spawn_def_id", "alive_limit"],
       },
       {
         association: "enemyDef",
@@ -178,7 +143,7 @@ async function findRespawnableDeadEnemies(spawnPointId, nowMs) {
       {
         association: "stats",
         required: false,
-        attributes: ["enemy_instance_id", "hp_current", "hp_max", "move_speed", "attack_speed"],
+        attributes: ["enemy_runtime_id", "hp_current", "hp_max", "move_speed", "attack_speed"],
       },
     ],
     order: [
@@ -189,10 +154,10 @@ async function findRespawnableDeadEnemies(spawnPointId, nowMs) {
   });
 }
 
-async function respawnDeadEnemy(deadEnemy, spawner, instanceId, io = null) {
+async function respawnDeadEnemy(deadEnemy, spawnInstance, spawnDef, io = null) {
   const enemyDef = deadEnemy.enemyDef;
-  const selectedEntry = deadEnemy.spawnEntry;
-  if (!enemyDef?.baseStats || !selectedEntry) {
+  const selectedComponent = deadEnemy.spawnDefComponent;
+  if (!enemyDef?.baseStats || !selectedComponent) {
     return null;
   }
 
@@ -204,14 +169,10 @@ async function respawnDeadEnemy(deadEnemy, spawner, instanceId, io = null) {
   const defense = requireNum(baseStats.defense, "defense", enemyDef.id);
   const attackRange = requireNum(baseStats.attack_range, "attack_range", enemyDef.id);
 
-  const patrolRadius = requireNum(spawner.patrol_radius, "patrol_radius", spawner.id);
-  const patrolWaitMs = requireNum(spawner.patrol_wait_ms, "patrol_wait_ms", spawner.id);
-  const patrolStopRadius = requireNum(spawner.patrol_stop_radius, "patrol_stop_radius", spawner.id);
-
-  const shapeKind = String(spawner.shape_kind ?? DEFAULT_SPAWN_SHAPE_KIND);
-  const spawnX = Number(spawner.pos_x);
-  const spawnZ = Number(spawner.pos_z);
-  const radiusRaw = Number(spawner.radius);
+  const shapeKind = String(spawnDef.shape_kind ?? DEFAULT_SPAWN_SHAPE_KIND);
+  const spawnX = Number(spawnInstance.pos_x);
+  const spawnZ = Number(spawnInstance.pos_z);
+  const radiusRaw = Number(spawnDef.radius);
   const radius = Number.isFinite(radiusRaw) && radiusRaw > 0 ? radiusRaw : DEFAULT_SPAWN_RADIUS;
   const spawnPos =
     shapeKind === "CIRCLE"
@@ -223,8 +184,8 @@ async function respawnDeadEnemy(deadEnemy, spawner, instanceId, io = null) {
     pos_x: spawnPos.x,
     pos_z: spawnPos.z,
     yaw: 0,
-    home_x: spawnPos.x,
-    home_z: spawnPos.z,
+    home_x: spawnX,
+    home_z: spawnZ,
     spawned_at: new Date(),
     dead_at: null,
     respawn_at: null,
@@ -238,8 +199,8 @@ async function respawnDeadEnemy(deadEnemy, spawner, instanceId, io = null) {
       attack_speed: attackSpeed,
     });
   } else {
-    await db.GaEnemyInstanceStats.create({
-      enemy_instance_id: deadEnemy.id,
+    await db.GaEnemyRuntimeStats.create({
+      enemy_runtime_id: deadEnemy.id,
       hp_current: hpMax,
       hp_max: hpMax,
       move_speed: moveSpeed,
@@ -248,10 +209,11 @@ async function respawnDeadEnemy(deadEnemy, spawner, instanceId, io = null) {
   }
 
   const runtimeData = buildEnemyRuntimeData({
-    enemyInstance: deadEnemy,
+    enemyRuntime: deadEnemy,
     enemyDef,
-    selectedEntry,
-    instanceId,
+    selectedComponent,
+    spawnInstance,
+    spawnDef,
     hpCurrent: hpMax,
     hpMax,
     moveSpeed,
@@ -259,9 +221,6 @@ async function respawnDeadEnemy(deadEnemy, spawner, instanceId, io = null) {
     attackPower,
     defense,
     attackRange,
-    patrolRadius,
-    patrolWaitMs,
-    patrolStopRadius,
   });
 
   addEnemy(runtimeData);
@@ -269,10 +228,10 @@ async function respawnDeadEnemy(deadEnemy, spawner, instanceId, io = null) {
   return runtimeData;
 }
 
-async function createFreshEnemy(spawner, selectedEntry, instanceId, nowMs, io = null) {
-  const enemyDef = await loadEnemyDefBundle(selectedEntry.enemy_def_id);
+async function createFreshEnemy(spawnInstance, spawnDef, selectedComponent, nowMs, io = null) {
+  const enemyDef = await loadEnemyDefBundle(selectedComponent.enemy_def_id);
   if (!enemyDef?.baseStats) {
-    console.warn(`[SPAWN] enemyDef=${selectedEntry.enemy_def_id} ou stats nao encontrados`);
+    console.warn(`[SPAWN] enemyDef=${selectedComponent.enemy_def_id} ou stats nao encontrados`);
     return null;
   }
 
@@ -284,38 +243,34 @@ async function createFreshEnemy(spawner, selectedEntry, instanceId, nowMs, io = 
   const defense = requireNum(baseStats.defense, "defense", enemyDef.id);
   const attackRange = requireNum(baseStats.attack_range, "attack_range", enemyDef.id);
 
-  const shapeKind = String(spawner.shape_kind ?? DEFAULT_SPAWN_SHAPE_KIND);
-  const spawnX = Number(spawner.pos_x);
-  const spawnZ = Number(spawner.pos_z);
-  const radiusRaw = Number(spawner.radius);
+  const shapeKind = String(spawnDef.shape_kind ?? DEFAULT_SPAWN_SHAPE_KIND);
+  const spawnX = Number(spawnInstance.pos_x);
+  const spawnZ = Number(spawnInstance.pos_z);
+  const radiusRaw = Number(spawnDef.radius);
   const radius = Number.isFinite(radiusRaw) && radiusRaw > 0 ? radiusRaw : DEFAULT_SPAWN_RADIUS;
-  const patrolRadius = requireNum(spawner.patrol_radius, "patrol_radius", spawner.id);
-  const patrolWaitMs = requireNum(spawner.patrol_wait_ms, "patrol_wait_ms", spawner.id);
-  const patrolStopRadius = requireNum(spawner.patrol_stop_radius, "patrol_stop_radius", spawner.id);
-
   const spawnPos =
     shapeKind === "CIRCLE"
       ? generateCirclePos(spawnX, spawnZ, radius)
       : generatePointPos(spawnX, spawnZ);
 
-  const enemyInstance = await db.GaEnemyInstance.create(
+  const enemyRuntime = await db.GaEnemyRuntime.create(
     {
-      spawn_point_id: spawner.id,
-      spawn_entry_id: selectedEntry.id,
+      spawn_instance_id: spawnInstance.id,
+      spawn_def_component_id: selectedComponent.id,
       enemy_def_id: enemyDef.id,
       status: "ALIVE",
       pos_x: spawnPos.x,
       pos_z: spawnPos.z,
       yaw: 0,
-      home_x: spawnPos.x,
-      home_z: spawnPos.z,
+      home_x: spawnX,
+      home_z: spawnZ,
       spawned_at: new Date(nowMs),
     },
     { returning: true }
   );
 
-  await db.GaEnemyInstanceStats.create({
-    enemy_instance_id: enemyInstance.id,
+  await db.GaEnemyRuntimeStats.create({
+    enemy_runtime_id: enemyRuntime.id,
     hp_current: hpMax,
     hp_max: hpMax,
     move_speed: moveSpeed,
@@ -323,10 +278,11 @@ async function createFreshEnemy(spawner, selectedEntry, instanceId, nowMs, io = 
   });
 
   const runtimeData = buildEnemyRuntimeData({
-    enemyInstance,
+    enemyRuntime,
     enemyDef,
-    selectedEntry,
-    instanceId,
+    selectedComponent,
+    spawnInstance,
+    spawnDef,
     hpCurrent: hpMax,
     hpMax,
     moveSpeed,
@@ -334,9 +290,6 @@ async function createFreshEnemy(spawner, selectedEntry, instanceId, nowMs, io = 
     attackPower,
     defense,
     attackRange,
-    patrolRadius,
-    patrolWaitMs,
-    patrolStopRadius,
   });
 
   addEnemy(runtimeData);
@@ -344,106 +297,117 @@ async function createFreshEnemy(spawner, selectedEntry, instanceId, nowMs, io = 
   return runtimeData;
 }
 
-async function processSpawner(spawner, nowMs, io = null) {
-  const instanceId = spawner.instance?.id ?? spawner.instance_id;
-  if (!instanceId) {
-    console.warn(`[SPAWN] ERROR: spawner=${spawner.id} sem instanceId`);
-    return;
+async function countEnemiesForComponent(spawnInstanceId, componentId) {
+  return db.GaEnemyRuntime.count({
+    where: {
+      spawn_instance_id: Number(spawnInstanceId),
+      spawn_def_component_id: Number(componentId),
+      status: {
+        [db.Sequelize.Op.ne]: "DESPAWNED",
+      },
+    },
+  });
+}
+
+async function ensureComponentPopulation(spawnInstance, spawnDef, component, nowMs, io = null) {
+  const desiredQty = Math.max(0, Number(component.quantity ?? 1));
+  if (desiredQty <= 0) {
+    return { created: 0, revived: 0 };
   }
 
-  const instanceSpawnConfig = resolveInstanceSpawnConfig(spawner.instance);
-  if (!instanceSpawnConfig.enemySpawnEnabled) {
-    console.log(`[SPAWN] spawner=${spawner.id} desabilitado pela config da instancia=${instanceId}`);
-    return;
+  const existingCount = await countEnemiesForComponent(spawnInstance.id, component.id);
+  let created = 0;
+
+  for (let i = existingCount; i < desiredQty; i++) {
+    const createdEnemy = await createFreshEnemy(spawnInstance, spawnDef, component, nowMs, io);
+    if (!createdEnemy) break;
+    created += 1;
   }
 
-  const effectiveMaxAlive = computeEffectiveMaxAlive(spawner, instanceSpawnConfig);
-  const maxAlive =
-    effectiveMaxAlive > 0
-      ? effectiveMaxAlive
-      : Math.max(0, Number(spawner.max_alive ?? DEFAULT_SPAWN_MAX_ALIVE));
-
-  if (maxAlive <= 0) {
-    console.log(`[SPAWN] spawner=${spawner.id} maxAlive efetivo=0`);
-    return;
-  }
-
-  const aliveEnemies = getAliveEnemiesForSpawnPoint(spawner.id);
-  let aliveCount = aliveEnemies.length;
-  console.log(`[SPAWN] spawner=${spawner.id} instanceId=${instanceId} vivos=${aliveCount} max=${maxAlive}`);
-
-  if (aliveCount >= maxAlive) return;
-
-  const entries = spawner.entries || [];
-  if (entries.length === 0) {
-    console.log(`[SPAWN] spawner=${spawner.id} sem entries ativas`);
-    return;
-  }
-
-  const respawnableDeadEnemies = await findRespawnableDeadEnemies(spawner.id, nowMs);
-  if (respawnableDeadEnemies.length > 0) {
-    for (const deadEnemy of respawnableDeadEnemies) {
-      if (aliveCount >= maxAlive) break;
-
-      const aliveLimit = deadEnemy.spawnEntry?.alive_limit;
-      const aliveOfType = getAliveEnemiesForSpawnEntry(spawner.id, deadEnemy.spawnEntry.id);
-      if (aliveLimit != null && aliveOfType.length >= Number(aliveLimit)) {
-        continue;
-      }
-
-      const respawned = await respawnDeadEnemy(deadEnemy, spawner, instanceId, io);
-      if (respawned) {
-        aliveCount += 1;
-      }
-    }
-  }
-
-  if (aliveCount >= maxAlive) return;
-
-  const candidateEntries = [];
-  for (const entry of entries) {
-    const aliveLimit = entry.alive_limit;
-    if (aliveLimit == null) {
-      candidateEntries.push(entry);
-      continue;
-    }
-
-    const aliveOfType = getAliveEnemiesForSpawnEntry(spawner.id, entry.id);
-    if (aliveOfType.length < Number(aliveLimit)) {
-      candidateEntries.push(entry);
-    }
-  }
-
-  if (candidateEntries.length === 0) return;
-
-  const selectedEntry = selectWeightedEntry(candidateEntries);
-  if (!selectedEntry) return;
-
-  const remainingCapacity = maxAlive - aliveCount;
-  const spawnCount = determineSpawnQuantity(selectedEntry, instanceSpawnConfig, remainingCapacity);
-  if (spawnCount <= 0) return;
-
-  console.log(
-    `[SPAWN] spawner=${spawner.id} criando=${spawnCount} entry=${selectedEntry.id} enemyDefId=${selectedEntry.enemy_def_id}`
+  const respawnableDeadEnemies = await findRespawnableDeadEnemies(spawnInstance.id, nowMs);
+  const componentDeadEnemies = respawnableDeadEnemies.filter(
+    (enemy) => Number(enemy.spawnDefComponent?.id) === Number(component.id)
   );
 
-  for (let i = 0; i < spawnCount; i++) {
-    const created = await createFreshEnemy(spawner, selectedEntry, instanceId, nowMs, io);
-    if (!created) break;
+  let revived = 0;
+  for (const deadEnemy of componentDeadEnemies) {
+    const respawned = await respawnDeadEnemy(deadEnemy, spawnInstance, spawnDef, io);
+    if (respawned) revived += 1;
+  }
+
+  return { created, revived };
+}
+
+async function processSpawnInstance(spawnInstance, nowMs, io = null) {
+  const instanceId = spawnInstance.instance?.id ?? spawnInstance.instance_id;
+  const spawnDef = spawnInstance.spawnDef;
+  if (!instanceId || !spawnDef) {
+    console.warn(`[SPAWN] ERROR: spawnInstance=${spawnInstance.id} sem instanceId/spawnDef`);
+    return;
+  }
+
+  const instanceSpawnConfig = resolveInstanceSpawnConfig(spawnInstance.instance);
+  if (!instanceSpawnConfig.enemySpawnEnabled) {
+    console.log(
+      `[SPAWN] spawnInstance=${spawnInstance.id} desabilitado pela config da instancia=${instanceId}`
+    );
+    return;
+  }
+
+  const spawnTickMs = Math.max(1000, Number(instanceSpawnConfig.spawnTickMs ?? 0) || 1000);
+  const lastTickAtMs = Number(_lastSpawnerTickAtMs.get(Number(spawnInstance.id)) ?? 0);
+  if (lastTickAtMs > 0 && nowMs - lastTickAtMs < spawnTickMs) {
+    return;
+  }
+  _lastSpawnerTickAtMs.set(Number(spawnInstance.id), nowMs);
+
+  const components = Array.isArray(spawnDef.components) ? [...spawnDef.components] : [];
+  if (components.length === 0) {
+    console.log(`[SPAWN] spawnInstance=${spawnInstance.id} sem components ativas`);
+    return;
+  }
+
+  components.sort((a, b) => {
+    const aOrder = Number(a.sort_order ?? a.id ?? 0);
+    const bOrder = Number(b.sort_order ?? b.id ?? 0);
+    return aOrder - bOrder;
+  });
+
+  for (const component of components) {
+    if (String(component.status ?? "ACTIVE").toUpperCase() !== "ACTIVE") continue;
+
+    const desiredQty = Math.max(0, Number(component.quantity ?? 1));
+    const existingCount = await countEnemiesForComponent(spawnInstance.id, component.id);
+    console.log(
+      `[SPAWN] spawnInstance=${spawnInstance.id} component=${component.id} enemyDefId=${component.enemy_def_id} existing=${existingCount} desired=${desiredQty}`
+    );
+
+    const result = await ensureComponentPopulation(spawnInstance, spawnDef, component, nowMs, io);
+    if (result.created > 0 || result.revived > 0) {
+      console.log(
+        `[SPAWN] spawnInstance=${spawnInstance.id} component=${component.id} created=${result.created} revived=${result.revived}`
+      );
+    }
   }
 }
 
 async function spawnTick(nowMs, io = null) {
   try {
-    const spawners = await db.GaSpawnPoint.findAll({
+    const spawnInstances = await db.GaSpawnInstance.findAll({
       where: {
         status: "ACTIVE",
       },
       include: [
         {
-          association: "entries",
-          where: { status: "ACTIVE" },
-          required: false,
+          association: "spawnDef",
+          required: true,
+          include: [
+            {
+              association: "components",
+              where: { status: "ACTIVE" },
+              required: false,
+            },
+          ],
         },
         {
           association: "instance",
@@ -459,15 +423,15 @@ async function spawnTick(nowMs, io = null) {
       ],
     });
 
-    if (!spawners || spawners.length === 0) {
+    if (!spawnInstances || spawnInstances.length === 0) {
       return;
     }
 
-    for (const spawner of spawners) {
+    for (const spawnInstance of spawnInstances) {
       try {
-        await processSpawner(spawner, nowMs, io);
+        await processSpawnInstance(spawnInstance, nowMs, io);
       } catch (err) {
-        console.error(`[SPAWN] Error processing spawner=${spawner.id}:`, err);
+        console.error(`[SPAWN] Error processing spawnInstance=${spawnInstance.id}:`, err);
       }
     }
   } catch (err) {

@@ -297,11 +297,12 @@ Documento principal:
 
 ## Inimigos, Spawn e Respawn
 
-O sistema de inimigos tem tres blocos:
+O sistema de inimigos agora deve ser lido em quatro camadas:
 
 - definicao: `ga_enemy_def` e `ga_enemy_def_stats`
-- pontos de spawn: `ga_spawn_point` e `ga_spawn_entry`
-- runtime: `ga_enemy_instance` e `ga_enemy_instance_stats`
+- receita reutilizavel: `ga_spawn_def` e `ga_spawn_def_entry`
+- colocacao no mapa: `ga_spawn_point`
+- runtime: `ga_enemy_runtime` e `ga_enemy_runtime_stats`
 
 Arquivos chave:
 
@@ -315,10 +316,10 @@ Arquivos chave:
 
 Evolucao atual:
 
-- o respawn passou a considerar `dead_at` e `respawn_at`
-- existe configuracao macro por instancia em `ga_instance_spawn_config`
-- o loop reaproveita inimigos mortos quando possivel
-- a ideia e permitir mapas com ritmos diferentes de regeneracao
+- o mesmo spawner precisa poder ser reutilizado em varias instancias
+- `spawn_point` deve ser apenas a colocacao de um spawner no mapa
+- o runtime do inimigo deve ser separado da receita do spawner
+- a configuracao macro por instancia continua em `ga_instance_spawn_config`
 
 Documento principal:
 

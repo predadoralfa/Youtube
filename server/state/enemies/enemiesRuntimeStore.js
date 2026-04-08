@@ -58,17 +58,28 @@ function addEnemy(enemy) {
   const record = {
     id,
     instanceId,
+    spawnInstanceId: toNum(enemy.spawnInstanceId ?? enemy.spawnPointId),
+    spawnDefComponentId: toNum(enemy.spawnDefComponentId ?? enemy.spawnEntryId),
     spawnPointId: toNum(enemy.spawnPointId),
     spawnEntryId: toNum(enemy.spawnEntryId),
     enemyDefId: toNum(enemy.enemyDefId),
+    enemyDefCode: enemy.enemyDefCode ?? null,
+    enemyDefName: enemy.enemyDefName ?? null,
+    displayName: enemy.displayName ?? enemy.enemyDefName ?? enemy.enemyDefCode ?? null,
+    visualKind: enemy.visualKind ?? "DEFAULT",
+    collisionRadius: toNum(enemy.collisionRadius, 0.5),
+    spawnOriginPos: {
+      x: toNum(enemy.spawnOriginPos?.x ?? enemy.homePos?.x ?? enemy.pos?.x, 0),
+      z: toNum(enemy.spawnOriginPos?.z ?? enemy.homePos?.z ?? enemy.pos?.z, 0),
+    },
     pos: {
       x: toNum(enemy.pos?.x, 0),
       z: toNum(enemy.pos?.z, 0),
     },
     yaw: toNum(enemy.yaw, 0),
     homePos: {
-      x: toNum(enemy.homePos?.x ?? enemy.pos?.x, 0),
-      z: toNum(enemy.homePos?.z ?? enemy.pos?.z, 0),
+      x: toNum(enemy.homePos?.x ?? enemy.spawnOriginPos?.x ?? enemy.pos?.x, 0),
+      z: toNum(enemy.homePos?.z ?? enemy.spawnOriginPos?.z ?? enemy.pos?.z, 0),
     },
     patrolRadius: Number(enemy.patrolRadius),
     patrolWaitMs: Number(enemy.patrolWaitMs),
@@ -162,7 +173,11 @@ function getEnemiesForInstance(instanceId) {
 function getAliveEnemiesForSpawnPoint(spawnPointId) {
   const out = [];
   for (const enemy of enemiesById.values()) {
-    if (Number(enemy.spawnPointId) === Number(spawnPointId) && enemy.status === "ALIVE") {
+    if (
+      (Number(enemy.spawnPointId) === Number(spawnPointId) ||
+        Number(enemy.spawnInstanceId) === Number(spawnPointId)) &&
+      enemy.status === "ALIVE"
+    ) {
       out.push(enemy);
     }
   }
@@ -175,6 +190,30 @@ function getAliveEnemiesForSpawnEntry(spawnPointId, spawnEntryId) {
     if (
       Number(enemy.spawnPointId) === Number(spawnPointId) &&
       Number(enemy.spawnEntryId) === Number(spawnEntryId) &&
+      enemy.status === "ALIVE"
+    ) {
+      out.push(enemy);
+    }
+  }
+  return out;
+}
+
+function getAliveEnemiesForSpawnInstance(spawnInstanceId) {
+  const out = [];
+  for (const enemy of enemiesById.values()) {
+    if (Number(enemy.spawnInstanceId) === Number(spawnInstanceId) && enemy.status === "ALIVE") {
+      out.push(enemy);
+    }
+  }
+  return out;
+}
+
+function getAliveEnemiesForSpawnDefComponent(spawnInstanceId, spawnDefComponentId) {
+  const out = [];
+  for (const enemy of enemiesById.values()) {
+    if (
+      Number(enemy.spawnInstanceId) === Number(spawnInstanceId) &&
+      Number(enemy.spawnDefComponentId) === Number(spawnDefComponentId) &&
       enemy.status === "ALIVE"
     ) {
       out.push(enemy);
@@ -202,5 +241,7 @@ module.exports = {
   getEnemiesForInstance,
   getAliveEnemiesForSpawnPoint,
   getAliveEnemiesForSpawnEntry,
+  getAliveEnemiesForSpawnInstance,
+  getAliveEnemiesForSpawnDefComponent,
   clearInstance,
 };

@@ -20,8 +20,11 @@ function resetEnemyToSpawn(enemy) {
 
   const hadCombat = Boolean(enemy._combatMode || enemy._combatActive);
 
-  if (enemy._spawnPos) {
-    enemy.pos = { ...enemy._spawnPos };
+  if (enemy.spawnOriginPos) {
+    enemy.pos = { ...enemy.spawnOriginPos };
+    enemy.homePos = { ...enemy.spawnOriginPos };
+  } else if (enemy.homePos) {
+    enemy.pos = { ...enemy.homePos };
   }
 
   enemy._combatMode = false;

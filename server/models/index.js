@@ -19,14 +19,15 @@ const defineGaActorResourceRuleDef = require("./ga_actor_resource_rule_def");
 const defineGaActorResourceState = require("./ga_actor_resource_state");
 
 // SPAWN
-const defineGaSpawnEntry = require("./ga_spawn_entry");
-const defineGaSpawnPoint = require("./ga_spawn_point");
+const defineGaSpawnDef = require("./ga_spawn_def");
+const defineGaSpawnDefComponent = require("./ga_spawn_def_component");
+const defineGaSpawnInstance = require("./ga_spawn_instance");
 
 // ENEMY
 const defineGaEnemyDef = require("./ga_enemy_def");
 const defineGaEnemyDefStats = require("./ga_enemy_def_stats");
-const defineGaEnemyInstance = require("./ga_enemy_instance");
-const defineGaEnemyInstanceStats = require("./ga_enemy_instance_stats");
+const defineGaEnemyRuntime = require("./ga_enemy_runtime");
+const defineGaEnemyRuntimeStats = require("./ga_enemy_runtime_stats");
 
 
 // WORLD
@@ -81,14 +82,15 @@ const GaActorResourceRuleDef = defineGaActorResourceRuleDef(sequelize, DataTypes
 const GaActorResourceState = defineGaActorResourceState(sequelize, DataTypes);
 
 // SPAWN MODELS
-const GaSpawnEntry = defineGaSpawnEntry(sequelize, DataTypes);
-const GaSpawnPoint = defineGaSpawnPoint(sequelize, DataTypes);
+const GaSpawnDef = defineGaSpawnDef(sequelize, DataTypes);
+const GaSpawnDefComponent = defineGaSpawnDefComponent(sequelize, DataTypes);
+const GaSpawnInstance = defineGaSpawnInstance(sequelize, DataTypes);
 
 // ENEMY MODELS
 const GaEnemyDef = defineGaEnemyDef(sequelize, DataTypes);
 const GaEnemyDefStats = defineGaEnemyDefStats(sequelize, DataTypes);
-const GaEnemyInstance = defineGaEnemyInstance(sequelize, DataTypes);
-const GaEnemyInstanceStats = defineGaEnemyInstanceStats(sequelize, DataTypes);
+const GaEnemyRuntime = defineGaEnemyRuntime(sequelize, DataTypes);
+const GaEnemyRuntimeStats = defineGaEnemyRuntimeStats(sequelize, DataTypes);
 
 // WORLD MODELS
 const GaLocal = defineGaLocal(sequelize, DataTypes);
@@ -136,14 +138,15 @@ const models = {
   GaEraDef,
 
   // SPAWN
-  GaSpawnEntry,
-  GaSpawnPoint,
+  GaSpawnDef,
+  GaSpawnDefComponent,
+  GaSpawnInstance,
 
   // ENEMY
   GaEnemyDef,
   GaEnemyDefStats,
-  GaEnemyInstance,
-  GaEnemyInstanceStats,
+  GaEnemyRuntime,
+  GaEnemyRuntimeStats,
 
   // USER
   GaUser,

@@ -1,199 +1,136 @@
-# Plano Tecnico - Respawn de Inimigos por Instancia
+# Plano Tecnico - Reestruturacao Definitiva de Spawners e Runtime de Inimigos
 
 ## Objetivo
 
-Este documento define como o sistema de respawn de inimigos deve evoluir para suportar regras diferentes por instancia do mundo.
+Este documento passa a ser o planejamento definitivo para a reformulacao do sistema de spawners e runtime de inimigos.
 
-Exemplo do problema:
+A decisao agora nao e mais "adaptar o sistema atual".
 
-- uma instancia pode regenerar inimigos rapidamente
-- outra instancia, do mesmo local, pode regenerar mais lentamente
-- no estado atual, o sistema nao expressa bem essa diferenca
+A decisao e:
 
-O objetivo e sair de um modelo parcialmente hardcoded para um modelo guiado por banco, com configuracao clara por instancia e reaproveitamento maximo do que ja existe.
+- reconstruir a modelagem do modulo de spawn do zero
+- alinhar nomenclatura com o padrao usado em outros modulos do jogo
+- separar definicao, colocacao no mapa e runtime
+- preparar o modulo para escalabilidade, reaproveitamento entre mapas e manutencao de longo prazo
 
-## Resumo executivo
+---
 
-Decisao principal:
+## Inventario do Legado
 
-- manter `ga_spawn_point` como configuracao do ponto de spawn
-- criar uma tabela filha de `ga_instance` para configuracao macro de spawn da instancia
-- continuar usando `respawn_ms` em `ga_spawn_point` como base
-- aplicar multiplicadores e flags da instancia por cima
-- refatorar o loop para respeitar `dead_at` e `respawn_at`
+As tabelas antigas existem e foram criadas por migration.
 
-Decisao importante:
+Migrations legadas encontradas:
 
-- nao colocar essa configuracao em `ga_local`
-- nao inflar `ga_instance` com varias colunas de spawn
-- usar `ga_instance_spawn_config` como lugar proprio dessa regra
+- `20260306222528-create-ga-enemy-def.js`
+- `20260306222627-create-ga-enemy-def-stats.js`
+- `20260306222710-create-ga-spawn-point.js`
+- `20260306222754-create-ga-spawn-entry.js`
+- `20260306222827-create-ga-enemy-instance.js`
+- `20260306222900-create-ga-enemy-instance-stats.js`
+- `20260328134000-add-patrol-radius-to-ga-spawn-point.js`
+- `20260328140000-add-patrol-wait-ms-to-ga-spawn-point.js`
+- `20260328141000-add-patrol-stop-radius-to-ga-spawn-point.js`
 
-## Estado atual
+Tambem ja existe uma primeira tentativa do modelo novo:
 
-### O que ja existe
+- `20260407213000-create-ga-spawn-def.js`
+- `20260407213100-create-ga-spawn-def-entry.js`
+- `20260407213200-add-spawn-def-id-to-ga-spawn-point.js`
+- `20260407213300-create-ga-enemy-runtime.js`
+- `20260407213400-create-ga-enemy-runtime-stats.js`
 
-Arquivos atuais:
+Conclusao importante:
 
-- [spawnConfig.js](/D:/JS-Projects/Youtube/server/state/spawn/spawnConfig.js)
-- [spawnLoop.js](/D:/JS-Projects/Youtube/server/state/spawn/spawnLoop.js)
-- [spawnTick.js](/D:/JS-Projects/Youtube/server/state/spawn/spawnTick.js)
-- [ga_spawn_point.js](/D:/JS-Projects/Youtube/server/models/ga_spawn_point.js)
-- [ga_spawn_entry.js](/D:/JS-Projects/Youtube/server/models/ga_spawn_entry.js)
-- [ga_enemy_instance.js](/D:/JS-Projects/Youtube/server/models/ga_enemy_instance.js)
-- [ga_instance.js](/D:/JS-Projects/Youtube/server/models/ga_instance.js)
-- [ga_local.js](/D:/JS-Projects/Youtube/server/models/ga_local.js)
+- o legado existe em migration
+- a primeira camada do modelo novo tambem ja existe
+- porem o desenho ainda nao esta fechado do jeito mais intuitivo e escalavel
 
-Hoje ja existem no banco:
+---
 
-- `ga_spawn_point.instance_id`
-- `ga_spawn_point.max_alive`
-- `ga_spawn_point.respawn_ms`
-- `ga_enemy_instance.dead_at`
-- `ga_enemy_instance.respawn_at`
+## Diagnostico Final
 
-### O que funciona hoje
+O sistema atual tem tres problemas estruturais.
 
-O sistema atual ja consegue:
+### 1. Mistura de papeis
 
-- encontrar spawn points por instancia
-- selecionar entries por peso
-- gerar posicao de spawn
-- criar `ga_enemy_instance`
-- criar `ga_enemy_instance_stats`
-- empurrar o inimigo para o runtime store
+Hoje o modulo mistura:
 
-### O que esta faltando
+- definicao reutilizavel de spawn
+- colocacao desse spawn em uma instancia
+- runtime do inimigo concreto
 
-O sistema atual ainda nao trata o respawn de forma completa.
+Isso espalha regra de negocio entre:
 
-Problemas observados:
+- `ga_spawn_point`
+- `ga_spawn_entry`
+- `ga_enemy_instance`
 
-1. o loop usa um tick global fixo
+### 2. Nomenclatura ruim
 
-- `SPAWN_TICK_MS = 180000`
-- isso significa um ciclo de 3 minutos para processar spawn
+O nome `ga_enemy_instance` sugere "instancia de configuracao".
 
-2. `respawn_ms` existe no banco, mas nao governa de verdade o nascimento
+Na pratica, ele guarda:
 
-- o `spawnTick` usa `max_alive`, `shape`, `entries`
-- mas nao valida `dead_at` e `respawn_at` como regra central de retorno
+- posicao atual
+- estado vivo ou morto
+- temporizador de respawn
+- dados de runtime
 
-3. o inimigo morto e so marcado como morto
+Entao ele nao e uma "instance" de configuracao.
+Ele e runtime.
 
-- em combate, o sistema faz `status = DEAD` e preenche `dead_at`
-- nao ha uma rotina forte de reaproveitamento daquele inimigo morto
+### 3. Reaproveitamento fraco
 
-4. a configuracao ainda e muito dependente do codigo
+O jogo tera mapas equivalentes para racas diferentes e outros cenarios repetidos.
 
-- varios defaults estao presos em `spawnConfig.js`
-- isso deveria ser fallback tecnico, nao regra principal de gameplay
+O mesmo pacote de spawn precisa ser reutilizado em varias instancias sem duplicar configuracao.
 
-## Leitura arquitetural
+Hoje isso nao esta bem resolvido.
 
-## Por que nao usar `ga_local`
+---
 
-`ga_local` representa o template geografico/logico do lugar.
+## Decisao Arquitetural
 
-Se colocarmos regra de respawn em `ga_local`, herdaremos este comportamento:
+Vamos manter o mesmo padrao mental que ja existe em outros modulos do projeto:
 
-- todo mapa daquele local vai compartilhar o mesmo pacing
+- definicao principal
+- tabelas filhas da definicao
+- colocacao concreta quando necessario
+- runtime separado
 
-Isso conflita com a necessidade atual:
+O modulo de spawn deve ficar assim:
 
-- instancias diferentes do mesmo local precisam poder ter comportamentos diferentes
+1. `ga_spawn_def`
+2. `ga_spawn_def_component`
+3. `ga_spawn_instance`
+4. `ga_enemy_runtime`
+5. `ga_enemy_runtime_stats`
+6. `ga_instance_spawn_config`
 
-Conclusao:
+---
 
-- `ga_local` nao deve ser o dono da regra de respawn por instancia
+## Novo Modelo
 
-## Por que nao jogar tudo em `ga_instance`
+### `ga_spawn_def`
 
-`ga_instance` hoje e uma entidade curta e estrutural:
+Tabela principal do spawner.
 
-- liga o mundo ao local
-- define tipo da instancia
-- guarda era atual
-- status
+Ela representa a definicao reutilizavel do spawn.
 
-Se comecarmos a empilhar varias colunas de spawn em `ga_instance`, ela ficara misturada com regra de gameplay.
+Exemplos:
 
-Isso piora em evolucoes futuras, por exemplo:
+- campo com coelhos
+- campinho com coelhos e raposas
+- grupo de lobos
+- grupo de goblins
 
-- respawn habilitado ou nao
-- multiplicador de tempo
-- multiplicador de quantidade
-- limite global
-- eventos especiais
-
-Conclusao:
-
-- `ga_instance` deve continuar como dono logico
-- mas a configuracao deve ir para uma tabela filha especializada
-
-## Solucao proposta
-
-### Nova tabela: `ga_instance_spawn_config`
-
-Essa tabela sera filha direta de `ga_instance`.
-
-Ela concentrara regras macro de spawn para aquela instancia.
-
-Campos propostos:
+Campos esperados:
 
 - `id`
-- `instance_id`
-- `enemy_spawn_enabled`
-- `respawn_multiplier`
-- `spawn_quantity_multiplier`
-- `max_alive_multiplier`
-- `spawn_tick_ms`
-- `created_at`
-- `updated_at`
-
-### Significado dos campos
-
-`instance_id`
-
-- fk para `ga_instance`
-- idealmente com unique para manter 1 config por instancia
-
-`enemy_spawn_enabled`
-
-- liga/desliga spawn de inimigos naquela instancia
-- bom para mapa especial, debug ou evento temporario
-
-`respawn_multiplier`
-
-- multiplica o `respawn_ms` de cada `ga_spawn_point`
-- exemplo:
-  - `1.0` = normal
-  - `2.0` = respawn 2x mais lento
-  - `0.5` = respawn 2x mais rapido
-
-`spawn_quantity_multiplier`
-
-- multiplica a quantidade final que um spawn point vai tentar gerar
-- util para instancia mais “cheia” ou “leve”
-
-`max_alive_multiplier`
-
-- multiplica o teto de vivos permitido no spawn point
-
-`spawn_tick_ms`
-
-- intervalo tecnico de varredura daquela instancia
-- opcional
-- se quiser simplificar a primeira versao, esse campo pode ficar fora da fase 1
-
-## Tabelas que continuam existindo
-
-### `ga_spawn_point`
-
-Continua sendo a configuracao local do ponto de spawn.
-
-Campos atuais relevantes:
-
-- `instance_id`
+- `code`
+- `name`
+- `status`
+- `spawn_kind`
 - `shape_kind`
 - `radius`
 - `max_alive`
@@ -201,397 +138,387 @@ Campos atuais relevantes:
 - `patrol_radius`
 - `patrol_wait_ms`
 - `patrol_stop_radius`
+- `flags_json`
 
-Papel futuro:
+Papel:
 
-- continuar como configuracao base do ponto
-- receber o multiplicador da instancia na hora do calculo
+- responder "que spawner e este"
+- guardar configuracao base reutilizavel
 
-### `ga_spawn_entry`
+### `ga_spawn_def_component`
 
-Continua definindo:
+Tabela filha da definicao do spawner.
 
-- qual inimigo pode nascer
-- peso
-- quantidade minima
-- quantidade maxima
-- limite por entry
+Ela substitui conceitualmente a ideia atual de `ga_spawn_entry`.
 
-Nao precisa mudar nesta fase.
+Papel:
 
-### `ga_enemy_instance`
+- responder "quais inimigos fazem parte desse spawner"
 
-Continua sendo o runtime persistido do inimigo.
+Campos esperados:
 
-Campos importantes:
-
+- `id`
+- `spawn_def_id`
+- `enemy_def_id`
 - `status`
-- `dead_at`
-- `respawn_at`
-- `spawn_point_id`
-- `spawn_entry_id`
-
-Mas o uso dessa tabela vai mudar.
-
-## Mudanca de estrategia recomendada
-
-### Hoje
-
-Hoje o sistema tende a criar novas linhas quando vai gerar inimigos.
-
-Problema:
-
-- a tabela pode crescer sem necessidade
-- fica ruim de auditar
-- o “slot” do inimigo no spawn point nao fica claro
-
-### Proposta
-
-Reaproveitar instancias mortas antes de criar novas.
-
-Fluxo:
-
-1. inimigo nasce em `ga_enemy_instance`
-2. inimigo morre
-3. `status = DEAD`
-4. `dead_at = now`
-5. `respawn_at = now + effective_respawn_ms`
-6. quando chegar a hora:
-   - resetar hp
-   - resetar posicao
-   - resetar home
-   - `status = ALIVE`
-   - limpar `dead_at`
-   - limpar `respawn_at`
-
-Vantagens:
-
-- menos lixo historico
-- cada spawn point reaproveita seu proprio conjunto de inimigos
-- mais facil debugar e administrar
-
-## Formula de respawn
-
-O tempo final de respawn deve ser:
-
-`effective_respawn_ms = ga_spawn_point.respawn_ms * ga_instance_spawn_config.respawn_multiplier`
-
-Opcionalmente:
-
-- arredondar para inteiro
-- aplicar piso minimo tecnico
+- `weight`
+- `quantity_min`
+- `quantity_max`
+- `alive_limit`
+- `flags_json`
 
 Exemplo:
 
-- spawn point base = `30000`
-- instancia lenta = `2.0`
-- resultado = `60000`
+- componente 1: `WILD_RABBIT`, quantidade `3..5`
+- componente 2: `FOX`, quantidade `1..2`
 
-Outro exemplo:
+### `ga_spawn_instance`
 
-- spawn point base = `30000`
-- instancia rapida = `0.5`
-- resultado = `15000`
+Tabela de colocacao do spawner no mundo.
 
-## Responsabilidades por camada
+Ela substitui o papel conceitual atual de `ga_spawn_point`.
 
-### Banco
+Papel:
 
-Banco deve definir:
+- responder "onde essa definicao de spawner foi colocada"
 
-- quais spawn points existem
-- em qual instancia eles vivem
-- qual entry pode nascer
-- qual e o respawn base do ponto
-- qual e o multiplicador de respawn da instancia
+Campos esperados:
 
-### Loop
+- `id`
+- `instance_id`
+- `spawn_def_id`
+- `status`
+- `pos_x`
+- `pos_z`
+- `yaw`
+- `override_json`
 
-Loop deve:
+Observacao:
 
-- buscar configs e spawn points
-- processar inimigos mortos prontos para voltar
-- respeitar os limites de vivos
-- criar novas instancias apenas se necessario
+- a receita continua em `ga_spawn_def`
+- a colocacao concreta fica em `ga_spawn_instance`
 
-### Combate
+### `ga_enemy_runtime`
 
-Combate deve:
+Tabela de runtime concreto do inimigo.
 
-- ao matar, preencher `dead_at`
-- calcular `respawn_at`
-- nao decidir sozinho a politica de spawn global
+Papel:
 
-## Refactor proposto dos arquivos atuais
+- responder "qual inimigo concreto existe ou existiu nesse spawner colocado"
 
-## 1. `spawnConfig.js`
+Campos esperados:
 
-Hoje:
+- `id`
+- `spawn_instance_id`
+- `spawn_def_component_id`
+- `enemy_def_id`
+- `status`
+- `pos_x`
+- `pos_z`
+- `yaw`
+- `home_x`
+- `home_z`
+- `spawned_at`
+- `dead_at`
+- `respawn_at`
 
-- guarda regra de gameplay e fallback ao mesmo tempo
+Observacao:
 
-Depois:
+- esse nome e explicitamente runtime
+- ele nao tenta fingir que e configuracao
 
-- guardar apenas defaults tecnicos
+### `ga_enemy_runtime_stats`
 
-Exemplos:
+Tabela filha do runtime do inimigo.
 
-- `DEFAULT_SPAWN_LOOP_INTERVAL_MS`
-- `DEFAULT_RESPAWN_MULTIPLIER`
-- `DEFAULT_MAX_ALIVE_MULTIPLIER`
-- `DEFAULT_SPAWN_QUANTITY_MULTIPLIER`
+Papel:
 
-Regra:
+- guardar stats runtime persistidos daquele inimigo concreto
 
-- o banco deve vencer
-- o arquivo serve como fallback
+Campos esperados:
 
-## 2. `spawnLoop.js`
+- `enemy_runtime_id`
+- `hp_current`
+- `hp_max`
+- `move_speed`
+- `attack_speed`
 
-Hoje:
+### `ga_instance_spawn_config`
 
-- loop unico global com intervalo fixo
+Continua existindo.
 
-Depois:
+Papel:
 
-- primeira fase:
-  - manter loop unico global
-  - reduzir o tick para algo curto, ex. `1000 ms`
-  - cada tick processa banco e decide por instancia
+- governar regras macro de spawn por instancia
 
-Fase futura opcional:
+Campos atuais ja validos:
 
-- loops particionados por instancia
+- `enemy_spawn_enabled`
+- `respawn_multiplier`
+- `spawn_quantity_multiplier`
+- `max_alive_multiplier`
+- `spawn_tick_ms`
 
-Minha recomendacao para agora:
+---
 
-- nao complicar com um loop por instancia
-- manter um loop global curto e stateless
+## Relacoes Corretas
 
-## 3. `spawnTick.js`
+Leitura correta do modulo:
 
-Esse sera o principal refactor.
+- `ga_spawn_def` tem muitos `ga_spawn_def_component`
+- `ga_spawn_instance` pertence a `ga_spawn_def`
+- `ga_spawn_instance` pertence a `ga_instance`
+- `ga_enemy_runtime` pertence a `ga_spawn_instance`
+- `ga_enemy_runtime` pertence a `ga_spawn_def_component`
+- `ga_enemy_runtime` pertence a `ga_enemy_def`
 
-Ele deve passar a ter estas etapas:
+Isso responde de forma direta perguntas como:
 
-1. carregar `ga_spawn_point` ativo com:
+- quais inimigos existem neste spawner colocado
+- quais inimigos uma definicao de spawner pode gerar
+- em quais instancias esse spawner foi reutilizado
+- quais runtimes mortos aguardam respawn em determinada instancia
 
-- `entries`
-- `instance`
-- `instanceSpawnConfig`
+---
 
-2. para cada spawn point:
+## Por Que Esse Desenho E Melhor
 
-- calcular config efetiva
-- contar vivos
-- localizar mortos elegiveis para respawn
-- reaproveitar mortos se possivel
-- criar novos apenas se faltar runtime reaproveitavel
+### Coerencia com o resto do projeto
 
-3. emitir spawn quando inimigo voltar
+O desenho fica mais proximo do padrao de modulos como item:
 
-### Funcoes novas sugeridas
+- definicao principal
+- componentes/filhas
+- instancia concreta
+- runtime separado
 
-- `resolveInstanceSpawnConfig(instance)`
-- `computeEffectiveRespawnMs(spawnPoint, instanceConfig)`
-- `computeEffectiveMaxAlive(spawnPoint, instanceConfig)`
-- `computeEffectiveSpawnQuantity(entry, instanceConfig, remainingCapacity)`
-- `findRespawnableDeadEnemies(spawnPointId, nowMs)`
-- `respawnDeadEnemy(enemyInstance, spawnPoint, enemyDef, selectedEntry, nowMs, io)`
+### Reutilizacao
 
-## 4. `combatSystem.js`
+O mesmo `spawn_def` pode ser colocado em:
 
-Hoje:
+- instancia 1
+- instancia 2
+- instancia 6
+- mapas equivalentes de racas diferentes
 
-- ao matar, marca `DEAD` e `dead_at`
+Sem duplicar configuracao.
 
-Depois:
+### Consultas mais diretas
 
-- ao matar, tambem calcular `respawn_at`
+Exemplo:
 
-Importante:
+- "quais inimigos estao no spawner X"
 
-- o combate nao precisa conhecer a config da instancia toda
-- ele pode carregar o `spawn_point` do inimigo e a config da instancia
-- ou chamar um helper dedicado do modulo de spawn
+vira:
 
-Minha recomendacao:
+- `ga_enemy_runtime where spawn_instance_id = X`
 
-- criar helper no dominio de spawn
-- o combate chama esse helper para resolver `respawn_at`
+Sem ficar costurando varios conceitos mal nomeados.
 
-## 5. `enemyLoader.js`
+### Menos ambiguidade no codigo
 
-Pode continuar quase igual.
+O codigo deixa de precisar interpretar:
 
-Melhorias possiveis:
+- `instance` como runtime
+- `point` como receita
+- `entry` como composicao reutilizavel e tambem como spawn local
 
-- incluir no payload runtime:
-  - `deadAt`
-  - `respawnAt`
-- isso ja ajuda debug futuro
+Cada coisa passa a ter um nome que bate com sua funcao.
 
-## Mudancas de banco
+---
 
-### Nova migration
+## Formula de Spawn
 
-Criar migration para `ga_instance_spawn_config`
+### Maximo de vivos
 
-Schema sugerido:
+`effective_max_alive = ga_spawn_def.max_alive * ga_instance_spawn_config.max_alive_multiplier`
 
-```sql
-ga_instance_spawn_config
-- id INT PK AI
-- instance_id INT NOT NULL UNIQUE
-- enemy_spawn_enabled BOOLEAN NOT NULL DEFAULT TRUE
-- respawn_multiplier DECIMAL(10,3) NOT NULL DEFAULT 1.000
-- spawn_quantity_multiplier DECIMAL(10,3) NOT NULL DEFAULT 1.000
-- max_alive_multiplier DECIMAL(10,3) NOT NULL DEFAULT 1.000
-- spawn_tick_ms INT NULL
-- created_at DATETIME NOT NULL
-- updated_at DATETIME NOT NULL
-```
+### Quantidade por ciclo
 
-Associacao sugerida:
+`effective_spawn_quantity = roll(ga_spawn_def_component.quantity_min..quantity_max) * ga_instance_spawn_config.spawn_quantity_multiplier`
 
-- `GaInstance.hasOne(GaInstanceSpawnConfig, { as: "spawnConfig" })`
-- `GaInstanceSpawnConfig.belongsTo(GaInstance, { as: "instance" })`
+### Respawn
 
-## Seeds
+`effective_respawn_ms = ga_spawn_def.respawn_ms * ga_instance_spawn_config.respawn_multiplier`
 
-Criar seed inicial para instancias existentes.
+### Scheduler
 
-Padrao inicial:
+O loop tecnico pode ser curto.
 
-- `enemy_spawn_enabled = true`
-- `respawn_multiplier = 1.0`
-- `spawn_quantity_multiplier = 1.0`
-- `max_alive_multiplier = 1.0`
+A regra de gameplay por instancia continua vindo de:
 
-Assim o comportamento atual fica preservado antes de customizacoes.
+- `ga_instance_spawn_config.spawn_tick_ms`
 
-## Fases de implementacao
+---
 
-## Fase 1 - Persistencia da configuracao por instancia
+## Fluxo Correto
 
-Entregas:
+### Bootstrap
 
-- model `ga_instance_spawn_config`
-- migration
-- associations
-- seed default para instancias existentes
+1. carregar `ga_spawn_instance` da instancia atual
+2. carregar `ga_enemy_runtime` ligado a esses spawn instances
+3. carregar nome e stats via `ga_enemy_def`
+4. enviar somente os runtimes validos
 
-Risco:
+### Spawn
 
-- baixo
+1. localizar `ga_spawn_instance`
+2. resolver `ga_spawn_def`
+3. escolher `ga_spawn_def_component`
+4. gerar posicao com base na definicao e no centro do spawn instance
+5. criar ou reciclar `ga_enemy_runtime`
+6. criar ou resetar `ga_enemy_runtime_stats`
 
-## Fase 2 - Cálculo efetivo de respawn
+### Patrulha
 
-Entregas:
+1. o centro de patrulha sempre vem do `ga_spawn_instance`
+2. o inimigo pode nascer deslocado dentro do raio
+3. mas seu retorno e sua patrulha referenciam o centro do spawner
 
-- helpers para config efetiva
-- uso de `respawn_multiplier`
-- uso de `enemy_spawn_enabled`
-- uso de `max_alive_multiplier`
-- uso de `spawn_quantity_multiplier`
+### Morte
 
-Risco:
+1. `status = DEAD`
+2. preencher `dead_at`
+3. calcular `respawn_at`
 
-- medio
+### Respawn
 
-## Fase 3 - Reaproveitamento de runtime morto
+1. procurar `ga_enemy_runtime` mortos elegiveis por `spawn_instance_id`
+2. reaproveitar primeiro os mortos
+3. so criar runtime novo quando necessario
+4. resetar stats e posicao
 
-Entregas:
+---
 
-- mortos passam a voltar
-- `respawn_at` ganha papel real
-- cria nova instancia apenas se nao houver runtime reaproveitavel
+## Estrategia de Implementacao
 
-Risco:
+### Fase 1 - Congelar o legado
 
-- medio/alto
+Nao fazer mais evolucao estrutural em:
 
-Essa fase precisa de cuidado porque toca:
+- `ga_spawn_point`
+- `ga_spawn_entry`
+- `ga_enemy_instance`
+- `ga_enemy_instance_stats`
 
-- banco
-- runtime store
-- eventos de socket
+Essas tabelas viram legado.
 
-## Fase 4 - Limpeza dos hardcodes
+### Fase 2 - Criar schema final
 
-Entregas:
+Criar do zero:
 
-- reduzir dependencia de `spawnConfig.js`
-- manter apenas defaults tecnicos
+- `ga_spawn_def`
+- `ga_spawn_def_component`
+- `ga_spawn_instance`
+- `ga_enemy_runtime`
+- `ga_enemy_runtime_stats`
 
-Risco:
+Observacao:
 
-- baixo
+- as tabelas `ga_spawn_def` e `ga_enemy_runtime` ja existem parcialmente
+- ainda assim a recomendacao e alinhar tudo ao desenho final, inclusive nomes, antes de migrar o codigo inteiro
 
-## Decisoes praticas recomendadas
+### Fase 3 - Migracao de dados
 
-### Decisao 1
+Transformar:
 
-Criar `ga_instance_spawn_config`
+- `ga_spawn_point` antigo em `ga_spawn_instance`
+- `ga_spawn_entry` antigo em `ga_spawn_def_component`
+- `ga_enemy_instance` antigo em `ga_enemy_runtime`
+- `ga_enemy_instance_stats` antigo em `ga_enemy_runtime_stats`
 
-Resposta:
+### Fase 4 - Refatorar o codigo
 
-- sim
+Atualizar:
 
-### Decisao 2
+- loaders
+- bootstrap
+- baseline
+- spawn loop
+- respawn
+- patrulha
+- combate
 
-Mover tudo de `ga_spawn_point` para config da instancia
+### Fase 5 - Desligar o legado
 
-Resposta:
+Depois de tudo validado:
 
-- nao
+- parar de ler as tabelas antigas
+- remover models antigos
+- criar migration de limpeza
 
-`ga_spawn_point` ainda deve continuar dono do detalhe local do ponto.
+### Fase 6 - Documentacao operacional
 
-### Decisao 3
+Criar um guia em `MD` ensinando:
 
-Guardar regra em `ga_local`
+- como criar um novo `spawn_def`
+- como criar componentes
+- como colocar um spawn em uma instancia
+- como configurar respawn por instancia
 
-Resposta:
+---
 
-- nao
+## Decisoes de Nome
 
-### Decisao 4
+Nome recomendado para a reformulacao final:
 
-Loop por instancia
+- manter `ga_spawn_def`
+- trocar `ga_spawn_def_entry` por `ga_spawn_def_component`
+- trocar `ga_spawn_point` por `ga_spawn_instance`
+- manter `ga_enemy_runtime`
+- manter `ga_enemy_runtime_stats`
 
-Resposta:
+Motivo:
 
-- nao nesta fase
+- `def` bate com padrao existente
+- `component` comunica melhor "composicao do spawner"
+- `instance` comunica melhor "colocacao concreta no mapa"
+- `runtime` comunica melhor "estado vivo do inimigo"
 
-Um loop global curto e suficiente para a primeira versao boa.
-
-### Decisao 5
-
-Criar nova linha de inimigo toda vez que respawnar
-
-Resposta:
-
-- nao, preferir reaproveitar mortos
+---
 
 ## Riscos
 
-1. manter tick global de 3 minutos inviabiliza qualquer respawn mais fino
+### Risco 1
 
-2. nao calcular `respawn_at` no momento da morte mantem o sistema impreciso
+Migrar codigo sem primeiro fechar nomes definitivos.
 
-3. criar nova linha a cada respawn pode inchar `ga_enemy_instance`
+Mitigacao:
 
-4. misturar regra de instancia com regra de spawn point aumenta confusao
+- fechar o schema final antes da fase pesada de codigo
+
+### Risco 2
+
+Tentar reaproveitar demais o legado e acabar carregando incoerencias antigas.
+
+Mitigacao:
+
+- tratar legado como fonte temporaria de migracao, nao como base de arquitetura
+
+### Risco 3
+
+Criar relacoes ambiguidas entre runtime e configuracao.
+
+Mitigacao:
+
+- runtime sempre pertence a `spawn_instance`
+- composicao sempre pertence a `spawn_def`
+
+---
 
 ## Conclusao
 
-O melhor desenho para o problema atual e:
+A reformulacao final recomendada e esta:
 
-- `ga_spawn_point` continua como configuracao local do ponto
-- `ga_instance_spawn_config` nasce como tabela filha de `ga_instance`
-- `ga_enemy_instance` continua como runtime persistido
-- `respawn_at` passa a ser usado de verdade
-- o loop deixa de ser guiado por hardcode e passa a ser guiado por banco
+1. `ga_spawn_def`
+2. `ga_spawn_def_component`
+3. `ga_spawn_instance`
+4. `ga_enemy_runtime`
+5. `ga_enemy_runtime_stats`
+6. `ga_instance_spawn_config`
 
-Esse desenho preserva a arquitetura atual, reaproveita grande parte do que ja foi construido e cria um caminho limpo para expandir spawn por instancia sem sujar `ga_local` ou `ga_instance`.
+O legado existe e foi confirmado nas migrations, mas ele nao deve mais orientar a arquitetura.
+
+O modulo precisa passar a seguir um desenho previsivel, intuitivo e escalavel, no mesmo espirito dos outros sistemas do jogo.
+
+Esse documento passa a ser a base para a refatoracao final do sistema de spawners.
