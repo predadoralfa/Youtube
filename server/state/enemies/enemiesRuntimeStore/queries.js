@@ -18,34 +18,6 @@ function getEnemiesForInstance(instanceId) {
   return out;
 }
 
-function getAliveEnemiesForSpawnPoint(spawnPointId) {
-  const out = [];
-  for (const enemy of enemiesById.values()) {
-    if (
-      (Number(enemy.spawnPointId) === Number(spawnPointId) ||
-        Number(enemy.spawnInstanceId) === Number(spawnPointId)) &&
-      enemy.status === "ALIVE"
-    ) {
-      out.push(enemy);
-    }
-  }
-  return out;
-}
-
-function getAliveEnemiesForSpawnEntry(spawnPointId, spawnEntryId) {
-  const out = [];
-  for (const enemy of enemiesById.values()) {
-    if (
-      Number(enemy.spawnPointId) === Number(spawnPointId) &&
-      Number(enemy.spawnEntryId) === Number(spawnEntryId) &&
-      enemy.status === "ALIVE"
-    ) {
-      out.push(enemy);
-    }
-  }
-  return out;
-}
-
 function getAliveEnemiesForSpawnInstance(spawnInstanceId) {
   const out = [];
   for (const enemy of enemiesById.values()) {
@@ -56,14 +28,33 @@ function getAliveEnemiesForSpawnInstance(spawnInstanceId) {
   return out;
 }
 
-function getAliveEnemiesForSpawnDefComponent(spawnInstanceId, spawnDefComponentId) {
+function getAliveEnemiesForSpawnDefEnemy(spawnInstanceId, spawnDefEnemyId) {
   const out = [];
   for (const enemy of enemiesById.values()) {
     if (
       Number(enemy.spawnInstanceId) === Number(spawnInstanceId) &&
-      Number(enemy.spawnDefComponentId) === Number(spawnDefComponentId) &&
+      Number(enemy.spawnDefEnemyId) === Number(spawnDefEnemyId) &&
       enemy.status === "ALIVE"
     ) {
+      out.push(enemy);
+    }
+  }
+  return out;
+}
+
+function getEnemyBySpawnInstanceEnemyId(spawnInstanceEnemyId) {
+  for (const enemy of enemiesById.values()) {
+    if (Number(enemy.spawnInstanceEnemyId) === Number(spawnInstanceEnemyId)) {
+      return enemy;
+    }
+  }
+  return null;
+}
+
+function getAliveEnemiesForLegacySpawnPoint(spawnPointId) {
+  const out = [];
+  for (const enemy of enemiesById.values()) {
+    if (Number(enemy.spawnInstanceId) === Number(spawnPointId) && enemy.status === "ALIVE") {
       out.push(enemy);
     }
   }
@@ -73,8 +64,10 @@ function getAliveEnemiesForSpawnDefComponent(spawnInstanceId, spawnDefComponentI
 module.exports = {
   getEnemy,
   getEnemiesForInstance,
-  getAliveEnemiesForSpawnPoint,
-  getAliveEnemiesForSpawnEntry,
   getAliveEnemiesForSpawnInstance,
-  getAliveEnemiesForSpawnDefComponent,
+  getAliveEnemiesForSpawnDefEnemy,
+  getEnemyBySpawnInstanceEnemyId,
+  getAliveEnemiesForSpawnPoint: getAliveEnemiesForLegacySpawnPoint,
+  getAliveEnemiesForSpawnEntry: getAliveEnemiesForSpawnDefEnemy,
+  getAliveEnemiesForSpawnDefComponent: getAliveEnemiesForSpawnDefEnemy,
 };

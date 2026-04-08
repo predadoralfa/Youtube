@@ -5,6 +5,8 @@ const db = require("../../../../models");
 const { loadPlayerCombatStats } = require("../../../runtime/combatLoader");
 const { executeAttack, loadEnemyCombatStats } = require("../../../../service/combatSystem");
 const { markEnemyDead } = require("../../../../service/enemyRespawnService");
+const { removeEnemy } = require("../../../enemies/enemiesRuntimeStore");
+const { emitEnemyDespawn } = require("../../../enemies/enemyEmit");
 
 async function executeServerSideAttack(io, attackerRt, targetEnemy) {
   const userId = attackerRt.userId;
@@ -51,11 +53,10 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
   targetEnemy._hpChanged = true;
 
   try {
-    const enemyStatsRow = await db.GaEnemyRuntimeStats.findByPk(targetEnemy.id);
-    if (enemyStatsRow) {
-      await enemyStatsRow.update({
+    const enemySlotRow = await db.GaSpawnInstanceEnemy.findByPk(targetEnemy.id);
+    if (enemySlotRow) {
+      await enemySlotRow.update({
         hp_current: combatResult.targetHPAfter,
-        hp_max: combatResult.targetHPMax,
       });
     }
     if (combatResult.targetDied) {
@@ -112,6 +113,8 @@ async function executeServerSideAttack(io, attackerRt, targetEnemy) {
 
   if (combatResult.targetDied) {
     targetEnemy.status = "DEAD";
+    removeEnemy(targetEnemy.id);
+    emitEnemyDespawn(io, targetEnemy);
   }
 
   return true;

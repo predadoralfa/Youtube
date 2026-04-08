@@ -9,33 +9,29 @@ async function loadPlayerCombatStats(userId) {
 
 async function loadEnemyCombatStats(enemyInstanceId) {
   try {
-    const enemyRuntime = await db.GaEnemyRuntime.findByPk(enemyInstanceId, {
+    const enemySlot = await db.GaSpawnInstanceEnemy.findByPk(enemyInstanceId, {
       include: [
         {
-          association: "stats",
+          association: "spawnDefEnemy",
           required: true,
-          attributes: [
-            "hp_current",
-            "hp_max",
-            "attack_speed",
-            "move_speed",
-          ],
-        },
-        {
-          association: "enemyDef",
-          required: true,
-          attributes: ["id"],
           include: [
             {
-              association: "baseStats",
+              association: "enemyDef",
               required: true,
-              attributes: [
-                "hp_max",
-                "move_speed",
-                "attack_speed",
-                "attack_power",
-                "defense",
-                "attack_range",
+              attributes: ["id"],
+              include: [
+                {
+                  association: "baseStats",
+                  required: true,
+                  attributes: [
+                    "hp_max",
+                    "move_speed",
+                    "attack_speed",
+                    "attack_power",
+                    "defense",
+                    "attack_range",
+                  ],
+                },
               ],
             },
           ],
@@ -43,21 +39,20 @@ async function loadEnemyCombatStats(enemyInstanceId) {
       ],
     });
 
-    const stats = enemyRuntime?.stats;
-    const baseStats = enemyRuntime?.enemyDef?.baseStats;
-    if (!stats || !baseStats) return null;
+    const baseStats = enemySlot?.spawnDefEnemy?.enemyDef?.baseStats;
+    if (!enemySlot || !baseStats) return null;
 
     return {
-      hpCurrent: Number(stats.hp_current),
-      hpMax: Number(stats.hp_max),
-      attackSpeed: Number(stats.attack_speed),
-      moveSpeed: Number(stats.move_speed),
+      hpCurrent: Number(enemySlot.hp_current),
+      hpMax: Number(baseStats.hp_max),
+      attackSpeed: Number(baseStats.attack_speed),
+      moveSpeed: Number(baseStats.move_speed),
       attackPower: Number(baseStats.attack_power),
       defense: Number(baseStats.defense),
       attackRange: Number(baseStats.attack_range),
     };
   } catch (err) {
-    console.error(`[COMBAT] Error loading enemy runtime stats for ${enemyInstanceId}:`, err);
+    console.error(`[COMBAT] Error loading enemy slot stats for ${enemyInstanceId}:`, err);
     return null;
   }
 }

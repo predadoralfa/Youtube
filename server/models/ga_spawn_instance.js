@@ -66,9 +66,9 @@ module.exports = (sequelize, DataTypes) => {
       onDelete: "RESTRICT",
     });
 
-    GaSpawnInstance.hasMany(models.GaEnemyRuntime, {
+    GaSpawnInstance.hasMany(models.GaSpawnInstanceEnemy, {
       foreignKey: "spawn_instance_id",
-      as: "enemyRuntimes",
+      as: "enemies",
     });
   };
 

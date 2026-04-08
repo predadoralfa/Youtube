@@ -8,7 +8,7 @@ const {
 
 async function markEnemyDead(enemyId, nowMs = Date.now(), tx = null) {
   const run = async (transaction) => {
-    const enemyRuntime = await db.GaEnemyRuntime.findByPk(enemyId, {
+    const enemySlot = await db.GaSpawnInstanceEnemy.findByPk(enemyId, {
       include: [
         {
           association: "spawnInstance",
@@ -34,13 +34,13 @@ async function markEnemyDead(enemyId, nowMs = Date.now(), tx = null) {
       transaction,
     });
 
-    if (!enemyRuntime?.spawnInstance?.spawnDef) {
+    if (!enemySlot?.spawnInstance?.spawnDef) {
       return null;
     }
 
-    const instanceSpawnConfig = resolveInstanceSpawnConfig(enemyRuntime.spawnInstance.instance);
+    const instanceSpawnConfig = resolveInstanceSpawnConfig(enemySlot.spawnInstance.instance);
     const effectiveRespawnMs = computeEffectiveRespawnMs(
-      enemyRuntime.spawnInstance.spawnDef,
+      enemySlot.spawnInstance.spawnDef,
       instanceSpawnConfig
     );
 
@@ -48,7 +48,7 @@ async function markEnemyDead(enemyId, nowMs = Date.now(), tx = null) {
     const respawnAt =
       effectiveRespawnMs > 0 ? new Date(nowMs + effectiveRespawnMs) : deadAt;
 
-    await enemyRuntime.update(
+    await enemySlot.update(
       {
         status: "DEAD",
         dead_at: deadAt,
@@ -58,8 +58,8 @@ async function markEnemyDead(enemyId, nowMs = Date.now(), tx = null) {
     );
 
     return {
-      enemyInstanceId: Number(enemyRuntime.id),
-      spawnInstanceId: Number(enemyRuntime.spawn_instance_id),
+      enemyInstanceId: Number(enemySlot.id),
+      spawnInstanceId: Number(enemySlot.spawn_instance_id),
       deadAt,
       respawnAt,
       effectiveRespawnMs,

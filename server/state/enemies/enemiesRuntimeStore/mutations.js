@@ -11,10 +11,9 @@ function addEnemy(enemy) {
   const record = {
     id,
     instanceId,
-    spawnInstanceId: toNum(enemy.spawnInstanceId ?? enemy.spawnPointId),
-    spawnDefComponentId: toNum(enemy.spawnDefComponentId ?? enemy.spawnEntryId),
-    spawnPointId: toNum(enemy.spawnPointId),
-    spawnEntryId: toNum(enemy.spawnEntryId),
+    spawnInstanceId: toNum(enemy.spawnInstanceId),
+    spawnDefEnemyId: toNum(enemy.spawnDefEnemyId),
+    spawnInstanceEnemyId: toNum(enemy.spawnInstanceEnemyId ?? enemy.id),
     enemyDefId: toNum(enemy.enemyDefId),
     enemyDefCode: enemy.enemyDefCode ?? null,
     enemyDefName: enemy.enemyDefName ?? null,

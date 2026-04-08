@@ -75,9 +75,9 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   GaSpawnDef.associate = (models) => {
-    GaSpawnDef.hasMany(models.GaSpawnDefComponent, {
+    GaSpawnDef.hasMany(models.GaSpawnDefEnemy, {
       foreignKey: "spawn_def_id",
-      as: "components",
+      as: "enemies",
     });
 
     GaSpawnDef.hasMany(models.GaSpawnInstance, {

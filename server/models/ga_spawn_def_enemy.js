@@ -1,8 +1,8 @@
 "use strict";
 
 module.exports = (sequelize, DataTypes) => {
-  const GaSpawnDefComponent = sequelize.define(
-    "GaSpawnDefComponent",
+  const GaSpawnDefEnemy = sequelize.define(
+    "GaSpawnDefEnemy",
     {
       id: {
         type: DataTypes.INTEGER,
@@ -34,7 +34,7 @@ module.exports = (sequelize, DataTypes) => {
       },
     },
     {
-      tableName: "ga_spawn_def_component",
+      tableName: "ga_spawn_def_enemy",
       timestamps: true,
       underscored: true,
       indexes: [
@@ -46,26 +46,26 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
-  GaSpawnDefComponent.associate = (models) => {
-    GaSpawnDefComponent.belongsTo(models.GaSpawnDef, {
+  GaSpawnDefEnemy.associate = (models) => {
+    GaSpawnDefEnemy.belongsTo(models.GaSpawnDef, {
       foreignKey: "spawn_def_id",
       as: "spawnDef",
       onUpdate: "CASCADE",
       onDelete: "RESTRICT",
     });
 
-    GaSpawnDefComponent.belongsTo(models.GaEnemyDef, {
+    GaSpawnDefEnemy.belongsTo(models.GaEnemyDef, {
       foreignKey: "enemy_def_id",
       as: "enemyDef",
       onUpdate: "CASCADE",
       onDelete: "RESTRICT",
     });
 
-    GaSpawnDefComponent.hasMany(models.GaEnemyRuntime, {
-      foreignKey: "spawn_def_component_id",
-      as: "enemyRuntimes",
+    GaSpawnDefEnemy.hasMany(models.GaSpawnInstanceEnemy, {
+      foreignKey: "spawn_def_enemy_id",
+      as: "instanceEnemies",
     });
   };
 
-  return GaSpawnDefComponent;
+  return GaSpawnDefEnemy;
 };

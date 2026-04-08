@@ -69,7 +69,7 @@ function emitEnemyDespawn(io, enemy) {
   console.log(`[EMIT_DESPAWN] 📤 Enemy despawn: id=${enemy.id} displayName=${enemy.displayName} room=${roomId}`);
   
   io.to(roomId).emit("entity:despawn", {
-    entityId: String(enemy.id),
+    entityId: `enemy_${enemy.id}`,
     kind: "ENEMY",
     rev: Number(enemy.rev ?? 0),
   });

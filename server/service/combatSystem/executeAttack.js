@@ -125,15 +125,37 @@ async function executeAttack(params) {
         }
       }
     } else if (targetKind === "ENEMY") {
-      const stats = await db.GaEnemyRuntimeStats.findByPk(targetId);
-      if (stats) {
-        targetHPBefore = Number(stats.hp_current);
-        targetHPMax = Number(stats.hp_max);
+      const enemySlot = await db.GaSpawnInstanceEnemy.findByPk(targetId, {
+        include: [
+          {
+            association: "spawnDefEnemy",
+            required: true,
+            include: [
+              {
+                association: "enemyDef",
+                required: true,
+                include: [
+                  {
+                    association: "baseStats",
+                    required: true,
+                    attributes: ["hp_max"],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+      if (enemySlot) {
+        targetHPBefore = Number(enemySlot.hp_current);
+        targetHPMax = Number(
+          enemySlot.spawnDefEnemy?.enemyDef?.baseStats?.hp_max ?? enemySlot.hp_current
+        );
 
         const newHP = Math.max(0, targetHPBefore - damage);
         targetHPAfter = newHP;
 
-        await stats.update({ hp_current: newHP });
+        await enemySlot.update({ hp_current: newHP });
 
         if (newHP <= 0) {
           await markEnemyDead(targetId, nowMs);

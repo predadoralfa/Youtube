@@ -20,14 +20,13 @@ const defineGaActorResourceState = require("./ga_actor_resource_state");
 
 // SPAWN
 const defineGaSpawnDef = require("./ga_spawn_def");
-const defineGaSpawnDefComponent = require("./ga_spawn_def_component");
+const defineGaSpawnDefEnemy = require("./ga_spawn_def_enemy");
 const defineGaSpawnInstance = require("./ga_spawn_instance");
+const defineGaSpawnInstanceEnemy = require("./ga_spawn_instance_enemy");
 
 // ENEMY
 const defineGaEnemyDef = require("./ga_enemy_def");
 const defineGaEnemyDefStats = require("./ga_enemy_def_stats");
-const defineGaEnemyRuntime = require("./ga_enemy_runtime");
-const defineGaEnemyRuntimeStats = require("./ga_enemy_runtime_stats");
 
 
 // WORLD
@@ -83,14 +82,13 @@ const GaActorResourceState = defineGaActorResourceState(sequelize, DataTypes);
 
 // SPAWN MODELS
 const GaSpawnDef = defineGaSpawnDef(sequelize, DataTypes);
-const GaSpawnDefComponent = defineGaSpawnDefComponent(sequelize, DataTypes);
+const GaSpawnDefEnemy = defineGaSpawnDefEnemy(sequelize, DataTypes);
 const GaSpawnInstance = defineGaSpawnInstance(sequelize, DataTypes);
+const GaSpawnInstanceEnemy = defineGaSpawnInstanceEnemy(sequelize, DataTypes);
 
 // ENEMY MODELS
 const GaEnemyDef = defineGaEnemyDef(sequelize, DataTypes);
 const GaEnemyDefStats = defineGaEnemyDefStats(sequelize, DataTypes);
-const GaEnemyRuntime = defineGaEnemyRuntime(sequelize, DataTypes);
-const GaEnemyRuntimeStats = defineGaEnemyRuntimeStats(sequelize, DataTypes);
 
 // WORLD MODELS
 const GaLocal = defineGaLocal(sequelize, DataTypes);
@@ -139,14 +137,13 @@ const models = {
 
   // SPAWN
   GaSpawnDef,
-  GaSpawnDefComponent,
+  GaSpawnDefEnemy,
   GaSpawnInstance,
+  GaSpawnInstanceEnemy,
 
   // ENEMY
   GaEnemyDef,
   GaEnemyDefStats,
-  GaEnemyRuntime,
-  GaEnemyRuntimeStats,
 
   // USER
   GaUser,

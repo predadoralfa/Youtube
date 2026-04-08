@@ -72,14 +72,9 @@ module.exports = (sequelize, DataTypes) => {
         as: "baseStats",
       });
   
-      GaEnemyDef.hasMany(models.GaSpawnDefComponent, {
+      GaEnemyDef.hasMany(models.GaSpawnDefEnemy, {
         foreignKey: "enemy_def_id",
-        as: "spawnDefComponents",
-      });
-
-      GaEnemyDef.hasMany(models.GaEnemyRuntime, {
-        foreignKey: "enemy_def_id",
-        as: "runtimes",
+        as: "spawnDefEnemies",
       });
     };
   
