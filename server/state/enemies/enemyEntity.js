@@ -55,6 +55,8 @@ function toEntity(enemy) {
     entityId: `enemy_${enemy.id}`,  // ✨ PREFIXO ADICIONADO
     kind: "ENEMY",
     displayName: enemy.displayName ?? enemy.enemyDefName ?? enemy.enemyDefCode ?? "Enemy",
+    visualKind: enemy.visualKind ?? "DEFAULT",
+    assetKey: enemy.assetKey ?? null,
     pos: enemy.pos ?? { x: 0, z: 0 },
     yaw: Number(enemy.yaw ?? 0),
     hp: hpCurrent, // compat legado
@@ -81,6 +83,8 @@ function toDelta(enemy) {
     entityId: `enemy_${enemy.id}`,  // ✨ PREFIXO ADICIONADO
     kind: "ENEMY",
     displayName: enemy.displayName ?? enemy.enemyDefName ?? enemy.enemyDefCode ?? "Enemy",
+    visualKind: enemy.visualKind ?? "DEFAULT",
+    assetKey: enemy.assetKey ?? null,
     pos: enemy.pos ?? { x: 0, z: 0 },
     yaw: Number(enemy.yaw ?? 0),
     hp: hpCurrent, // compat legado

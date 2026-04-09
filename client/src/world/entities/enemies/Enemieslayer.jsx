@@ -1,88 +1,139 @@
-/**
- * EnemiesLayer.jsx
- *
- * Renderiza inimigos replicados via multiplayer.
- * Padrão idêntico a PlayersLayer.jsx
- *
- * Usa worldStoreRef para obter lista de entidades do interesse
- *
- * Props:
- * - worldStoreRef: referência ao store de entidades
- */
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+
+const rabbitModelUrl = new URL("../../../assets/Rabbit.glb", import.meta.url).href;
+const rabbitLoader = new GLTFLoader();
+let rabbitModelPromise = null;
+let rabbitModelTemplate = null;
+
+function normalizeEnemyVisualToken(entity) {
+  const visualKind = String(entity?.visualKind ?? "").trim().toUpperCase();
+  const enemyDefCode = String(entity?.enemyDefCode ?? "").trim().toUpperCase();
+  const enemyDefName = String(entity?.enemyDefName ?? "").trim().toUpperCase();
+  const displayName = String(entity?.displayName ?? "").trim().toUpperCase();
+  const token = `${visualKind} ${enemyDefCode} ${enemyDefName} ${displayName}`;
+
+  if (token.includes("RABBIT") || token.includes("COELHO")) {
+    return "RABBIT";
+  }
+
+  return "DEFAULT";
+}
+
+async function loadRabbitModelTemplate() {
+  if (rabbitModelTemplate) return rabbitModelTemplate;
+
+  if (!rabbitModelPromise) {
+    rabbitModelPromise = rabbitLoader.loadAsync(rabbitModelUrl)
+      .then((gltf) => {
+        rabbitModelTemplate = gltf.scene;
+        return rabbitModelTemplate;
+      })
+      .catch((error) => {
+        rabbitModelPromise = null;
+        throw error;
+      });
+  }
+
+  return rabbitModelPromise;
+}
+
+function cloneAndAlignModel(template, scaleScalar) {
+  const model = template.clone(true);
+  model.scale.setScalar(scaleScalar);
+  model.position.set(0, 0, 0);
+  model.rotation.set(0, 0, 0);
+
+  model.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+
+  const box = new THREE.Box3().setFromObject(model);
+  if (!box.isEmpty()) {
+    const center = box.getCenter(new THREE.Vector3());
+    model.position.x -= center.x;
+    model.position.z -= center.z;
+    model.position.y -= box.min.y;
+  }
+
+  return model;
+}
 
 export function EnemiesLayer({ worldStoreRef }) {
   const store = worldStoreRef?.current;
   const subscribe = store?.subscribe ?? (() => () => {});
   const getVersionSnapshot = () => store?.version ?? 0;
-
   const version = useSyncExternalStore(subscribe, getVersionSnapshot, getVersionSnapshot);
   const entities = useMemo(() => store?.getSnapshot?.() ?? [], [store, version]);
-
-  console.log("[ENEMIES_LAYER] entities total:", entities.length);
-  console.log("[ENEMIES_LAYER] first 3:", entities.slice(0, 3));
-
   const selfId = store?.selfId ?? null;
 
-  // Filtra só inimigos (exclui self e players)
-  // Inimigos têm IDs numéricos, players têm IDs de usuário
   const enemies = useMemo(() => {
     return entities.filter((entity) => {
-      // Exclui self
-      if (selfId && String(selfId) === String(entity.entityId)) {
-        return false;
-      }
-      // Simplificado: incluir tudo que não é self
-      // Você pode adicionar lógica de tipo depois se quiser ser específico
+      if (selfId && String(selfId) === String(entity.entityId)) return false;
       return true;
     });
   }, [entities, selfId]);
 
   return (
     <group name="enemies-layer">
-      {enemies.map((entity) => {
-        const entityId = String(entity.entityId);
-        return (
-          <EnemyEntity
-            key={entityId}
-            entity={entity}
-          />
-        );
-      })}
+      {enemies.map((entity) => (
+        <EnemyEntity key={String(entity.entityId)} entity={entity} />
+      ))}
     </group>
   );
 }
 
-/**
- * EnemyEntity: renderiza um inimigo individual
- */
 function EnemyEntity({ entity }) {
   const x = Number(entity?.pos?.x ?? 0);
   const z = Number(entity?.pos?.z ?? 0);
   const yaw = Number(entity?.yaw ?? 0);
+  const visualToken = normalizeEnemyVisualToken(entity);
+  const [model, setModel] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (visualToken !== "RABBIT") {
+      setModel(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    loadRabbitModelTemplate()
+      .then((template) => {
+        if (cancelled) return;
+        setModel(cloneAndAlignModel(template, 0.42));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error("[ENEMIES_LAYER] Failed to load rabbit model:", error);
+        setModel(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visualToken]);
 
   return (
     <group
-      position={[x, 0.5, z]}
+      position={[x, 0, z]}
       rotation={[0, yaw, 0]}
       name={`enemy-${entity.entityId}`}
     >
-      {/* Esfera colorida do inimigo */}
-      <mesh castShadow receiveShadow>
-        <sphereGeometry args={[0.5, 16, 16]} />
-        <meshStandardMaterial
-          color={"#ff6b35"}
-          metalness={0.3}
-          roughness={0.6}
-        />
-      </mesh>
-
-      {/* Label com nome do inimigo (opcional) */}
-      <group position={[0, 1.0, 0]} scale={0.01}>
-        <sprite name={`enemy-label-${entity.entityId}`}>
-          <spriteMaterial sizeAttenuation={true} />
-        </sprite>
-      </group>
+      {model ? (
+        <primitive object={model} />
+      ) : (
+        <mesh castShadow receiveShadow position={[0, 0.5, 0]}>
+          <sphereGeometry args={[0.5, 16, 16]} />
+          <meshStandardMaterial color={"#ff6b35"} metalness={0.3} roughness={0.6} />
+        </mesh>
+      )}
     </group>
   );
 }

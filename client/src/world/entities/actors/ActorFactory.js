@@ -25,6 +25,32 @@ let appleModelTemplate = null;
 let treeModelPromise = null;
 let treeModelTemplate = null;
 
+function normalizeAssetKey(assetKey) {
+  const raw = String(assetKey ?? "").trim().toUpperCase();
+
+  switch (raw) {
+    case "CHEST_TEST":
+    case "CHEST":
+      return "CHEST";
+    case "TREE_APPLE":
+    case "APPLE_TREE":
+    case "TREE":
+      return "TREE";
+    case "ROCK_NODE_SMALL":
+    case "ROCK":
+      return "ROCK";
+    case "APPLE":
+      return "APPLE";
+    case "GROUND_LOOT":
+    case "ITEM_DROP":
+    case "DROP":
+    case "LOOT_DROP":
+      return "ITEM_DROP";
+    default:
+      return raw || null;
+  }
+}
+
 function normalizeActorType(actorType) {
   const raw = String(actorType ?? "").trim().toUpperCase();
 
@@ -56,6 +82,7 @@ function normalizeActorKind(actorKind) {
 }
 
 function resolveRenderActorType(actor) {
+  const normalizedAssetKey = normalizeAssetKey(actor?.assetKey ?? null);
   const normalizedActorType = normalizeActorType(
     actor?.actorDefCode ??
     actor?.actorType ??
@@ -75,6 +102,10 @@ function resolveRenderActorType(actor) {
     return "ITEM_DROP";
   }
 
+  if (normalizedAssetKey) {
+    return normalizedAssetKey;
+  }
+
   return normalizedActorType;
 }
 
@@ -84,6 +115,7 @@ function applyActorUserData(root, actor, interactive) {
     actorType: actor.actorDefCode ?? actor.actorType,
     actorKind: actor.actorKind ?? null,
     visualHint: actor.visualHint ?? null,
+    assetKey: actor.assetKey ?? null,
     interactive,
   };
 
@@ -245,6 +277,14 @@ async function loadTreeModelTemplate() {
 }
 
 function resolveDroppedItemVisual(actor) {
+  const explicitAssetKey = normalizeAssetKey(actor?.assetKey ?? null);
+  if (explicitAssetKey === "ROCK") {
+    return "ROCK";
+  }
+  if (explicitAssetKey === "APPLE") {
+    return "APPLE";
+  }
+
   const explicitVisualHint = String(actor?.visualHint ?? "").trim().toUpperCase();
   if (explicitVisualHint === "ROCK") {
     return "ROCK";

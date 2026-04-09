@@ -26,6 +26,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(64),
         allowNull: true,
       },
+      asset_key: {
+        type: DataTypes.STRING(128),
+        allowNull: true,
+      },
       default_state_json: {
         type: DataTypes.JSON,
         allowNull: true,
@@ -47,6 +51,7 @@ module.exports = (sequelize, DataTypes) => {
       indexes: [
         { unique: true, fields: ["code"] },
         { fields: ["actor_kind"] },
+        { fields: ["asset_key"] },
         { fields: ["is_active"] },
       ],
     }

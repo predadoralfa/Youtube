@@ -18,6 +18,7 @@ function buildActorPayload(actorRow) {
     actorDefCode: actorDef?.code ?? null,
     actorKind: actorDef?.actor_kind ?? null,
     displayName: actorDef?.name ?? actorDef?.code ?? `Actor ${actor.id}`,
+    assetKey: actorDef?.asset_key ?? null,
     instanceId: Number(actor.instance_id),
     spawnId: actor.actor_spawn_id == null ? null : Number(actor.actor_spawn_id),
     pos: {

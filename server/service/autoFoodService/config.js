@@ -24,7 +24,6 @@ async function loadPersistedAutoFoodConfig(userId, hungerMax = 100) {
     where: {
       user_id: Number(userId),
       macro_code: "AUTO_FOOD",
-      is_active: true,
     },
   });
 
@@ -43,7 +42,7 @@ async function loadPersistedAutoFoodConfig(userId, hungerMax = 100) {
 async function persistAutoFoodConfig(userId, autoFood) {
   const itemInstanceId =
     autoFood?.itemInstanceId == null || autoFood?.itemInstanceId === "" ? null : String(autoFood.itemInstanceId);
-  const hungerThreshold = toFiniteNumber(autoFood?.hungerThreshold, 0);
+  const hungerThreshold = Math.max(0, toFiniteNumber(autoFood?.hungerThreshold, 0));
   const where = {
     user_id: Number(userId),
     macro_code: "AUTO_FOOD",
@@ -55,14 +54,20 @@ async function persistAutoFoodConfig(userId, autoFood) {
     if (existing) {
       await existing.update({
         is_active: false,
-        config_json: null,
+        config_json: {
+          itemInstanceId: null,
+          hungerThreshold,
+        },
         state_json: null,
       });
     } else {
       await db.GaUserMacroConfig.create({
         ...where,
         is_active: false,
-        config_json: null,
+        config_json: {
+          itemInstanceId: null,
+          hungerThreshold,
+        },
         state_json: null,
       });
     }

@@ -30,6 +30,11 @@ module.exports = (sequelize, DataTypes) => {
           allowNull: false,
           defaultValue: "DEFAULT",
         },
+
+        asset_key: {
+          type: DataTypes.STRING(128),
+          allowNull: true,
+        },
   
         collision_radius: {
           type: DataTypes.DECIMAL(10, 3),
@@ -61,6 +66,9 @@ module.exports = (sequelize, DataTypes) => {
           },
           {
             fields: ["visual_kind"],
+          },
+          {
+            fields: ["asset_key"],
           },
         ],
       }
