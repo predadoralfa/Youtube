@@ -1,0 +1,1 @@
+export { ResearchModal } from "./ResearchModalView";

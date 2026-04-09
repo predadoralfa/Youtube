@@ -56,10 +56,13 @@ function getFoodItemInstance(invRt, equipmentRt, itemInstanceId) {
   );
 }
 
-function findConsumableComponent(itemDef) {
+function findEdibleComponent(itemDef) {
   const components = Array.isArray(itemDef?.components) ? itemDef.components : [];
   return (
-    components.find((component) => String(component?.componentType ?? component?.component_type ?? "").toUpperCase() === "CONSUMABLE") ??
+    components.find((component) => {
+      const type = String(component?.componentType ?? component?.component_type ?? "").toUpperCase();
+      return type === "EDIBLE" || type === "CONSUMABLE";
+    }) ??
     null
   );
 }
@@ -79,7 +82,7 @@ function getFoodSpec(invRt, equipmentRt, itemInstanceId) {
     null;
   if (!itemDef || !isFoodLikeCategory(itemDef)) return null;
 
-  const component = findConsumableComponent(itemDef);
+  const component = findEdibleComponent(itemDef);
   const data = component?.dataJson ?? component?.data_json ?? null;
   const effects = Array.isArray(data?.effects) ? data.effects : [];
   const restoreEffect =

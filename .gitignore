@@ -139,3 +139,4 @@ dist
 .pnp.*
 *.bat
 *.sql
+!server/*.bat

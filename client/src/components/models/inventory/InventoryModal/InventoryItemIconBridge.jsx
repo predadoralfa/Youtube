@@ -1,0 +1,1 @@
+export { InventoryItemIcon } from "../InventoryItemIcon";
