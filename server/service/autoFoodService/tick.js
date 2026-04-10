@@ -65,7 +65,7 @@ async function processAutoFoodTick(rt, nowMs) {
 
   const invRt = await ensureInventoryLoaded(rt.userId);
   const eqRt = await ensureEquipmentLoaded(rt.userId);
-  const foodSpec = getFoodSpec(invRt, eqRt, autoFood.itemInstanceId);
+  const foodSpec = await getFoodSpec(invRt, eqRt, autoFood.itemInstanceId);
   if (!foodSpec) {
     autoFood.itemInstanceId = null;
     autoFood.activeConsumption = null;

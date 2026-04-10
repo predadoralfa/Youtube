@@ -10,6 +10,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false
       },
 
+      ground_material_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false
+      },
+
       // NOVO: ground mesh declarativa
       ground_mesh_id: {
         type: DataTypes.INTEGER,
@@ -33,6 +38,7 @@ module.exports = (sequelize, DataTypes) => {
       tableName: "ga_local_visual",
       indexes: [
         { unique: true, fields: ["local_id"] },
+        { fields: ["ground_material_id"] },
         { fields: ["ground_mesh_id"] },
         { fields: ["ground_render_material_id"] }
       ]

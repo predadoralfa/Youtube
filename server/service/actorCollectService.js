@@ -287,6 +287,12 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
       return { ok: false, error: "ITEM_DEF_NOT_FOUND" };
     }
 
+    const itemDefComponents = await db.GaItemDefComponent.findAll({
+      where: { item_def_id: Number(itemDef.id) },
+      transaction: tx,
+      order: [["id", "ASC"]],
+    });
+
     let actorState = null;
     if (actor?.state_json != null) {
       if (typeof actor.state_json === "string") {
@@ -636,7 +642,22 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
               : Number(itemDef.weight)
             : Number(itemDef.unit_weight),
         stackMax: Number(itemDef.stack_max ?? itemDef.stackMax ?? 1) || 1,
-        components: [],
+        components: itemDefComponents.map((component) => ({
+          id: String(component.id),
+          itemDefId: String(component.item_def_id),
+          componentType: component.component_type ?? null,
+          dataJson:
+            typeof component.data_json === "string"
+              ? (() => {
+                  try {
+                    return JSON.parse(component.data_json);
+                  } catch {
+                    return component.data_json;
+                  }
+                })()
+              : component.data_json ?? null,
+          version: Number(component.version ?? 1),
+        })),
       });
     }
 

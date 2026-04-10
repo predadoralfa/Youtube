@@ -114,7 +114,7 @@ async function setAutoFoodConfig(userId, rt, intent = {}) {
   if (nextItemInstanceId) {
     await ensureResearchLoaded(userId, rt);
     const eqRt = await ensureEquipmentLoaded(userId);
-    const foodSpec = getFoodSpec(invRt, eqRt, nextItemInstanceId);
+    const foodSpec = await getFoodSpec(invRt, eqRt, nextItemInstanceId);
     if (!foodSpec) {
       return {
         ok: false,

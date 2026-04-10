@@ -1,6 +1,11 @@
 "use strict";
 
+const db = require("../../models");
 const { toFiniteNumber } = require("./shared");
+const {
+  normalizeItemDefRow,
+  normalizeItemDefComponentRow,
+} = require("../../state/inventory/loader/normalize");
 
 function findSlotByItemInstance(invRt, itemInstanceId) {
   const target = String(itemInstanceId ?? "");
@@ -72,14 +77,44 @@ function isFoodLikeCategory(itemDef) {
   return category === "FOOD" || category === "CONSUMABLE";
 }
 
-function getFoodSpec(invRt, equipmentRt, itemInstanceId) {
+async function ensureItemDefHydrated(invRt, equipmentRt, itemDefId) {
+  const key = String(itemDefId ?? "");
+  if (!key) return null;
+
+  const invMap = invRt?.itemDefsById ?? null;
+  const eqMap = equipmentRt?.itemDefsById ?? null;
+  let itemDef = invMap?.get?.(key) ?? eqMap?.get?.(key) ?? null;
+  const hasComponents = Array.isArray(itemDef?.components) && itemDef.components.length > 0;
+
+  if (itemDef && hasComponents) return itemDef;
+
+  const itemDefRow = await db.GaItemDef.findByPk(Number(key));
+  if (!itemDefRow) return itemDef;
+
+  const hydratedDef = normalizeItemDefRow(itemDefRow);
+  const componentRows = await db.GaItemDefComponent.findAll({
+    where: { item_def_id: Number(key) },
+    order: [["id", "ASC"]],
+  });
+  hydratedDef.components = componentRows.map(normalizeItemDefComponentRow);
+
+  invMap?.set?.(key, hydratedDef);
+  eqMap?.set?.(key, hydratedDef);
+  return hydratedDef;
+}
+
+async function getFoodSpec(invRt, equipmentRt, itemInstanceId) {
   const itemInstance = getFoodItemInstance(invRt, equipmentRt, itemInstanceId);
   if (!itemInstance) return null;
 
-  const itemDef =
+  let itemDef =
     invRt?.itemDefsById?.get?.(String(itemInstance.itemDefId)) ??
     equipmentRt?.itemDefsById?.get?.(String(itemInstance.itemDefId)) ??
     null;
+  itemDef = itemDef ?? await ensureItemDefHydrated(invRt, equipmentRt, itemInstance.itemDefId);
+  if (itemDef && (!Array.isArray(itemDef.components) || itemDef.components.length === 0)) {
+    itemDef = await ensureItemDefHydrated(invRt, equipmentRt, itemInstance.itemDefId);
+  }
   if (!itemDef || !isFoodLikeCategory(itemDef)) return null;
 
   const component = findEdibleComponent(itemDef);
