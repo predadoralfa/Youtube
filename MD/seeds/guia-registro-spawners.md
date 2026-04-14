@@ -22,6 +22,12 @@ Antes de criar um spawner novo, ler primeiro os models reais do backend:
 - [ga_enemy_def.js](/D:/JS-Projects/Youtube/server/models/ga_enemy_def.js)
 - [ga_enemy_def_stats.js](/D:/JS-Projects/Youtube/server/models/ga_enemy_def_stats.js)
 
+Colunas visuais do inimigo:
+
+- `ga_enemy_def.visual_kind`
+- `ga_enemy_def.asset_key`
+- `ga_enemy_def.visual_scale`
+
 Motivo:
 
 - os enums reais vivem nesses models
@@ -47,11 +53,35 @@ Exemplos:
 - `SPAWN_RAPOSAS_FLORESTA`
 - `SPAWN_COELHO_RAPOSA_MISTO`
 
+Exemplo de inimigo com escala visual salva no banco:
+
+```json
+{
+  "code": "WILD_RABBIT",
+  "name": "Wild Rabbit",
+  "status": "ACTIVE",
+  "visual_kind": "RABBIT",
+  "asset_key": "RABBIT",
+  "visual_scale": 3.1,
+  "collision_radius": 0.4
+}
+```
+
+Regra:
+
+- `visual_scale` controla o tamanho visual no client
+- `collision_radius` controla colisao/gameplay
+- os dois campos sao independentes
+- se o valor for ajustado no banco, o client deve refletir esse valor
+
 Campos principais:
 
 - `code`
 - `name`
 - `status`
+- `visual_kind`
+- `asset_key`
+- `visual_scale`
 - `spawn_kind`
 - `shape_kind`
 - `radius`
@@ -179,7 +209,11 @@ Checklist:
 1. confirmar `code` do inimigo
 2. confirmar `name`
 3. confirmar stats base
-4. confirmar `status = ACTIVE`
+4. confirmar `visual_kind`
+5. confirmar `asset_key` quando houver modelo especifico
+6. confirmar `visual_scale` com o tamanho visual desejado
+7. confirmar `collision_radius` coerente com a colisao
+8. confirmar `status = ACTIVE`
 
 ### Passo 2: criar o `ga_spawn_def`
 

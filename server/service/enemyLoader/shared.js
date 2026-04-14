@@ -43,6 +43,7 @@ function normalizeLoadedEnemy({
     displayName: enemyDef?.name ?? enemyDef?.code ?? `Enemy ${row.id}`,
     visualKind: enemyDef?.visual_kind ?? "DEFAULT",
     assetKey: enemyDef?.asset_key ?? null,
+    visualScale: Number(enemyDef?.visual_scale ?? 1),
     collisionRadius: Number(enemyDef?.collision_radius),
     pos: {
       x: Number(position?.x ?? originPos.x),

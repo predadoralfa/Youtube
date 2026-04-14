@@ -19,6 +19,11 @@ function normalizeEnemyAssetKey(enemy) {
   return null;
 }
 
+function resolveEnemyVisualScale(enemy) {
+  const explicit = Number(enemy?.visualScale ?? enemy?.visual_scale ?? 1);
+  return Number.isFinite(explicit) && explicit > 0 ? explicit : 1;
+}
+
 async function loadRabbitTemplate() {
   if (rabbitTemplateScene) return rabbitTemplateScene;
 
@@ -65,13 +70,15 @@ function createFallbackEnemyMesh(enemyId, enemy) {
   );
   mesh.castShadow = true;
   applyMeshMetadata(mesh, enemyId, enemy);
+  mesh.userData.visualScale = resolveEnemyVisualScale(enemy);
   return mesh;
 }
 
 function createRabbitGroup(template, enemyId, enemy) {
   const group = new THREE.Group();
   const model = template.clone(true);
-  model.scale.setScalar(4.2);
+  const visualScale = resolveEnemyVisualScale(enemy);
+  model.scale.setScalar(visualScale);
   model.position.set(0, 0, 0);
   model.rotation.set(0, 0, 0);
 
@@ -85,6 +92,7 @@ function createRabbitGroup(template, enemyId, enemy) {
   alignModelToGround(model);
   group.add(model);
   applyMeshMetadata(group, enemyId, enemy);
+  group.userData.visualScale = visualScale;
   return group;
 }
 
@@ -99,6 +107,7 @@ export function syncEnemyMeshes({ entities, selfKey, scene, state, clearSelectio
   for (const enemy of enemies) {
     const enemyId = String(enemy.entityId);
     const desiredAssetKey = normalizeEnemyAssetKey(enemy);
+    const desiredVisualScale = resolveEnemyVisualScale(enemy);
     nextEnemyIds.add(enemyId);
 
     entityPositions.set(enemyId, {
@@ -109,8 +118,22 @@ export function syncEnemyMeshes({ entities, selfKey, scene, state, clearSelectio
 
     let mesh = state.meshByEnemyIdRef.current.get(enemyId);
     const currentAssetKey = String(mesh?.userData?.assetKey ?? "").trim().toUpperCase() || null;
+    const currentVisualScale = Number(mesh?.userData?.visualScale ?? 1);
+    const scaleChanged = Math.abs(currentVisualScale - desiredVisualScale) > 0.0005;
 
-    if (!mesh || currentAssetKey !== desiredAssetKey) {
+    if (!mesh || currentAssetKey !== desiredAssetKey || scaleChanged) {
+      if (desiredAssetKey === "RABBIT") {
+        console.log(
+          "[SYNC_ENEMY] rabbit apply scale",
+          JSON.stringify({
+            enemyId,
+            desiredVisualScale,
+            currentAssetKey,
+            currentVisualScale,
+            scaleChanged,
+          })
+        );
+      }
       if (mesh) {
         scene.remove(mesh);
         state.meshByEnemyIdRef.current.delete(enemyId);
@@ -118,6 +141,7 @@ export function syncEnemyMeshes({ entities, selfKey, scene, state, clearSelectio
 
       mesh = createFallbackEnemyMesh(enemyId, enemy);
       mesh.userData.assetKey = desiredAssetKey;
+      mesh.userData.visualScale = desiredVisualScale;
       state.meshByEnemyIdRef.current.set(enemyId, mesh);
       scene.add(mesh);
 
@@ -126,9 +150,12 @@ export function syncEnemyMeshes({ entities, selfKey, scene, state, clearSelectio
           .then((template) => {
             const current = state.meshByEnemyIdRef.current.get(enemyId);
             if (!current || current.userData.assetKey !== "RABBIT") return;
+            const currentScale = Number(current.userData.visualScale ?? 1);
+            if (Math.abs(currentScale - desiredVisualScale) > 0.0005) return;
 
             const rabbitGroup = createRabbitGroup(template, enemyId, enemy);
             rabbitGroup.userData.assetKey = "RABBIT";
+            rabbitGroup.userData.visualScale = desiredVisualScale;
             scene.remove(current);
             state.meshByEnemyIdRef.current.set(enemyId, rabbitGroup);
             scene.add(rabbitGroup);
@@ -145,6 +172,7 @@ export function syncEnemyMeshes({ entities, selfKey, scene, state, clearSelectio
       mesh.material.color.set(getEnemyColor(enemy.displayName));
     }
     mesh.userData.displayName = enemy.displayName ?? mesh.userData.displayName ?? null;
+    mesh.userData.visualScale = desiredVisualScale;
 
     const { x, z, yaw } = readPosYawFromEntity(enemy);
     mesh.position.set(x, 0, z);

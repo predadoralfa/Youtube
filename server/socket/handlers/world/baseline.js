@@ -61,7 +61,8 @@ function buildBaseline(rt) {
       console.log(`[BASELINE] ✅ Enemy: ${enemyEntity.entityId} `
         + `displayName=${enemyEntity.displayName} `
         + `pos=(${enemyEntity.pos.x}, ${enemyEntity.pos.z}) `
-        + `status=${enemy.status}`);
+        + `status=${enemy.status} `
+        + `visualScale=${enemyEntity.visualScale ?? "n/a"}`);
       
       others.push(enemyEntity);
     } else {

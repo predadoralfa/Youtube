@@ -120,6 +120,15 @@ export function applyDelta(state, emitChange, delta) {
     hp: nextHpCompat,
     vitals: nextVitals,
     action: delta.action != null ? delta.action : base.action,
+    enemyDefCode:
+      delta.enemyDefCode != null ? delta.enemyDefCode : base.enemyDefCode,
+    enemyDefName:
+      delta.enemyDefName != null ? delta.enemyDefName : base.enemyDefName,
+    visualKind:
+      delta.visualKind != null ? delta.visualKind : base.visualKind,
+    assetKey: delta.assetKey != null ? delta.assetKey : base.assetKey,
+    visualScale:
+      delta.visualScale != null ? Number(delta.visualScale) : base.visualScale,
   };
 
   state.entities.set(entityId, next);

@@ -78,6 +78,7 @@ function buildEnemyStoreRecord({
     enemyDefName: enemyDef.name ?? enemyDef.code,
     displayName: enemyDef.name || enemyDef.code,
     visualKind: enemyDef.visual_kind ?? "DEFAULT",
+    visualScale: Number(enemyDef.visual_scale ?? 1),
     collisionRadius: Number(enemyDef.collision_radius ?? 0.5),
     pos: spawnPos,
     spawnOriginPos: originPos,

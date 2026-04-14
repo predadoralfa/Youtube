@@ -35,7 +35,13 @@ module.exports = (sequelize, DataTypes) => {
           type: DataTypes.STRING(128),
           allowNull: true,
         },
-  
+
+        visual_scale: {
+          type: DataTypes.DECIMAL(10, 3),
+          allowNull: false,
+          defaultValue: 1.0,
+        },
+
         collision_radius: {
           type: DataTypes.DECIMAL(10, 3),
           allowNull: false,
@@ -69,6 +75,9 @@ module.exports = (sequelize, DataTypes) => {
           },
           {
             fields: ["asset_key"],
+          },
+          {
+            fields: ["visual_scale"],
           },
         ],
       }

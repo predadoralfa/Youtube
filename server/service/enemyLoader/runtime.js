@@ -137,7 +137,16 @@ async function loadEnemiesFromSlots(instanceId) {
           {
             association: "enemyDef",
             required: true,
-            attributes: ["id", "code", "name", "visual_kind", "collision_radius", "ai_profile_json"],
+            attributes: [
+              "id",
+              "code",
+              "name",
+              "visual_kind",
+              "asset_key",
+              "visual_scale",
+              "collision_radius",
+              "ai_profile_json",
+            ],
             include: [
               {
                 association: "baseStats",
@@ -168,6 +177,15 @@ async function loadEnemiesFromSlots(instanceId) {
     const runtimeEnemy = toRuntimeEnemy(row);
     if (!runtimeEnemy) continue;
 
+    if (
+      String(runtimeEnemy.enemyDefCode ?? "").toUpperCase() === "WILD_RABBIT" ||
+      String(runtimeEnemy.displayName ?? "").toUpperCase().includes("RABBIT")
+    ) {
+      console.log(
+        `[ENEMY_LOADER] enemy=${runtimeEnemy.id} code=${runtimeEnemy.enemyDefCode} visualScale=${runtimeEnemy.visualScale}`
+      );
+    }
+
     const existing = getEnemy(runtimeEnemy.id);
     if (!existing) {
       addEnemy(runtimeEnemy);
@@ -182,6 +200,7 @@ async function loadEnemiesFromSlots(instanceId) {
     existing.enemyDefName = runtimeEnemy.enemyDefName;
     existing.visualKind = runtimeEnemy.visualKind;
     existing.collisionRadius = runtimeEnemy.collisionRadius;
+    existing.visualScale = runtimeEnemy.visualScale;
     existing.spawnInstanceId = runtimeEnemy.spawnInstanceId;
     existing.spawnDefEnemyId = runtimeEnemy.spawnDefEnemyId;
     existing.spawnInstanceEnemyId = runtimeEnemy.spawnInstanceEnemyId;

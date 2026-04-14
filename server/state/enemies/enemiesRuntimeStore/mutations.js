@@ -20,6 +20,7 @@ function addEnemy(enemy) {
     displayName: enemy.displayName ?? enemy.enemyDefName ?? enemy.enemyDefCode ?? null,
     visualKind: enemy.visualKind ?? "DEFAULT",
     assetKey: enemy.assetKey ?? null,
+    visualScale: toNum(enemy.visualScale, 1),
     collisionRadius: toNum(enemy.collisionRadius, 0.5),
     spawnOriginPos: {
       x: toNum(enemy.spawnOriginPos?.x ?? enemy.homePos?.x ?? enemy.pos?.x, 0),

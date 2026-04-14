@@ -63,6 +63,11 @@ function cloneAndAlignModel(template, scaleScalar) {
   return model;
 }
 
+function resolveEnemyVisualScale(entity) {
+  const explicit = Number(entity?.visualScale ?? entity?.visual_scale ?? 1);
+  return Number.isFinite(explicit) && explicit > 0 ? explicit : 1;
+}
+
 export function EnemiesLayer({ worldStoreRef }) {
   const store = worldStoreRef?.current;
   const subscribe = store?.subscribe ?? (() => () => {});
@@ -92,6 +97,7 @@ function EnemyEntity({ entity }) {
   const z = Number(entity?.pos?.z ?? 0);
   const yaw = Number(entity?.yaw ?? 0);
   const visualToken = normalizeEnemyVisualToken(entity);
+  const visualScale = resolveEnemyVisualScale(entity);
   const [model, setModel] = useState(null);
 
   useEffect(() => {
@@ -107,7 +113,9 @@ function EnemyEntity({ entity }) {
     loadRabbitModelTemplate()
       .then((template) => {
         if (cancelled) return;
-        setModel(cloneAndAlignModel(template, 0.42));
+        const rabbit = cloneAndAlignModel(template, visualScale);
+        rabbit.userData.visualScale = visualScale;
+        setModel(rabbit);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -118,7 +126,7 @@ function EnemyEntity({ entity }) {
     return () => {
       cancelled = true;
     };
-  }, [visualToken]);
+  }, [visualToken, visualScale]);
 
   return (
     <group

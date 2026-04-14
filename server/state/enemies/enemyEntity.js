@@ -57,6 +57,7 @@ function toEntity(enemy) {
     displayName: enemy.displayName ?? enemy.enemyDefName ?? enemy.enemyDefCode ?? "Enemy",
     visualKind: enemy.visualKind ?? "DEFAULT",
     assetKey: enemy.assetKey ?? null,
+    visualScale: Number(enemy.visualScale ?? 1),
     pos: enemy.pos ?? { x: 0, z: 0 },
     yaw: Number(enemy.yaw ?? 0),
     hp: hpCurrent, // compat legado
@@ -85,6 +86,7 @@ function toDelta(enemy) {
     displayName: enemy.displayName ?? enemy.enemyDefName ?? enemy.enemyDefCode ?? "Enemy",
     visualKind: enemy.visualKind ?? "DEFAULT",
     assetKey: enemy.assetKey ?? null,
+    visualScale: Number(enemy.visualScale ?? 1),
     pos: enemy.pos ?? { x: 0, z: 0 },
     yaw: Number(enemy.yaw ?? 0),
     hp: hpCurrent, // compat legado
