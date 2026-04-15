@@ -84,7 +84,7 @@ module.exports = (sequelize, DataTypes) => {
       collect_cooldown_ms: {
         type: DataTypes.INTEGER.UNSIGNED,
         allowNull: false,
-        defaultValue: 1000,
+        defaultValue: 4000,
         comment: "Cooldown em milissegundos entre coletas de actors (ex: BAU)"
       },
 

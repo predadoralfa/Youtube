@@ -29,6 +29,14 @@ export function useGameShellInventoryActions({ emitInventoryAction, emitEquipmen
     [emitInventoryAction]
   );
 
+  const onConsumeInventoryItem = useCallback(
+    ({ itemInstanceId }) =>
+      emitInventoryAction("inv:eat", {
+        itemInstanceId: String(itemInstanceId),
+      }),
+    [emitInventoryAction]
+  );
+
   const onMoveInventoryItem = useCallback(
     ({ fromRole, fromSlotIndex, toRole, toSlotIndex, qty }) =>
       emitInventoryAction("inv:move", {
@@ -91,6 +99,7 @@ export function useGameShellInventoryActions({ emitInventoryAction, emitEquipmen
     onPickupInventoryItem,
     onPlaceHeldItem,
     onSplitInventoryItem,
+    onConsumeInventoryItem,
     onMoveInventoryItem,
     onCancelHeldState,
     onSetAutoFoodMacro,

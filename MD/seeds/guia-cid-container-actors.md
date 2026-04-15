@@ -27,9 +27,16 @@ Campos mais importantes:
 - `code`: CID do container
 - `name`: nome humano
 - `slot_count`: quantidade de slots
-- `max_weight`: limite de peso, quando usado
+- `max_weight`: capacidade maxima de peso daquele container
 - `allowed_categories_mask`: filtro de categorias, quando usado
 - `is_active`: ativacao do tipo
+
+Regra de capacidade:
+
+- a capacidade total do jogador e a soma dos `max_weight` de todos os containers ativos dele
+- `HAND_L` e `HAND_R` devem ter `2.5` kg cada
+- `BASKET` deve ter `10` kg
+- a tela de inventario precisa refletir essa soma, nao um valor fixo do personagem
 
 Exemplos de CID:
 
@@ -114,7 +121,7 @@ await queryInterface.bulkInsert("ga_container_def", [
     code: "CHEST_TEST",
     name: "Test Chest",
     slot_count: 8,
-    max_weight: null,
+    max_weight: 30,
     allowed_categories_mask: null,
     is_active: true,
   },
@@ -200,6 +207,7 @@ O fluxo usa `default_container_def_id` para criar container automaticamente quan
 Antes de criar um actor com container, confirme:
 
 - o `ga_container_def.code` existe
+- o `ga_container_def.max_weight` foi definido para a capacidade desejada
 - o `ga_actor_def.code` existe
 - o `ga_actor_def.default_container_def_id` aponta para o container certo
 - o `ga_actor_spawn` foi criado

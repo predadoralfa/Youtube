@@ -73,6 +73,30 @@ async function ensureStarterInventory(userIdRaw, tx) {
     }
 
     const containerId = owner.container_id;
+    const container = await db.GaContainer.findByPk(containerId, {
+      ...lockOptions,
+    });
+
+    if (!container) {
+      const replacement = await db.GaContainer.create(
+        {
+          container_def_id: def.id,
+          state: "ACTIVE",
+          rev: 1,
+        },
+        queryOptions
+      );
+
+      await owner.update({ container_id: replacement.id }, queryOptions);
+    } else if (Number(container.container_def_id) !== Number(def.id)) {
+      await container.update(
+        {
+          container_def_id: def.id,
+          state: "ACTIVE",
+        },
+        queryOptions
+      );
+    }
 
     // 3) garante slots vazios (idempotente)
     for (let i = 0; i < slotCount; i++) {

@@ -12,7 +12,6 @@ export function createResearchBoardInteractions({
   const handleBoardWheel = (e) => {
     const board = boardRef.current;
     if (!board) return;
-    e.preventDefault();
     e.stopPropagation();
 
     const prevZoom = zoomRef.current;

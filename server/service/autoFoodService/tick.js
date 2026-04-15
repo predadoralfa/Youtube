@@ -11,14 +11,16 @@ const {
 const { ensureResearchLoaded, hasCapability } = require("../researchService");
 const { persistAutoFoodConfig } = require("./config");
 const { getFoodSpec } = require("./foodSpec");
-const { consumeOneConfiguredFood } = require("./actions");
+const { startFoodConsumption } = require("./actions");
 const { clamp, getFoodMacroState, toFiniteNumber } = require("./shared");
 
 async function processAutoFoodTick(rt, nowMs) {
   if (!rt) return { changed: false, inventoryChanged: false };
 
   const autoFood = getFoodMacroState(rt);
-  if (!autoFood.itemInstanceId) return { changed: false, inventoryChanged: false };
+  if (!autoFood.itemInstanceId && !autoFood.activeConsumption) {
+    return { changed: false, inventoryChanged: false };
+  }
 
   const now = toFiniteNumber(nowMs, Date.now());
   const hungerMax = Math.max(0, toFiniteNumber(readRuntimeHungerMax(rt), 0));
@@ -86,7 +88,10 @@ async function processAutoFoodTick(rt, nowMs) {
     return { changed: true, inventoryChanged: false };
   }
 
-  const consumeResult = await consumeOneConfiguredFood(rt.userId, autoFood.itemInstanceId);
+  const consumeResult = await startFoodConsumption(rt, autoFood.itemInstanceId, {
+    nowMs: now,
+    skipLock: true,
+  });
   if (!consumeResult?.ok) {
     autoFood.itemInstanceId = null;
     autoFood.activeConsumption = null;
@@ -96,14 +101,6 @@ async function processAutoFoodTick(rt, nowMs) {
     return { changed: true, inventoryChanged: false };
   }
 
-  autoFood.activeConsumption = {
-    itemInstanceId: String(autoFood.itemInstanceId),
-    startedAtMs: now,
-    consumeTimeMs: foodSpec.consumeTimeMs,
-    cooldownMs: foodSpec.cooldownMs,
-    restoreHunger: foodSpec.restoreHunger,
-    appliedRestore: 0,
-  };
   markRuntimeDirty(rt.userId, now);
   return { changed: true, inventoryChanged: true };
 }

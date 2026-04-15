@@ -4,6 +4,8 @@ const { getInventory } = require("../../inventory/store");
 const { ensureInventoryLoaded } = require("../../inventory/loader");
 const { getEquipment } = require("../../equipment/store");
 const { ensureEquipmentLoaded } = require("../../equipment/loader");
+const { getRuntime } = require("../../runtime/store");
+const { ensureResearchLoaded } = require("../../../service/researchService");
 const { computeCarryWeight } = require("../../inventory/weight");
 
 async function resolveCarryWeightContext(userId) {
@@ -17,20 +19,17 @@ async function resolveCarryWeightContext(userId) {
     eqRt = await ensureEquipmentLoaded(userId);
   }
 
-  const carryWeightMax = Number.isFinite(Number(invRt?.carryWeight))
-    ? Number(invRt.carryWeight)
-    : 20;
-  let carryWeightCurrent = Number(invRt?.carryWeightCurrent);
+  const runtime = getRuntime(String(userId));
+  const research = runtime?.research ?? (await ensureResearchLoaded(userId, runtime ?? { userId }));
+  const computed = computeCarryWeight(invRt, eqRt, research);
+  const carryWeightCurrent = Number(computed.current ?? 0);
+  const carryWeightMax = Number(computed.max ?? 0);
 
-  if (!Number.isFinite(carryWeightCurrent)) {
-    const computed = computeCarryWeight(invRt, eqRt);
-    carryWeightCurrent = Number(computed.current ?? 0);
-    if (invRt) {
-      invRt.carryWeightCurrent = carryWeightCurrent;
-      invRt.carryWeightRatio = carryWeightMax > 0 ? carryWeightCurrent / carryWeightMax : 0;
-      invRt.carryWeightPercent = Math.min(100, Math.max(0, invRt.carryWeightRatio * 100));
-      invRt.carryWeightMax = carryWeightMax;
-    }
+  if (invRt) {
+    invRt.carryWeightCurrent = carryWeightCurrent;
+    invRt.carryWeightRatio = carryWeightMax > 0 ? carryWeightCurrent / carryWeightMax : 0;
+    invRt.carryWeightPercent = Math.min(100, Math.max(0, invRt.carryWeightRatio * 100));
+    invRt.carryWeightMax = carryWeightMax;
   }
 
   return {

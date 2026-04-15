@@ -23,6 +23,10 @@ function setInventory(userId, inv) {
   inventoryByUser.set(String(userId), inv);
 }
 
+function getAllInventories() {
+  return Array.from(inventoryByUser.values());
+}
+
 function clearInventory(userId) {
   const key = String(userId);
   inventoryByUser.delete(key);
@@ -69,6 +73,7 @@ async function withInventoryLock(userId, fn) {
 
 module.exports = {
   getInventory,
+  getAllInventories,
   setInventory,
   clearInventory,
   markDirty,

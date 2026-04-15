@@ -10,13 +10,17 @@ export function createMenuHandlers({
   handleUnequip,
   onSplitInventoryItem,
   onDropItemToWorld,
+  onConsumeInventoryItem,
 }) {
+  const resolveItemDef = (slotCtx) => slotCtx?.itemDef ?? slotCtx?.item ?? null;
+
   const openContextMenu = (slotCtx, event) => {
     event.preventDefault?.();
     event.stopPropagation?.();
     const containerId = slotCtx?.containerId ?? slotCtx?.sourceContainerId ?? null;
     const slotIndex = slotCtx?.slotIndex ?? slotCtx?.sourceSlotIndex ?? null;
-    const stackMax = Number(slotCtx?.itemDef?.stackMax ?? slotCtx?.item?.stackMax ?? 1);
+    const itemDef = resolveItemDef(slotCtx);
+    const stackMax = Number(itemDef?.stackMax ?? slotCtx?.item?.stackMax ?? 1);
     const canSplit = Boolean(stackMax > 1 && Number(slotCtx?.qty ?? 0) > 1);
     if (heldStateActive || !slotCtx?.itemInstanceId) return;
 
@@ -95,6 +99,14 @@ export function createMenuHandlers({
     setLocalNotice(ok ? null : "Drop is not available right now");
   };
 
+  const handleContextEat = () => {
+    const slot = contextMenu?.slot;
+    setContextMenu(null);
+    setSplitDraft(null);
+    const ok = slot?.itemInstanceId ? onConsumeInventoryItem?.({ itemInstanceId: slot.itemInstanceId }) : false;
+    setLocalNotice(ok ? null : "Eat is not available right now");
+  };
+
   const handleContextRemove = () => {
     const slot = contextMenu?.slot;
     setContextMenu(null);
@@ -113,6 +125,7 @@ export function createMenuHandlers({
     openSplitModal,
     submitSplit,
     handleContextDrop,
+    handleContextEat,
     handleContextRemove,
   };
 }

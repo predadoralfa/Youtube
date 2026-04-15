@@ -1,5 +1,5 @@
 import { InventoryItemIcon } from "../InventoryItemIconBridge";
-import { getAllowedSlotsForDef, getDefIdFromInstance, getItemLabel } from "../helpers";
+import { getAllowedSlotsForDef, getDefIdFromInstance, getItemLabel, isFoodItem } from "../helpers";
 
 export function InventoryGridSection({
   containers,
@@ -48,6 +48,15 @@ export function InventoryGridSection({
                     itemName = `INSTANCE_${instanceId}`;
                   }
                 }
+                const canEat =
+                  instanceId != null
+                    ? Boolean(
+                        itemDef?.canEat ||
+                          ["FOOD", "CONSUMABLE"].includes(String(itemDef?.category ?? "").toUpperCase()) ||
+                          String(itemDef?.code ?? "").toUpperCase().startsWith("FOOD-") ||
+                          isFoodItem(inventoryIndex, instanceId)
+                      )
+                    : false;
 
                 const isHeldSource =
                   heldStateActive &&
@@ -96,7 +105,7 @@ export function InventoryGridSection({
                     onMouseDown={(event) => {
                       if (
                         openContextMenuFromMouseDown(
-                          { containerId, slotIndex, itemInstanceId: instanceId, qty, itemName, itemDef },
+                          { containerId, slotIndex, itemInstanceId: instanceId, qty, itemName, itemDef, canEat },
                           event
                         )
                       ) {
@@ -109,8 +118,17 @@ export function InventoryGridSection({
                         event.preventDefault?.();
                         return;
                       }
+                      console.log("[INV][GRID] contextmenu", {
+                        containerId,
+                        slotIndex,
+                        itemInstanceId: instanceId,
+                        itemCode: itemDef?.code ?? null,
+                        itemCategory: itemDef?.category ?? null,
+                        canEat,
+                        qty,
+                      });
                       openContextMenu(
-                        { containerId, slotIndex, itemInstanceId: instanceId, qty, itemName, itemDef },
+                        { containerId, slotIndex, itemInstanceId: instanceId, qty, itemName, itemDef, canEat },
                         event
                       );
                     }}

@@ -1,6 +1,7 @@
 "use strict";
 
 const { buildEquipmentFull } = require("../../equipment/fullPayload");
+const { getRuntime } = require("../../runtime/store");
 const { computeCarryWeight } = require("../weight");
 
 function uniq(arr) {
@@ -17,6 +18,25 @@ function stableSortBy(arr, pick) {
   });
 }
 
+function hasRestoreHungerEffect(def) {
+  const components = Array.isArray(def?.components) ? def.components : [];
+  return components.some((component) => {
+    const type = String(component?.componentType ?? component?.component_type ?? "").toUpperCase();
+    if (type !== "EDIBLE" && type !== "CONSUMABLE") return false;
+    const data = component?.dataJson ?? component?.data_json ?? null;
+    const effects = Array.isArray(data?.effects) ? data.effects : [];
+    return effects.some((effect) => String(effect?.type ?? "").toUpperCase() === "RESTORE_HUNGER");
+  });
+}
+
+function isFoodDef(def) {
+  const category = String(def?.category ?? "").toUpperCase();
+  if (category !== "FOOD" && category !== "CONSUMABLE") {
+    return String(def?.code ?? "").toUpperCase().startsWith("FOOD-");
+  }
+  return hasRestoreHungerEffect(def) || category === "FOOD";
+}
+
 function buildItemDefPayload(def) {
   return {
     id: String(def.id),
@@ -25,6 +45,7 @@ function buildItemDefPayload(def) {
     category: def.category ?? null,
     weight: def.weight ?? null,
     stackMax: def.stackMax ?? 1,
+    canEat: isFoodDef(def),
     components: Array.isArray(def.components)
       ? stableSortBy(def.components, (c) => String(c.id)).map((c) => ({
           id: String(c.id),
@@ -133,6 +154,23 @@ function buildInventoryFull(invRt, equipmentRt = null) {
     ...buildItemDefPayload(d),
   }));
 
+  if (process.env.NODE_ENV !== "production") {
+    const defById = new Map(itemDefsPayload.map((def) => [String(def.id), def]));
+    for (const inst of itemInstancesPayload) {
+      if (String(inst.itemInstanceId) !== "103") continue;
+      const def = defById.get(String(inst.itemDefId)) ?? null;
+      console.log("[INV][FULL] item snapshot", {
+        itemInstanceId: inst.itemInstanceId,
+        itemDefId: inst.itemDefId,
+        code: def?.code ?? null,
+        name: def?.name ?? null,
+        category: def?.category ?? null,
+        canEat: def?.canEat ?? null,
+        components: Array.isArray(def?.components) ? def.components.map((c) => c.componentType ?? null) : [],
+      });
+    }
+  }
+
   const heldStatePayload = heldState
     ? {
         mode: heldState.mode ?? "PICK",
@@ -155,8 +193,9 @@ function buildInventoryFull(invRt, equipmentRt = null) {
     : null;
 
   const equipment = equipmentRt && equipmentRt.userId ? buildEquipmentFull(equipmentRt, invRt) : null;
-  const computedCarryWeight = computeCarryWeight(invRt, equipmentRt);
-  const carryWeightMax = Number.isFinite(Number(invRt?.carryWeight)) ? Number(invRt.carryWeight) : 20;
+  const research = getRuntime(invRt?.userId)?.research ?? null;
+  const computedCarryWeight = computeCarryWeight(invRt, equipmentRt, research);
+  const carryWeightMax = computedCarryWeight.max;
   const carryWeightCurrent = computedCarryWeight.current;
   const carryWeightRatio = carryWeightMax > 0 ? carryWeightCurrent / carryWeightMax : 0;
 

@@ -26,8 +26,9 @@ export function getItemLabel(inst, def) {
 }
 
 export function buildInventoryIndex(snapshot) {
-  const instances = snapshot?.itemInstances || snapshot?.item_instances || [];
-  const defs = snapshot?.itemDefs || snapshot?.item_defs || [];
+  const source = snapshot?.inventory ?? snapshot ?? null;
+  const instances = source?.itemInstances || source?.item_instances || [];
+  const defs = source?.itemDefs || source?.item_defs || [];
   const instanceMap = new Map();
   const defMap = new Map();
 
@@ -45,7 +46,8 @@ export function buildInventoryIndex(snapshot) {
 }
 
 export function buildEquipmentIndex(snapshot) {
-  const slots = Array.isArray(snapshot?.slots) ? snapshot.slots : [];
+  const source = snapshot?.equipment ?? snapshot ?? null;
+  const slots = Array.isArray(source?.slots) ? source.slots : [];
   const slotMap = new Map();
   for (const slot of slots) {
     const code = slot?.slotCode ?? slot?.slot_code ?? null;
@@ -70,13 +72,21 @@ export function formatWeight(value) {
 export function buildSlotList(slotCodes, equipmentIndex, fallbackKind) {
   return slotCodes.map((slotCode) => {
     const slot = equipmentIndex.get(slotCode) ?? null;
+    const itemDef = slot?.item ?? null;
     return {
       slotCode,
       slotName: slot?.slotName ?? slotCode,
       slotKind: slot?.slotKind ?? fallbackKind,
       itemInstanceId: slot?.itemInstanceId ?? null,
       qty: Number(slot?.qty ?? 0),
-      item: slot?.item ?? null,
+      item: itemDef,
+      itemDef,
+      canEat: Boolean(
+        itemDef &&
+          (itemDef?.canEat ||
+            ["FOOD", "CONSUMABLE"].includes(String(itemDef?.category ?? "").toUpperCase()) ||
+            String(itemDef?.code ?? "").toUpperCase().startsWith("FOOD-"))
+      ),
       sourceContainerId: slot?.sourceContainerId ?? null,
       sourceSlotIndex: slot?.sourceSlotIndex ?? null,
       sourceRole: slot?.sourceRole ?? slotCode,

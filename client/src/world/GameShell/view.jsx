@@ -46,6 +46,7 @@ export function GameShellView({ state, actions }) {
         onUnequipItemFromSlot={actions.onUnequipItemFromSlot}
         onSwapEquipmentSlots={actions.onSwapEquipmentSlots}
         onDropItemToWorld={actions.emitInventoryDrop}
+        onConsumeInventoryItem={actions.onConsumeInventoryItem}
         onSetAutoFoodMacro={actions.onSetAutoFoodMacro}
       />
 

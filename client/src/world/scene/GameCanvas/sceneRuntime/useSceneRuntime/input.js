@@ -6,7 +6,7 @@ import { toWorldDir } from "../../helpers";
 export function setupSceneInput(renderer, cameraApi, tools, onInputIntent) {
   const bus = createInputBus();
   const unbindInputs = bindInputs(renderer.domElement, bus);
-  let moveDir = { x: 0, z: 0 };
+  let moveInputDir = { x: 0, z: 0 };
 
   const off = bus.on((intent) => {
     if (!intent || typeof intent !== "object") return;
@@ -24,12 +24,16 @@ export function setupSceneInput(renderer, cameraApi, tools, onInputIntent) {
     if (intent.type === IntentType.CAMERA_ZOOM) return cameraApi.applyZoom(intent.delta);
     if (intent.type === IntentType.CAMERA_ORBIT) return cameraApi.applyOrbit(intent.dx, intent.dy);
     if (intent.type === IntentType.MOVE_DIRECTION) {
-      moveDir = toWorldDir(intent?.dir ?? { x: 0, z: 0 }, cameraApi.getState().yaw);
+      moveInputDir = intent?.dir ?? { x: 0, z: 0 };
       return;
     }
 
     if (intent.type === IntentType.CLICK_PRIMARY) {
-      return tools.emitClick(intent.clientX, intent.clientY, moveDir);
+      return tools.emitClick(
+        intent.clientX,
+        intent.clientY,
+        toWorldDir(moveInputDir, cameraApi.getState().yaw)
+      );
     }
 
     onInputIntent?.(intent);
@@ -39,7 +43,7 @@ export function setupSceneInput(renderer, cameraApi, tools, onInputIntent) {
     off,
     unbindInputs,
     getMoveDir() {
-      return moveDir;
+      return toWorldDir(moveInputDir, cameraApi.getState().yaw);
     },
   };
 }

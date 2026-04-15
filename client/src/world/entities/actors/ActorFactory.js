@@ -10,11 +10,13 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 const chestModelUrl = new URL("../../../assets/Chest.glb", import.meta.url).href;
 const rockModelUrl = new URL("../../../assets/Rock.glb", import.meta.url).href;
 const appleModelUrl = new URL("../../../assets/Apple.glb", import.meta.url).href;
+const grassModelUrl = new URL("../../../assets/Grass.glb", import.meta.url).href;
 const treeModelUrl = new URL("../../../assets/Apple tree.glb", import.meta.url).href;
 
 const chestLoader = new GLTFLoader();
 const rockLoader = new GLTFLoader();
 const appleLoader = new GLTFLoader();
+const grassLoader = new GLTFLoader();
 const treeLoader = new GLTFLoader();
 let chestModelPromise = null;
 let chestModelTemplate = null;
@@ -22,6 +24,8 @@ let rockModelPromise = null;
 let rockModelTemplate = null;
 let appleModelPromise = null;
 let appleModelTemplate = null;
+let grassModelPromise = null;
+let grassModelTemplate = null;
 let treeModelPromise = null;
 let treeModelTemplate = null;
 
@@ -36,11 +40,18 @@ function normalizeAssetKey(assetKey) {
     case "APPLE_TREE":
     case "TREE":
       return "TREE";
+    case "FIBER_PATCH":
+    case "GRASS_PATCH":
+      return "GRASS";
     case "ROCK_NODE_SMALL":
     case "ROCK":
       return "ROCK";
     case "APPLE":
       return "APPLE";
+    case "FIBER":
+    case "GRASS":
+    case "GRAMA":
+      return "GRASS";
     case "GROUND_LOOT":
     case "ITEM_DROP":
     case "DROP":
@@ -69,6 +80,9 @@ function normalizeActorType(actorType) {
     case "APPLE_TREE":
     case "TREE":
       return "TREE";
+    case "FIBER_PATCH":
+    case "GRASS_PATCH":
+      return "GRASS";
     case "NPC":
       return "NPC";
     default:
@@ -258,6 +272,24 @@ async function loadAppleModelTemplate() {
   return appleModelPromise;
 }
 
+async function loadGrassModelTemplate() {
+  if (grassModelTemplate) return grassModelTemplate;
+
+  if (!grassModelPromise) {
+    grassModelPromise = grassLoader.loadAsync(grassModelUrl)
+      .then((gltf) => {
+        grassModelTemplate = gltf.scene;
+        return grassModelTemplate;
+      })
+      .catch((error) => {
+        grassModelPromise = null;
+        throw error;
+      });
+  }
+
+  return grassModelPromise;
+}
+
 async function loadTreeModelTemplate() {
   if (treeModelTemplate) return treeModelTemplate;
 
@@ -302,6 +334,9 @@ function resolveDroppedItemVisual(actor) {
   }
   if (token.includes("APPLE") || token.includes("MACA")) {
     return "APPLE";
+  }
+  if (token.includes("FIBER") || token.includes("GRASS") || token.includes("GRAMA")) {
+    return "GRASS";
   }
 
   const normalizedActorType = normalizeActorType(
@@ -433,6 +468,33 @@ export function createDroppedItemMesh(actor) {
     return group;
   }
 
+  if (visual === "GRASS") {
+    loadGrassModelTemplate()
+      .then((template) => {
+        const model = template.clone(true);
+        model.scale.setScalar(0.2 * scaleBoost);
+        model.position.set(0, 0, 0);
+        model.rotation.set(0, 0, 0);
+
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+
+        alignModelToGround(model);
+        applyActorUserData(model, actor, true);
+        group.add(model);
+      })
+      .catch((error) => {
+        console.error("[ACTOR_FACTORY] Failed to load grass model:", error);
+        group.add(createDroppedItemFallbackMesh(actor));
+      });
+
+    return group;
+  }
+
   const fallback = createDroppedItemFallbackMesh(actor);
   fallback.scale.setScalar(scaleBoost);
   group.add(fallback);
@@ -490,6 +552,39 @@ export function createTreeMesh(actor) {
         foliage.position.y = y;
         group.add(foliage);
       }
+    });
+
+  return group;
+}
+
+/**
+ * Cria um mesh para GRASS / Fiber Patch
+ */
+export function createGrassMesh(actor) {
+  const group = new THREE.Group();
+  applyActorUserData(group, actor, true);
+
+  loadGrassModelTemplate()
+    .then((template) => {
+      const model = template.clone(true);
+      model.scale.setScalar(0.65);
+      model.position.set(0, 0, 0);
+      model.rotation.set(0, 0, 0);
+
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      alignModelToGround(model);
+      applyActorUserData(model, actor, true);
+      group.add(model);
+    })
+    .catch((error) => {
+      console.error("[ACTOR_FACTORY] Failed to load grass actor model:", error);
+      group.add(createDroppedItemFallbackMesh(actor));
     });
 
   return group;
@@ -567,6 +662,8 @@ export function createActorMesh(actor) {
       return createDroppedItemMesh(actor);
     case "TREE":
       return createTreeMesh(actor);
+    case "GRASS":
+      return createGrassMesh(actor);
     case "NPC":
       return createNPCMesh(actor);
     default:

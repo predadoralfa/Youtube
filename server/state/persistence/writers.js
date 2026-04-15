@@ -156,7 +156,10 @@ async function flushUserStats(userId, now, { force = false } = {}) {
     const staminaCurrentRaw = readRuntimeCombatField(rt, "staminaCurrent", 100);
     const staminaMax = readRuntimeCombatField(rt, "staminaMax", 100);
     const staminaBucket = resolveStaminaPersistBucket(staminaCurrentRaw, staminaMax);
-    const staminaCurrent = staminaBucket * (staminaMax / 4);
+    const staminaCurrent = Math.max(
+      0,
+      Math.min(staminaMax, Math.round(staminaCurrentRaw))
+    );
 
     const payload = {
       hp_current: readRuntimeCombatField(rt, "hpCurrent", 100),

@@ -96,10 +96,27 @@ async function ensureUserResearchRows(userId, defs, transaction = null) {
 }
 
 function buildResearchRuntime(defs, userRows) {
+  const defById = new Map(defs.map((def) => [Number(def.id), def]));
   const userByDefId = new Map(userRows.map((row) => [Number(row.research_def_id), row]));
 
   const studies = defs.map((def) => {
     const row = userByDefId.get(Number(def.id));
+    const prerequisiteResearchDefId = toFiniteNumber(def.prerequisite_research_def_id ?? def.prerequisiteResearchDefId, 0) || null;
+    const prerequisiteLevel = clamp(
+      Math.floor(toFiniteNumber(def.prerequisite_level ?? def.prerequisiteLevel, 1)),
+      1,
+      Math.max(1, Number(def.max_level ?? 1))
+    );
+    const prerequisiteDef = prerequisiteResearchDefId ? defById.get(Number(prerequisiteResearchDefId)) ?? null : null;
+    const prerequisiteRow = prerequisiteDef ? userByDefId.get(Number(prerequisiteDef.id)) ?? null : null;
+    const prerequisiteCurrentLevel = prerequisiteDef
+      ? clamp(
+          toFiniteNumber(prerequisiteRow?.current_level, 0),
+          0,
+          Math.max(0, Number(prerequisiteDef.max_level ?? 1))
+        )
+      : 0;
+    const isVisible = !prerequisiteDef || prerequisiteCurrentLevel >= prerequisiteLevel;
     const levels = (Array.isArray(def.levels) ? def.levels : []).map((level) => ({
       level: Number(level.level),
       studyTimeMs: toFiniteNumber(level.study_time_ms, 0),
@@ -151,6 +168,11 @@ function buildResearchRuntime(defs, userRows) {
             category: def.itemDef.category,
           }
         : null,
+      prerequisiteResearchDefId,
+      prerequisiteResearchCode: prerequisiteDef?.code ?? null,
+      prerequisiteResearchName: prerequisiteDef?.name ?? null,
+      prerequisiteLevel,
+      isVisible,
       dirty: false,
       forcePersist: false,
       lastPersistBucket: Math.floor(progressMs / PROGRESS_PERSIST_STEP_MS),
@@ -163,6 +185,7 @@ function buildResearchRuntime(defs, userRows) {
     study.canStart =
       study.currentLevel < study.maxLevel &&
       study.status !== STATUS_RUNNING &&
+      study.isVisible &&
       (!running || running.code === study.code);
   }
 

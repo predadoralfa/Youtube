@@ -20,6 +20,7 @@ export function formatDuration(ms) {
 export function resolveNodeTone(code) {
   const normalized = String(code ?? "").toUpperCase();
   if (normalized.includes("APPLE")) return "apple";
+  if (normalized.includes("FIBER") || normalized.includes("GRASS")) return "fiber";
   if (normalized.includes("SHELTER")) return "shelter";
   return "stone";
 }

@@ -8,6 +8,8 @@ Ter um item no inventario nao significa automaticamente saber usa-lo.
 Exemplos iniciais:
 
 - `APPLE` nivel 1 libera comer maca e configurar maca no macro de auto food.
+- `APPLE` nivel 2 abre a ramificacao de `BASKET`.
+- `BASKET` nivel 1 libera o craft da cesta.
 - `STONE` nivel 1 libera o craft da arma `WEAPON-STONE-SLING`.
 
 Regra central:

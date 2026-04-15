@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { buildInventoryCounts } from "../../helpers/inventoryCounts";
 import { deriveLiveStudy, resolveNodeTone } from "../../helpers/study";
+import { buildStudyTree, flattenStudyTree } from "./tree";
 
 export function useResearchModalDerivedState({
   snapshot,
@@ -11,7 +12,7 @@ export function useResearchModalDerivedState({
   const nodes = useMemo(() => {
     const studies = Array.isArray(snapshot?.studies) ? snapshot.studies : [];
     const serverNowMs = Number(snapshot?.serverNowMs ?? Date.now());
-    return studies.map((study) => {
+    const decorated = studies.map((study) => {
       const live = deriveLiveStudy(study, serverNowMs, clientNowMs);
       return {
         ...study,
@@ -21,6 +22,7 @@ export function useResearchModalDerivedState({
         liveProgressRatio: live.progressRatio,
       };
     });
+    return buildStudyTree(decorated);
   }, [clientNowMs, snapshot]);
 
   const inventoryIndex = useMemo(
@@ -29,11 +31,11 @@ export function useResearchModalDerivedState({
   );
 
   const activeStudy = useMemo(
-    () => nodes.find((node) => node?.isRunning) ?? null,
+    () => flattenStudyTree(nodes).find((node) => node?.isRunning) ?? null,
     [nodes]
   );
   const previewStudy = useMemo(
-    () => activeStudy ?? nodes.find((node) => node?.canStart) ?? nodes[0] ?? null,
+    () => activeStudy ?? flattenStudyTree(nodes).find((node) => node?.canStart) ?? nodes[0] ?? null,
     [activeStudy, nodes]
   );
 

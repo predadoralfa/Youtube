@@ -12,19 +12,20 @@ export function TargetEnemyCard({
   if (!visible) return null;
   if (!Number.isFinite(Number(hpMax)) || Number(hpMax) <= 0) return null;
 
-  const safeX = Number.isFinite(Number(x)) ? Number(x) : 0;
-  const safeY = Number.isFinite(Number(y)) ? Number(y) : 0;
   const safeName = String(enemyName ?? "Enemy").trim() || "Enemy";
+  const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1200;
+  const cardWidth = Math.max(240, Math.min(420, Math.floor(viewportWidth * 0.34)));
+  const barWidth = Math.max(208, Math.min(388, Math.floor(cardWidth - 32)));
 
   return (
     <div
       style={{
         position: "fixed",
-        left: `${safeX}px`,
-        top: `${safeY}px`,
-        transform: "translate(-50%, -118%)",
-        minWidth: "244px",
-        maxWidth: "244px",
+        left: "50%",
+        top: "clamp(20px, 2.4vh, 30px)",
+        transform: "translateX(-50%)",
+        width: `min(92vw, ${cardWidth}px)`,
+        maxWidth: "92vw",
         padding: "12px 14px",
         borderRadius: 14,
         background: "linear-gradient(180deg, rgba(32, 10, 10, 0.95), rgba(18, 7, 7, 0.92))",
@@ -72,7 +73,7 @@ export function TargetEnemyCard({
       <HPBar
         visible={true}
         mode="hud"
-        width={216}
+        width={barWidth}
         hpHeight={12}
         hpCurrent={hpCurrent}
         hpMax={hpMax}

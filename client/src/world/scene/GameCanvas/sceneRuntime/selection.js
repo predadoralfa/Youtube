@@ -56,6 +56,7 @@ export function createSelectionTools({
     state.selectedObjectRef.current = null;
     state.setMarker((prev) => (prev.visible ? { ...prev, visible: false } : prev));
     state.setTargetHpBar(null);
+    state.setTargetPlayerCard(null);
     state.setTargetLootCard(null);
     onTargetClear?.();
     onInputIntent?.({ type: IntentType.TARGET_CLEAR });

@@ -1,11 +1,13 @@
 "use strict";
 
+const { clearInventory } = require("../../../state/inventory/store");
 const { ensureInventoryLoaded } = require("../../../state/inventory/loader");
 const { buildInventoryFull } = require("../../../state/inventory/fullPayload");
 const { ensureEquipmentLoaded } = require("../../../state/equipment/loader");
 
 async function emitEquipmentAndInventory(socket, userId, equipment) {
   const eqRt = await ensureEquipmentLoaded(userId);
+  clearInventory(userId);
   const invRt = await ensureInventoryLoaded(userId);
   const inventory = buildInventoryFull(invRt, eqRt);
 

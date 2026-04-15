@@ -17,6 +17,9 @@ const {
   stopResourceRegenLoop,
 } = require("./state/resourceRegen/resourceRegenLoop");
 const { getAllRuntimes } = require("./state/runtimeStore");
+const { getAllInventories } = require("./state/inventory/store");
+const { cancel } = require("./state/inventory/authoritative");
+const { withInventoryLock } = require("./state/inventory/store");
 
 const db = require("./models");
 const { initWorldClock } = require("./service/worldClockService");
@@ -73,6 +76,27 @@ async function bootstrap() {
     const shutdown = async (signal) => {
       console.log(`[SERVER] shutdown signal=${signal}`);
       try {
+        for (const invRt of getAllInventories()) {
+          if (!invRt?.heldState) continue;
+
+          await withInventoryLock(invRt.userId, async () => {
+            const tx = await db.sequelize.transaction();
+            try {
+              await cancel(invRt, tx);
+              await tx.commit();
+              console.log(
+                `[SERVER] restored held inventory item user=${invRt.userId} before shutdown`
+              );
+            } catch (err) {
+              await tx.rollback().catch(() => {});
+              console.warn(
+                `[SERVER] failed to restore held inventory item user=${invRt?.userId}`,
+                err
+              );
+            }
+          });
+        }
+
         stopMovementTick();
         stopSpawnManager();
         stopResourceRegenLoop();
@@ -97,6 +121,7 @@ async function bootstrap() {
 
     process.on("SIGINT", () => shutdown("SIGINT"));
     process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGUSR2", () => shutdown("SIGUSR2"));
   } catch (error) {
     console.error("Erro ao iniciar servidor:");
     console.error(error);

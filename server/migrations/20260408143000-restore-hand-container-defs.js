@@ -19,7 +19,7 @@ module.exports = {
         code: "HAND_L",
         name: "Hand Left",
         slot_count: 1,
-        max_weight: null,
+        max_weight: 2.5,
         allowed_categories_mask: null,
         is_active: true,
       });
@@ -30,7 +30,7 @@ module.exports = {
         code: "HAND_R",
         name: "Hand Right",
         slot_count: 1,
-        max_weight: null,
+        max_weight: 2.5,
         allowed_categories_mask: null,
         is_active: true,
       });

@@ -2,7 +2,7 @@
 
 const { getFoodMacroState, buildAutoFoodPayload } = require("./shared");
 const { loadPersistedAutoFoodConfig } = require("./config");
-const { setAutoFoodConfig } = require("./actions");
+const { setAutoFoodConfig, startFoodConsumption, consumeOneConfiguredFood } = require("./actions");
 const { processAutoFoodTick } = require("./tick");
 
 module.exports = {
@@ -10,5 +10,7 @@ module.exports = {
   buildAutoFoodPayload,
   loadPersistedAutoFoodConfig,
   setAutoFoodConfig,
+  startFoodConsumption,
+  consumeOneConfiguredFood,
   processAutoFoodTick,
 };

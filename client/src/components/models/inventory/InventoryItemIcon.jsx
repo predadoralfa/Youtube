@@ -4,6 +4,7 @@ import { Bounds, Center, useGLTF } from "@react-three/drei";
 
 const rockModelUrl = new URL("../../../assets/Rock.glb", import.meta.url).href;
 const appleModelUrl = new URL("../../../assets/Apple.glb", import.meta.url).href;
+const grassModelUrl = new URL("../../../assets/Grass.glb", import.meta.url).href;
 
 function normalizeText(value) {
   return String(value ?? "").trim().toUpperCase();
@@ -19,6 +20,14 @@ function resolveInventoryIconSpec(itemDef) {
       url: appleModelUrl,
       scale: 1.25,
       cameraPosition: [0, 0, 3.2],
+    };
+  }
+
+  if (code.includes("FIBER") || code.includes("GRASS") || name.includes("FIBER") || name.includes("GRASS") || name.includes("GRAMA")) {
+    return {
+      url: grassModelUrl,
+      scale: 1.15,
+      cameraPosition: [0, 0, 3.15],
     };
   }
 
@@ -106,3 +115,4 @@ export function InventoryItemIcon({ itemDef, label, className = "" }) {
 
 useGLTF.preload(rockModelUrl);
 useGLTF.preload(appleModelUrl);
+useGLTF.preload(grassModelUrl);

@@ -36,20 +36,26 @@ Em outras palavras:
 Estrutura atual:
 
 ```text
-MD/
-|-- document.md
-|-- struct.md
-|-- CIDs/
-|   |-- guia-cid-container-actors.md
-|   |-- guia-registro-actors.md
-|   `-- guia-registro-itens.md
-`-- implementacoes/
-    |-- estudo-arquitetural-actors-spawn.md
-    |-- implementacao-ciclo-visual-dia-noite.md
-    |-- implementacao-sistema-de-fome.md
-    |-- modulo-research.md
-    |-- plano-regeneracao-recursos.md
-    `-- plano-tecnico-respawn-inimigos-por-instancia.md
+ MD/
+ |-- document.md
+ |-- struct.md
+ |-- CIDs/
+ |   |-- guia-registro-documentacao.md
+ |   |-- guia-cid-container-actors.md
+ |   |-- guia-registro-actors.md
+ |   `-- guia-registro-itens.md
+ |-- seeds/
+ |   |-- guia-registro-actors.md
+ |   |-- guia-registro-itens.md
+ |   `-- guia-registro-skills-craft.md
+ `-- implementacoes/
+     |-- estudo-arquitetural-actors-spawn.md
+     |-- implementacao-ciclo-visual-dia-noite.md
+     |-- implementacao-sistema-de-fome.md
+     |-- modulo-skills-craft.md
+     |-- modulo-research.md
+     |-- plano-regeneracao-recursos.md
+     `-- plano-tecnico-respawn-inimigos-por-instancia.md
 ```
 
 Papel de cada area:
@@ -74,8 +80,12 @@ Atalhos:
 
 - actors: [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
 - itens: [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
+- research: [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-research.md)
+- skills e craft: [guia-registro-skills-craft.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-skills-craft.md)
+- documentacao: [guia-registro-documentacao.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-documentacao.md)
 - container CID: [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
 - actors e spawn: [estudo-arquitetural-actors-spawn.md](/D:/JS-Projects/Youtube/MD/implementacoes/estudo-arquitetural-actors-spawn.md)
+- skills e craft: [modulo-skills-craft.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-skills-craft.md)
 - research: [modulo-research.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-research.md)
 - fome: [implementacao-sistema-de-fome.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-sistema-de-fome.md)
 - ciclo visual: [implementacao-ciclo-visual-dia-noite.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-ciclo-visual-dia-noite.md)
@@ -254,6 +264,14 @@ Pecas principais:
 - `ga_container`: instancia concreta do container
 - `ga_container_owner`: dono logico do container
 - `ga_container_slot`: slots e conteudo
+
+Regras de capacidade:
+
+- `ga_container_def.max_weight` representa a capacidade maxima do container
+- a capacidade total do jogador e a soma dos containers ativos que ele possui
+- `HAND_L` e `HAND_R` devem ficar com `2.5` kg cada
+- `BASKET` deve ficar com `10` kg
+- a interface de inventario deve refletir a soma dos containers carregados, nao um valor hardcoded do personagem
 
 No contexto de actors:
 

@@ -68,6 +68,7 @@ export function cleanupSceneRuntime({
 
   state.setMarker({ visible: false, x: 0, y: 0 });
   state.setTargetHpBar(null);
+  state.setTargetPlayerCard(null);
   state.setTargetLootCard(null);
   state.setSelfHpBar(null);
 }

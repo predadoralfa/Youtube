@@ -664,7 +664,7 @@ module.exports = {
         collect_cooldown_ms: {
           type: Sequelize.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 1000,
+          defaultValue: 4000,
         },
         carry_weight: {
           type: Sequelize.FLOAT,

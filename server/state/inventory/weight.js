@@ -1,8 +1,7 @@
 "use strict";
 
 const db = require("../../models");
-
-const LEGACY_HAND_ROLES = new Set(["HAND_L", "HAND_R"]);
+const { resolveResearchItemWeightDelta } = require("../../service/researchService");
 
 function toNum(value, fallback = 0) {
   const n = Number(value);
@@ -17,8 +16,18 @@ function getDefWeight(def) {
 
 function getInventoryMaxWeight(invRt) {
   return (invRt?.containers ?? [])
-    .filter((container) => !LEGACY_HAND_ROLES.has(String(container?.slotRole ?? "")))
+    .filter((container) => String(container?.state ?? "ACTIVE") === "ACTIVE")
     .reduce((sum, container) => sum + Math.max(0, toNum(container?.def?.maxWeight, 0)), 0);
+}
+
+function resolveCarryWeightMax(invRt, fallback = 20) {
+  const total = getInventoryMaxWeight(invRt);
+  if (total > 0) return total;
+
+  const legacy = Number(invRt?.carryWeight);
+  if (Number.isFinite(legacy) && legacy >= 0) return legacy;
+
+  return fallback;
 }
 
 function addWeightedInstance(state, itemInstanceId, itemDefId, qty) {
@@ -33,13 +42,17 @@ function addWeightedInstance(state, itemInstanceId, itemDefId, qty) {
     state.eqRt?.itemDefsById?.get?.(String(itemDefId)) ||
     null;
 
-  state.current += getDefWeight(def) * Math.max(1, toNum(qty, 1));
+  const baseWeight = getDefWeight(def);
+  const researchWeightDelta = resolveResearchItemWeightDelta(state.research, def?.code ?? null);
+  const effectiveWeight = Math.max(0, baseWeight + researchWeightDelta);
+  state.current += effectiveWeight * Math.max(1, toNum(qty, 1));
 }
 
-function computeCarryWeight(invRt, eqRt = null) {
+function computeCarryWeight(invRt, eqRt = null, research = null) {
   const state = {
     invRt,
     eqRt,
+    research,
     seen: new Set(),
     current: 0,
   };
@@ -77,7 +90,7 @@ function computeCarryWeight(invRt, eqRt = null) {
     }
   }
 
-  const max = getInventoryMaxWeight(invRt);
+  const max = resolveCarryWeightMax(invRt);
   const ratio = max > 0 ? state.current / max : 0;
   const percent = max > 0 ? Math.min(100, Math.max(0, ratio * 100)) : 0;
 
@@ -104,5 +117,7 @@ async function loadCarryWeightStats(userIdRaw) {
 
 module.exports = {
   computeCarryWeight,
+  getInventoryMaxWeight,
+  resolveCarryWeightMax,
   loadCarryWeightStats,
 };

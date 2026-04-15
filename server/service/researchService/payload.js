@@ -4,8 +4,10 @@ const {
   STATUS_RUNNING,
   STATUS_COMPLETED,
   clamp,
+  canonicalResearchItemCode,
   normalizeItemCosts,
   normalizeUnlocks,
+  normalizeItemCode,
   resolveCurrentStudy,
   toFiniteNumber,
 } = require("./shared");
@@ -41,6 +43,11 @@ function buildStudyPayload(study) {
     canStart: Boolean(study.canStart),
     isRunning: study.status === STATUS_RUNNING,
     isCompleted: study.status === STATUS_COMPLETED,
+    isVisible: study.isVisible !== false,
+    prerequisiteResearchDefId: study.prerequisiteResearchDefId ?? null,
+    prerequisiteResearchCode: study.prerequisiteResearchCode ?? null,
+    prerequisiteResearchName: study.prerequisiteResearchName ?? null,
+    prerequisiteLevel: Number(study.prerequisiteLevel ?? 1),
     itemDef: study.itemDef
       ? {
           id: Number(study.itemDef.id),
@@ -80,6 +87,40 @@ function listUnlockedCapabilities(rt) {
   return unlocks;
 }
 
+function resolveResearchModifierDelta(rt, prefix, targetCode) {
+  const normalizedPrefix = String(prefix ?? "").trim();
+  const normalizedTarget = normalizeItemCode(canonicalResearchItemCode(targetCode));
+  if (!normalizedPrefix || !normalizedTarget) return 0;
+
+  let total = 0;
+  for (const unlockCode of listUnlockedCapabilities(rt)) {
+    const raw = String(unlockCode ?? "").trim();
+    if (!raw.startsWith(`${normalizedPrefix}:`)) continue;
+
+    const parts = raw.split(":");
+    if (parts.length < 3) continue;
+
+    const unlockTarget = normalizeItemCode(parts[1]);
+    if (unlockTarget !== normalizedTarget) continue;
+
+    const deltaText = parts.slice(2).join(":");
+    const delta = Number(deltaText);
+    if (Number.isFinite(delta)) {
+      total += delta;
+    }
+  }
+
+  return total;
+}
+
+function resolveResearchItemWeightDelta(rt, itemCode) {
+  return resolveResearchModifierDelta(rt, "item.weight_delta", itemCode);
+}
+
+function resolveResearchItemCollectTimeDelta(rt, itemCode) {
+  return resolveResearchModifierDelta(rt, "item.collect_time_delta", itemCode);
+}
+
 function hasCapability(rt, capabilityCode) {
   if (!capabilityCode) return false;
   return listUnlockedCapabilities(rt).has(String(capabilityCode));
@@ -88,4 +129,8 @@ function hasCapability(rt, capabilityCode) {
 module.exports = {
   buildResearchPayload,
   hasCapability,
+  listUnlockedCapabilities,
+  resolveResearchModifierDelta,
+  resolveResearchItemWeightDelta,
+  resolveResearchItemCollectTimeDelta,
 };

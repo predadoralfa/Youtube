@@ -66,6 +66,7 @@ export function InventoryModal(props) {
           splitInputRef={state.splitInputRef}
           submitSplit={controller.menuHandlers.submitSplit}
           openSplitModal={controller.menuHandlers.openSplitModal}
+          handleContextEat={controller.menuHandlers.handleContextEat}
           handleContextDrop={controller.menuHandlers.handleContextDrop}
           handleContextRemove={controller.menuHandlers.handleContextRemove}
           containers={state.containers}

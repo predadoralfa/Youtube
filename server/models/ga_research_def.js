@@ -29,6 +29,18 @@ module.exports = (sequelize, DataTypes) => {
         onUpdate: "CASCADE",
         onDelete: "SET NULL",
       },
+      prerequisite_research_def_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: "ga_research_def", key: "id" },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
+      },
+      prerequisite_level: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        defaultValue: 1,
+      },
       era_min_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
@@ -54,6 +66,7 @@ module.exports = (sequelize, DataTypes) => {
       indexes: [
         { unique: true, fields: ["code"] },
         { fields: ["item_def_id"] },
+        { fields: ["prerequisite_research_def_id"] },
         { fields: ["era_min_id"] },
         { fields: ["is_active"] },
       ],
@@ -64,6 +77,20 @@ module.exports = (sequelize, DataTypes) => {
     GaResearchDef.belongsTo(models.GaItemDef, {
       foreignKey: "item_def_id",
       as: "itemDef",
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    });
+
+    GaResearchDef.belongsTo(models.GaResearchDef, {
+      foreignKey: "prerequisite_research_def_id",
+      as: "prerequisiteResearchDef",
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    });
+
+    GaResearchDef.hasMany(models.GaResearchDef, {
+      foreignKey: "prerequisite_research_def_id",
+      as: "childResearchDefs",
       onUpdate: "CASCADE",
       onDelete: "SET NULL",
     });

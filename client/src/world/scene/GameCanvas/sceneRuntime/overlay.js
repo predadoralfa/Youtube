@@ -75,6 +75,31 @@ export function updateOverlayState({
     return state.setTargetLootCard(null);
   }
 
+  if (selected?.kind === "PLAYER") {
+    const pos = entityPositions.get(String(selected.id));
+    const vitals = state.entityVitalsRef.current.get(String(selected.id));
+
+    if (!pos || !vitals || Number(vitals.hpMax ?? 0) <= 0) {
+      state.setTargetPlayerCard(null);
+      state.setTargetHpBar(null);
+      return state.setTargetLootCard(null);
+    }
+
+    const mesh = state.meshByEntityIdRef.current.get(String(selected.id));
+    state.setTargetPlayerCard({
+      id: String(selected.id),
+      displayName:
+        mesh?.userData?.displayName ??
+        mesh?.userData?.entityName ??
+        `Player ${String(selected.id)}`,
+      hpCurrent: Math.max(0, vitals.hpCurrent ?? 0),
+      hpMax: vitals.hpMax ?? 0,
+    });
+
+    state.setTargetHpBar(null);
+    return state.setTargetLootCard(null);
+  }
+
   if (selected?.kind === "ACTOR") {
     const mesh = state.meshByActorIdRef.current.get(String(selected.id));
     const lootSummary = mesh?.userData?.lootSummary ?? null;
@@ -108,5 +133,6 @@ export function updateOverlayState({
   }
 
   state.setTargetHpBar(null);
+  state.setTargetPlayerCard(null);
   state.setTargetLootCard(null);
 }

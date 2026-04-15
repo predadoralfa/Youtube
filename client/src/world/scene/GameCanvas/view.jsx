@@ -3,6 +3,7 @@ import { FloatingLootText } from "../FloatingLootText";
 import { HPBar } from "../HPBar";
 import { TargetEnemyCard } from "../TargetEnemyCard";
 import { TargetLootCard } from "../TargetLootCard";
+import { TargetPlayerCard } from "../TargetPlayerCard";
 import { TargetMarker } from "../TargetMarker";
 
 export function GameCanvasView({ state, lootNotifications = [] }) {
@@ -35,6 +36,15 @@ export function GameCanvasView({ state, lootNotifications = [] }) {
             y={state.targetLootCard.y}
             actorName={state.targetLootCard.actorName}
             lootSummary={state.targetLootCard.lootSummary}
+          />
+        ) : null}
+
+        {state.targetPlayerCard ? (
+          <TargetPlayerCard
+            visible={true}
+            displayName={state.targetPlayerCard.displayName}
+            hpCurrent={state.targetPlayerCard.hpCurrent}
+            hpMax={state.targetPlayerCard.hpMax}
           />
         ) : null}
 

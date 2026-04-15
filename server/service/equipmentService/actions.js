@@ -4,6 +4,10 @@ const db = require("../../models");
 const { withEquipmentLock } = require("../../state/equipment/store");
 const { isItemAllowedInSlot } = require("./shared");
 const {
+  ensureGrantedContainerForItem,
+  removeGrantedContainerForItem,
+} = require("./grantsContainer");
+const {
   loadItemForEquip,
   loadSlotDefByCode,
   loadEquippedRow,
@@ -61,6 +65,13 @@ async function equipItemToSlot(playerIdRaw, itemInstanceIdRaw, slotCode) {
         },
         { transaction: tx }
       );
+
+      await ensureGrantedContainerForItem({
+        playerId,
+        slotCode: targetSlotCode,
+        itemDef,
+        tx,
+      });
 
       await tx.commit();
       return rebuildEquipmentPayload(playerId);
@@ -120,6 +131,24 @@ async function swapEquipmentSlots(playerIdRaw, fromSlotCode, toSlotCode) {
         }
       }
 
+      if (sourceItem?.def) {
+        await removeGrantedContainerForItem({
+          playerId,
+          slotCode: sourceSlotCode,
+          itemDef: sourceItem.def,
+          tx,
+        });
+      }
+
+      if (targetItem?.def) {
+        await removeGrantedContainerForItem({
+          playerId,
+          slotCode: targetSlotCode,
+          itemDef: targetItem.def,
+          tx,
+        });
+      }
+
       await sourceRow.destroy({ transaction: tx });
       if (targetRow) {
         await targetRow.destroy({ transaction: tx });
@@ -145,6 +174,22 @@ async function swapEquipmentSlots(playerIdRaw, fromSlotCode, toSlotCode) {
           },
           { transaction: tx }
         );
+      }
+
+      await ensureGrantedContainerForItem({
+        playerId,
+        slotCode: targetSlotCode,
+        itemDef: sourceItem.def,
+        tx,
+      });
+
+      if (targetItem?.def) {
+        await ensureGrantedContainerForItem({
+          playerId,
+          slotCode: sourceSlotCode,
+          itemDef: targetItem.def,
+          tx,
+        });
       }
 
       await tx.commit();
@@ -175,6 +220,16 @@ async function unequipItemFromSlot(playerIdRaw, slotCode) {
       const row = await loadEquippedRow(playerId, slotDef.id, tx);
       if (!row) {
         throw new Error("SLOT_ALREADY_EMPTY");
+      }
+
+      const equippedItem = await loadItemForEquip(row.item_instance_id, tx);
+      if (equippedItem?.def) {
+        await removeGrantedContainerForItem({
+          playerId,
+          slotCode: targetSlotCode,
+          itemDef: equippedItem.def,
+          tx,
+        });
       }
 
       await row.destroy({ transaction: tx });

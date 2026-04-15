@@ -471,6 +471,15 @@
   background: rgba(0, 255, 255, 0.14);
 }
 
+.inv-context-menu-item--accent {
+  background: rgba(0, 255, 160, 0.12);
+  color: rgba(220, 255, 245, 0.98);
+}
+
+.inv-context-menu-item--accent:hover {
+  background: rgba(0, 255, 160, 0.2);
+}
+
 .inv-split-modal {
   position: fixed;
   inset: 0;

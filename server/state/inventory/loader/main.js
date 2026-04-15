@@ -1,7 +1,6 @@
 "use strict";
 
 const { loadCarryWeightStats } = require("../weight");
-const { ensureStarterInventory } = require("../../../service/inventoryProvisioning");
 const {
   loadOwnersForPlayer,
   loadContainersByIds,
@@ -26,15 +25,10 @@ const {
 
 async function loadInventoryRuntime(userIdRaw) {
   const userId = String(userIdRaw);
+  const { ensureStarterInventory } = require("../../../service/inventoryProvisioning");
 
+  await ensureStarterInventory(userId);
   const ownerRows = await loadOwnersForPlayer(userId);
-  if (!ownerRows.length) {
-    await ensureStarterInventory(userId);
-    const provisionedOwnerRows = await loadOwnersForPlayer(userId);
-    if (provisionedOwnerRows.length > 0) {
-      return loadInventoryRuntime(userId);
-    }
-  }
   const owners = ownerRows.map(normalizeOwnerRow);
 
   const containerIds = uniq(owners.map((o) => o.containerId));

@@ -2,7 +2,6 @@
 
 const db = require("../../models");
 const { getRuntime } = require("../../state/runtime/store");
-const { ensureInventoryLoaded } = require("../../state/inventory/loader");
 const { withInventoryLock } = require("../../state/inventory/store");
 const { ensureResearchLoaded } = require("./definitions");
 const { buildResearchPayload } = require("./payload");
@@ -20,6 +19,7 @@ const {
 
 async function startResearch(userId, researchCode, nowMs = Date.now()) {
   return withInventoryLock(userId, async () => {
+    const { ensureInventoryLoaded } = require("../../state/inventory/loader");
     const rt = getRuntime(userId);
     if (!rt) {
       return { ok: false, code: "RUNTIME_NOT_LOADED", message: "Runtime not loaded" };
@@ -30,6 +30,9 @@ async function startResearch(userId, researchCode, nowMs = Date.now()) {
     const target = research.studies.find((study) => String(study.code) === String(researchCode));
     if (!target) {
       return { ok: false, code: "RESEARCH_NOT_FOUND", message: "Research not found" };
+    }
+    if (target.isVisible === false) {
+      return { ok: false, code: "RESEARCH_LOCKED", message: "Research is locked" };
     }
     if (target.status === STATUS_RUNNING) {
       return { ok: true, research: buildResearchPayload(rt) };

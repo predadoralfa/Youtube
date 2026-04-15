@@ -21,6 +21,7 @@ export function useGameCanvasState(currentWorldTime) {
   const [marker, setMarker] = useState({ visible: false, x: 0, y: 0 });
   const [floatingDamages, setFloatingDamages] = useState([]);
   const [targetHpBar, setTargetHpBar] = useState(null);
+  const [targetPlayerCard, setTargetPlayerCard] = useState(null);
   const [targetLootCard, setTargetLootCard] = useState(null);
   const [selfHpBar, setSelfHpBar] = useState(null);
   const stateRef = useRef(null);
@@ -46,11 +47,13 @@ export function useGameCanvasState(currentWorldTime) {
       setMarker,
       setFloatingDamages,
       setTargetHpBar,
+      setTargetPlayerCard,
       setTargetLootCard,
       setSelfHpBar,
       marker,
       floatingDamages,
       targetHpBar,
+      targetPlayerCard,
       targetLootCard,
       selfHpBar,
     };
@@ -59,6 +62,7 @@ export function useGameCanvasState(currentWorldTime) {
   stateRef.current.marker = marker;
   stateRef.current.floatingDamages = floatingDamages;
   stateRef.current.targetHpBar = targetHpBar;
+  stateRef.current.targetPlayerCard = targetPlayerCard;
   stateRef.current.targetLootCard = targetLootCard;
   stateRef.current.selfHpBar = selfHpBar;
 

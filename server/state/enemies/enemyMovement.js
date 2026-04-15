@@ -1,9 +1,16 @@
 // server/state/enemies/enemyMovement.js
 
+const { getRuntime } = require("../runtimeStore");
 const { getEnemiesForInstance } = require("./enemiesRuntimeStore");
 const { computeChunkFromPos, getUsersInChunks } = require("../presenceIndex");
 const { bumpRev, toDelta } = require("./enemyEntity");
 const { moveEntityTowardTarget } = require("../movement/entityMotion");
+const {
+  calculateDistance,
+  calculateYawToTarget,
+  getEffectiveAttackRange,
+  resetEnemyToSpawn,
+} = require("./enemyAI/helpers");
 
 /**
  * Gera posição aleatória em raio
@@ -24,9 +31,82 @@ function updateEnemyMovement(enemy, nowMs, dt) {
   // Inimigos mortos não se movem
   if (enemy.status !== "ALIVE") return false;
 
-  // Não mover quando combat acabou ou está congelado
-  if (enemy._combatMode && !enemy._combatActive) {
+  if (Number.isFinite(Number(enemy._attackUntilMs)) && nowMs < Number(enemy._attackUntilMs)) {
+    enemy.action = "attack";
     return false;
+  }
+
+  // Em combate, a patrulha normal fica suspensa.
+  // O chase/posicionamento passa a ser controlado pela AI de combate.
+  if (enemy._combatMode) {
+    if (!enemy._combatActive) {
+      enemy.action = "idle";
+      return false;
+    }
+
+    const targetId = enemy._combatTargetId;
+    if (!targetId) {
+      resetEnemyToSpawn(enemy);
+      return true;
+    }
+
+    const targetRt = getRuntime(String(targetId));
+    if (!targetRt || !targetRt.pos) {
+      resetEnemyToSpawn(enemy);
+      return true;
+    }
+
+    const speed = Number(enemy.stats?.moveSpeed);
+    if (!Number.isFinite(speed) || speed <= 0) {
+      console.warn(`[ENEMY_MOVE] Enemy ${enemy.id} sem moveSpeed válido`);
+      return false;
+    }
+
+    const attackRange = getEffectiveAttackRange(enemy);
+    if (!Number.isFinite(attackRange) || attackRange <= 0) {
+      console.warn(`[ENEMY_MOVE] Enemy ${enemy.id} sem attackRange válido`);
+      return false;
+    }
+
+    const dist = calculateDistance(enemy.pos, targetRt.pos);
+    const desiredYaw = calculateYawToTarget(enemy.pos, targetRt.pos);
+    if (desiredYaw != null && enemy.yaw !== desiredYaw) {
+      enemy.yaw = desiredYaw;
+    }
+
+    if (dist <= attackRange) {
+      enemy.action = "idle";
+      return false;
+    }
+
+    const movement = moveEntityTowardTarget({
+      pos: enemy.pos,
+      target: targetRt.pos,
+      speed,
+      dt,
+      bounds: null,
+      stopRadius: attackRange,
+    });
+
+    if (!movement.ok) {
+      console.warn(`[ENEMY_MOVE] Enemy ${enemy.id} target inválido durante combate`);
+      return false;
+    }
+
+    const newYaw = movement.yaw;
+    const posChanged = movement.moved;
+    const yawChanged = newYaw != null && enemy.yaw !== newYaw;
+
+    if (!posChanged && !yawChanged) {
+      enemy.action = "move";
+      return false;
+    }
+
+    enemy.pos = movement.pos;
+    if (newYaw != null) enemy.yaw = newYaw;
+    enemy.action = "move";
+    bumpRev(enemy);
+    return true;
   }
 
   const speed = Number(enemy.stats?.moveSpeed);

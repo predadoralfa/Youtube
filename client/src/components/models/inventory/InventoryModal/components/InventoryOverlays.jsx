@@ -11,9 +11,19 @@ export function InventoryOverlays({
   splitInputRef,
   submitSplit,
   openSplitModal,
+  handleContextEat,
   handleContextDrop,
   handleContextRemove,
 }) {
+  const slot = contextMenu?.slot ?? null;
+  const slotItem = slot?.itemDef ?? slot?.item ?? null;
+  const canEatSlot = Boolean(
+    slot?.canEat ||
+      slotItem?.canEat ||
+      ["FOOD", "CONSUMABLE"].includes(String(slotItem?.category ?? "").toUpperCase()) ||
+      String(slotItem?.code ?? "").toUpperCase().startsWith("FOOD-")
+  );
+
   return (
     <>
       {heldStateActive ? (
@@ -51,6 +61,11 @@ export function InventoryOverlays({
               e.stopPropagation?.();
             }}
           >
+            {canEatSlot ? (
+              <button type="button" className="inv-context-menu-item inv-context-menu-item--accent" onClick={handleContextEat}>
+                Eat
+              </button>
+            ) : null}
             {contextMenu.slot?.canSplit ? (
               <button type="button" className="inv-context-menu-item" onClick={openSplitModal}>
                 Split

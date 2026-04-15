@@ -7,6 +7,7 @@ const {
   isWASDActive,
 } = require("../../../state/runtimeStore");
 const { getEnemy } = require("../../../state/enemies/enemiesRuntimeStore");
+const { getActor } = require("../../../state/actorsRuntimeStore");
 const {
   DEFAULT_STOP_RADIUS,
   DEFAULT_TIMEOUT_MS,
@@ -16,6 +17,8 @@ const { resolveNearbyCollectTarget } = require("./collect");
 const { resolveTargetPos } = require("./targeting");
 const { applyApproach } = require("./movement");
 const { startEnemyCombat } = require("./combat");
+const { resolveActorCollectCooldownMs } = require("../../../service/actorCollectService");
+const { DEFAULT_COLLECT_COOLDOWN_MS } = require("../../../config/interactionConstants");
 
 function registerInteractHandler(io, socket) {
   socket.on("interact:start", async (payload = {}) => {
@@ -32,7 +35,7 @@ function registerInteractHandler(io, socket) {
       const stats = await db.GaUserStats.findByPk(userId, {
         attributes: ["collect_cooldown_ms"],
       });
-      rt.collectCooldownMs = stats?.collect_cooldown_ms ?? 1000;
+      rt.collectCooldownMs = stats?.collect_cooldown_ms ?? DEFAULT_COLLECT_COOLDOWN_MS;
 
       if (
         rt.connectionState === "DISCONNECTED_PENDING" ||
@@ -68,6 +71,18 @@ function registerInteractHandler(io, socket) {
         target: { kind: targetKind, id: String(target.id) },
       });
       if (!targetPos) return;
+
+      if (targetKind === "ACTOR") {
+        const actor = getActor(String(target.id));
+        const baseCollectCooldownMs = stats?.collect_cooldown_ms ?? DEFAULT_COLLECT_COOLDOWN_MS;
+        rt.collectCooldownMs = await resolveActorCollectCooldownMs(
+          userId,
+          actor,
+          baseCollectCooldownMs
+        );
+      } else {
+        rt.collectCooldownMs = stats?.collect_cooldown_ms ?? DEFAULT_COLLECT_COOLDOWN_MS;
+      }
 
       if (targetKind === "ENEMY") {
         const cleanEnemyId = String(target.id).replace(/^enemy_/, "");

@@ -70,7 +70,10 @@ function createFallbackEnemyMesh(enemyId, enemy) {
   );
   mesh.castShadow = true;
   applyMeshMetadata(mesh, enemyId, enemy);
-  mesh.userData.visualScale = resolveEnemyVisualScale(enemy);
+  const visualScale = resolveEnemyVisualScale(enemy);
+  mesh.userData.visualScale = visualScale;
+  mesh.userData.baseVisualScale = visualScale;
+  mesh.scale.setScalar(visualScale);
   return mesh;
 }
 
@@ -78,7 +81,7 @@ function createRabbitGroup(template, enemyId, enemy) {
   const group = new THREE.Group();
   const model = template.clone(true);
   const visualScale = resolveEnemyVisualScale(enemy);
-  model.scale.setScalar(visualScale);
+  model.scale.setScalar(1);
   model.position.set(0, 0, 0);
   model.rotation.set(0, 0, 0);
 
@@ -93,10 +96,82 @@ function createRabbitGroup(template, enemyId, enemy) {
   group.add(model);
   applyMeshMetadata(group, enemyId, enemy);
   group.userData.visualScale = visualScale;
+  group.userData.baseVisualScale = visualScale;
+  group.userData.rabbitModelNode = model;
+  group.userData.rabbitBaseModelPos = {
+    x: model.position.x,
+    y: model.position.y,
+    z: model.position.z,
+  };
   return group;
 }
 
+function applyEnemyMotion(mesh, enemy, nowMs) {
+  if (!mesh) return;
+
+  const action = String(enemy?.action ?? "idle").trim().toLowerCase() || "idle";
+  const motion = mesh.userData.motionState ?? {
+    action,
+    startedAtMs: nowMs,
+    lastUpdateAtMs: nowMs,
+  };
+
+  if (motion.action !== action) {
+    motion.action = action;
+    motion.startedAtMs = nowMs;
+  }
+  motion.lastUpdateAtMs = nowMs;
+  mesh.userData.motionState = motion;
+
+  const elapsed = Math.max(0, nowMs - motion.startedAtMs);
+  let bob = 0.02;
+  let leanX = 0;
+  let rollZ = 0;
+  let squash = 1;
+  let lungeZ = 0;
+
+  if (action === "move") {
+    const phase = elapsed / 95;
+    const hop = Math.abs(Math.sin(phase));
+    bob = 0.08 + hop * 0.12;
+    leanX = -0.05 * hop;
+    rollZ = Math.sin(phase * 1.35) * 0.03;
+    squash = 1 + hop * 0.03;
+  } else if (action === "attack") {
+    const t = Math.min(1, elapsed / 260);
+    const pulse = Math.sin(Math.PI * t);
+    bob = 0.06 + pulse * 0.22;
+    leanX = -0.22 * pulse;
+    rollZ = Math.sin(Math.PI * t) * 0.05;
+    squash = 1 - pulse * 0.08;
+    lungeZ = -0.14 * pulse;
+  } else {
+    const breathe = Math.sin(elapsed / 260) * 0.01;
+    bob = 0.02 + breathe;
+    leanX = 0;
+    rollZ = 0;
+    squash = 1;
+  }
+
+  mesh.position.y = bob;
+  mesh.rotation.x = leanX;
+  mesh.rotation.z = rollZ;
+  mesh.scale.setScalar((mesh.userData.baseVisualScale ?? mesh.userData.visualScale ?? 1) * squash);
+
+  const rabbitModelNode = mesh.userData.rabbitModelNode ?? null;
+  if (rabbitModelNode) {
+    const base = mesh.userData.rabbitBaseModelPos ?? {
+      x: rabbitModelNode.position.x,
+      y: rabbitModelNode.position.y,
+      z: rabbitModelNode.position.z,
+    };
+    mesh.userData.rabbitBaseModelPos = base;
+    rabbitModelNode.position.set(base.x, base.y, base.z + lungeZ);
+  }
+}
+
 export function syncEnemyMeshes({ entities, selfKey, scene, state, clearSelection, entityPositions }) {
+  const nowMs = performance.now();
   const nextEnemyIds = new Set();
   const enemies = entities.filter((entity) => {
     const entityId = String(entity?.entityId ?? "");
@@ -181,6 +256,7 @@ export function syncEnemyMeshes({ entities, selfKey, scene, state, clearSelectio
     const vitals = readEntityVitals(enemy);
     const previous = state.entityVitalsRef.current.get(enemyId) ?? {};
     state.entityVitalsRef.current.set(enemyId, { ...previous, ...vitals });
+    applyEnemyMotion(mesh, enemy, nowMs);
   }
 
   for (const [enemyId, mesh] of state.meshByEnemyIdRef.current.entries()) {

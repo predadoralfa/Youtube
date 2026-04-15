@@ -2,7 +2,14 @@
 
 const { getRuntime } = require("../../runtimeStore");
 const { COMBAT_RANGE_LIMIT } = require("../../../config/enemyConstants");
-const { isFiniteNumber, calculateDistance, resetEnemyToSpawn } = require("./helpers");
+const {
+  isFiniteNumber,
+  calculateDistance,
+  calculateYawToTarget,
+  getEffectiveAttackRange,
+  resetEnemyToSpawn,
+} = require("./helpers");
+const { bumpRev } = require("../enemyEntity");
 
 function updateSingleEnemyAI(enemy, nowMs) {
   if (!enemy || !enemy.pos || String(enemy.status) !== "ALIVE") {
@@ -11,6 +18,11 @@ function updateSingleEnemyAI(enemy, nowMs) {
 
   const prevMoveMode = enemy.moveMode;
   let changed = false;
+
+  if (Number.isFinite(Number(enemy._attackUntilMs)) && nowMs < Number(enemy._attackUntilMs)) {
+    enemy.action = "attack";
+    return false;
+  }
 
   if (enemy._combatMode === true && enemy._combatActive === false) {
     if (enemy.moveMode !== "IDLE") {
@@ -40,7 +52,7 @@ function updateSingleEnemyAI(enemy, nowMs) {
       return true;
     }
 
-    const attackRange = Number(enemy.stats?.attackRange);
+    const attackRange = getEffectiveAttackRange(enemy);
     if (!Number.isFinite(attackRange) || attackRange <= 0) {
       console.warn(`[ENEMY_AI] Enemy ${enemy.id} sem attackRange valido`);
       return null;
@@ -50,6 +62,13 @@ function updateSingleEnemyAI(enemy, nowMs) {
     if (dist > COMBAT_RANGE_LIMIT) {
       resetEnemyToSpawn(enemy);
       return true;
+    }
+
+    const desiredYaw = calculateYawToTarget(enemy.pos, targetRt.pos);
+    const yawChanged = desiredYaw != null && enemy.yaw !== desiredYaw;
+    if (yawChanged) {
+      enemy.yaw = desiredYaw;
+      changed = true;
     }
 
     if (dist <= attackRange) {
@@ -74,7 +93,11 @@ function updateSingleEnemyAI(enemy, nowMs) {
     enemy._moveTarget = { x: targetRt.pos.x, z: targetRt.pos.z };
     enemy._moveTargetSetAt = nowMs;
 
-    return changed;
+    if (changed || yawChanged) {
+      bumpRev(enemy);
+    }
+
+    return changed || yawChanged;
   }
 
   if (enemy.moveMode !== "IDLE") {

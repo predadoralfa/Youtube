@@ -83,10 +83,14 @@ Organizacao atual:
 Documentos principais:
 
 - [document.md](/D:/JS-Projects/Youtube/MD/document.md)
+- [guia-registro-documentacao.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-documentacao.md)
 - [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
 - [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
+- [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-research.md)
 - [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
+- [guia-registro-skills-craft.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-skills-craft.md)
 - [estudo-arquitetural-actors-spawn.md](/D:/JS-Projects/Youtube/MD/implementacoes/estudo-arquitetural-actors-spawn.md)
+- [modulo-skills-craft.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-skills-craft.md)
 - [plano-tecnico-respawn-inimigos-por-instancia.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-respawn-inimigos-por-instancia.md)
 
 ---
@@ -143,6 +147,13 @@ Estrutura funcional:
 - `service/`: regra de negocio
 - `socket/`: eventos do multiplayer
 - `state/`: runtime em memoria e loops
+
+Capacidade de containers:
+
+- `ga_container_def.max_weight` e a capacidade maxima de cada container
+- o total da UI de inventario vem da soma dos containers ativos
+- `HAND_L` e `HAND_R` devem ficar com `2.5` kg cada
+- `BASKET` deve ficar com `10` kg
 
 Arquivo de entrada:
 
@@ -219,6 +230,15 @@ Regra do backend:
 - `ga_user_research`
 - `ga_equipment_slot_def`
 - `ga_equipped_item`
+
+### Skills e Crafts
+
+- `ga_skill_def`
+- `ga_skill_level_def`
+- `ga_user_skill`
+- `ga_craft_def`
+- `ga_craft_recipe_item`
+- `ga_user_craft_job`
 
 ---
 

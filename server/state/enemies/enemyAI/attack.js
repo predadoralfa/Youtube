@@ -2,7 +2,14 @@
 
 const { getRuntime } = require("../../runtimeStore");
 const { executeAttack } = require("../../../service/combatSystem");
-const { isFiniteNumber, calculateDistance, resetEnemyToSpawn } = require("./helpers");
+const {
+  isFiniteNumber,
+  calculateDistance,
+  calculateYawToTarget,
+  getEffectiveAttackRange,
+  resetEnemyToSpawn,
+} = require("./helpers");
+const { bumpRev } = require("../enemyEntity");
 
 async function updateSingleEnemyAttack(enemy, nowMs) {
   if (!enemy) return null;
@@ -20,7 +27,7 @@ async function updateSingleEnemyAttack(enemy, nowMs) {
   if (!isFiniteNumber(enemy.pos?.x) || !isFiniteNumber(enemy.pos?.z)) return null;
   if (!isFiniteNumber(targetRt.pos.x) || !isFiniteNumber(targetRt.pos.z)) return null;
 
-  const attackRange = Number(enemy.stats?.attackRange);
+  const attackRange = getEffectiveAttackRange(enemy);
   if (!Number.isFinite(attackRange) || attackRange <= 0) {
     console.warn(`[ENEMY_AI] Enemy ${enemy.id} sem attackRange valido`);
     return null;
@@ -29,6 +36,11 @@ async function updateSingleEnemyAttack(enemy, nowMs) {
   const dist = calculateDistance(enemy.pos, targetRt.pos);
   if (dist > attackRange) {
     return null;
+  }
+
+  const desiredYaw = calculateYawToTarget(enemy.pos, targetRt.pos);
+  if (desiredYaw != null) {
+    enemy.yaw = desiredYaw;
   }
 
   const enemyAttackPower = Number(enemy.stats?.attackPower);
@@ -60,6 +72,10 @@ async function updateSingleEnemyAttack(enemy, nowMs) {
   }
 
   enemy._lastAttackAtMs = nowMs;
+  enemy._attackUntilMs = nowMs + 260;
+  enemy.action = "attack";
+  enemy._combatActive = true;
+  bumpRev(enemy);
 
   return {
     enemyId: enemy.id,

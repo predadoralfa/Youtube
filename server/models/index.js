@@ -15,6 +15,12 @@ const defineGaUserMacroConfig = require("./ga_user_macro_config");
 const defineGaResearchDef = require("./ga_research_def");
 const defineGaResearchLevelDef = require("./ga_research_level_def");
 const defineGaUserResearch = require("./ga_user_research");
+const defineGaSkillDef = require("./ga_skill_def");
+const defineGaSkillLevelDef = require("./ga_skill_level_def");
+const defineGaUserSkill = require("./ga_user_skill");
+const defineGaCraftDef = require("./ga_craft_def");
+const defineGaCraftRecipeItem = require("./ga_craft_recipe_item");
+const defineGaUserCraftJob = require("./ga_user_craft_job");
 const defineGaActorResourceRuleDef = require("./ga_actor_resource_rule_def");
 const defineGaActorResourceState = require("./ga_actor_resource_state");
 
@@ -77,6 +83,12 @@ const GaUserMacroConfig = defineGaUserMacroConfig(sequelize, DataTypes);
 const GaResearchDef = defineGaResearchDef(sequelize, DataTypes);
 const GaResearchLevelDef = defineGaResearchLevelDef(sequelize, DataTypes);
 const GaUserResearch = defineGaUserResearch(sequelize, DataTypes);
+const GaSkillDef = defineGaSkillDef(sequelize, DataTypes);
+const GaSkillLevelDef = defineGaSkillLevelDef(sequelize, DataTypes);
+const GaUserSkill = defineGaUserSkill(sequelize, DataTypes);
+const GaCraftDef = defineGaCraftDef(sequelize, DataTypes);
+const GaCraftRecipeItem = defineGaCraftRecipeItem(sequelize, DataTypes);
+const GaUserCraftJob = defineGaUserCraftJob(sequelize, DataTypes);
 const GaActorResourceRuleDef = defineGaActorResourceRuleDef(sequelize, DataTypes);
 const GaActorResourceState = defineGaActorResourceState(sequelize, DataTypes);
 
@@ -154,6 +166,12 @@ const models = {
   GaResearchDef,
   GaResearchLevelDef,
   GaUserResearch,
+  GaSkillDef,
+  GaSkillLevelDef,
+  GaUserSkill,
+  GaCraftDef,
+  GaCraftRecipeItem,
+  GaUserCraftJob,
   GaActorResourceRuleDef,
   GaActorResourceState,
 

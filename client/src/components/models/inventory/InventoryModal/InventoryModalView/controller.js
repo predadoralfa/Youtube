@@ -40,6 +40,7 @@ export function createInventoryModalController(state, props) {
     handleUnequip: equipmentHandlers.handleUnequip,
     onSplitInventoryItem: props.onSplitInventoryItem,
     onDropItemToWorld: props.onDropItemToWorld,
+    onConsumeInventoryItem: props.onConsumeInventoryItem,
   });
 
   const macroHandlers = createMacroHandlers({

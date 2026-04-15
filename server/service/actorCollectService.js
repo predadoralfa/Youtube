@@ -8,7 +8,12 @@ const { ensureEquipmentLoaded } = require("../state/equipment/loader");
 const { loadCarryWeightStats } = require("../state/inventory/weight");
 const { getRuntime } = require("../state/runtime/store");
 const { ensureStarterInventory } = require("./inventoryProvisioning");
-const { ensureResearchLoaded, hasCapability } = require("./researchService");
+const { DEFAULT_COLLECT_COOLDOWN_MS } = require("../config/interactionConstants");
+const {
+  ensureResearchLoaded,
+  hasCapability,
+  resolveResearchItemCollectTimeDelta,
+} = require("./researchService");
 
 function parseMaybeJsonObject(value) {
   if (value == null) return null;
@@ -18,6 +23,63 @@ function parseMaybeJsonObject(value) {
   } catch {
     return value;
   }
+}
+
+function resolveCollectUnlockCode(actorDefCode, actorState) {
+  const resourceType = String(actorState?.resourceType ?? "").trim().toUpperCase();
+
+  if (actorDefCode === "TREE_APPLE" && resourceType === "APPLE_TREE") {
+    return "actor.collect:APPLE_TREE";
+  }
+
+  if (actorDefCode === "ROCK_NODE_SMALL" && resourceType === "ROCK_NODE_SMALL") {
+    return "actor.collect:ROCK_NODE_SMALL";
+  }
+
+  if (actorDefCode === "FIBER_PATCH" && resourceType === "FIBER_PATCH") {
+    return "actor.collect:FIBER_PATCH";
+  }
+
+  return null;
+}
+
+function resolveCollectResearchCode(actorDefCode) {
+  if (actorDefCode === "TREE_APPLE") return "RESEARCH_APPLE";
+  if (actorDefCode === "ROCK_NODE_SMALL") return "RESEARCH_STONE";
+  if (actorDefCode === "FIBER_PATCH") return "RESEARCH_FIBER";
+  return null;
+}
+
+function resolveCollectItemCode(actorDefCode) {
+  if (actorDefCode === "TREE_APPLE") return "FOOD-APPLE";
+  if (actorDefCode === "ROCK_NODE_SMALL") return "SMALL_STONE";
+  if (actorDefCode === "FIBER_PATCH") return "FIBER";
+  return null;
+}
+
+async function resolveActorCollectCooldownMs(userId, actor, fallbackMs = DEFAULT_COLLECT_COOLDOWN_MS) {
+  const actorDefCode = String(actor?.actorDef?.code ?? "").trim().toUpperCase();
+  const actorState = actor?.state_json ?? null;
+  const resourceType = String(actorState?.resourceType ?? "").trim().toUpperCase();
+  const fallback = Number.isFinite(Number(fallbackMs)) ? Number(fallbackMs) : DEFAULT_COLLECT_COOLDOWN_MS;
+
+  const rt = getRuntime(userId);
+  const research = await ensureResearchLoaded(userId, rt ?? { userId }, { forceReload: false });
+  const itemCode = resolveCollectItemCode(actorDefCode) ?? resourceType ?? null;
+  if (!itemCode) {
+    return fallback;
+  }
+  const collectCooldownDelta = resolveResearchItemCollectTimeDelta(research, itemCode);
+
+  return Math.max(500, DEFAULT_COLLECT_COOLDOWN_MS + collectCooldownDelta);
+}
+
+function hasResearchLevelReached(research, researchCode, minimumLevel) {
+  if (!researchCode) return false;
+  const study = Array.isArray(research?.studies)
+    ? research.studies.find((entry) => String(entry?.code ?? "") === String(researchCode))
+    : null;
+  return Number(study?.currentLevel ?? 0) >= Number(minimumLevel ?? 1);
 }
 
 async function buildLootSummaryFromSlots(slots, tx) {
@@ -306,20 +368,21 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
       }
     }
 
-    const collectUnlockCode =
-      actorDefCode === "TREE_APPLE" &&
-      String(actorState?.resourceType ?? "").toUpperCase() === "APPLE_TREE"
-        ? "actor.collect:APPLE_TREE"
-        : null;
+    const collectUnlockCode = resolveCollectUnlockCode(actorDefCode, actorState);
+    const collectResearchCode = resolveCollectResearchCode(actorDefCode);
 
     if (collectUnlockCode) {
       const rt = getRuntime(userId);
       const research = await ensureResearchLoaded(userId, rt ?? { userId }, { forceReload: true });
-      if (!hasCapability(rt ?? { research }, collectUnlockCode)) {
+      const hasCollectAccess =
+        hasCapability(rt ?? { research }, collectUnlockCode) ||
+        hasResearchLevelReached(research, collectResearchCode, 1);
+
+      if (!hasCollectAccess) {
         return {
           ok: false,
           error: "RESEARCH_REQUIRED_FOR_COLLECT",
-          message: "Study apples further before collecting them from trees",
+          message: "Study this resource further before collecting it",
         };
       }
     }
@@ -721,4 +784,7 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
   });
 }
 
-module.exports = { attemptCollectFromActor };
+module.exports = {
+  attemptCollectFromActor,
+  resolveActorCollectCooldownMs,
+};
