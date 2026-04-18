@@ -89,21 +89,15 @@ export function useDamageSocket(state, damageTtlMs) {
       state.setTargetHpBar(null);
       state.setTargetLootCard(null);
     };
-    const onAttackResult = (data) => {
-      if (!data) return;
-      console.log("[COMBAT] Attack result:", data);
-    };
 
     socket.on("combat:damage_taken", onDamageTaken);
     socket.on("combat:enemy_attack", onEnemyAttack);
     socket.on("combat:cancelled", onCombatCancelled);
-    socket.on("combat:attack_result", onAttackResult);
 
     return () => {
       socket.off("combat:damage_taken", onDamageTaken);
       socket.off("combat:enemy_attack", onEnemyAttack);
       socket.off("combat:cancelled", onCombatCancelled);
-      socket.off("combat:attack_result", onAttackResult);
     };
   }, [state, damageTtlMs]);
 }

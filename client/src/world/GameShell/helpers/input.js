@@ -2,7 +2,6 @@ const DEBUG_IDS = false;
 
 export function debugIds(...args) {
   if (!DEBUG_IDS) return;
-  // console.log(...args);
 }
 
 export function isInteractDown(type) {

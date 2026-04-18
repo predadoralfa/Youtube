@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { getEnemyColor, isEnemyEntity, readEntityVitals, readPosYawFromEntity } from "../helpers";
+import { sampleGroundTilt } from "./terrain";
 
 const rabbitModelUrl = new URL("../../../../assets/Rabbit.glb", import.meta.url).href;
 const rabbitLoader = new GLTFLoader();
@@ -73,6 +74,7 @@ function createFallbackEnemyMesh(enemyId, enemy) {
   const visualScale = resolveEnemyVisualScale(enemy);
   mesh.userData.visualScale = visualScale;
   mesh.userData.baseVisualScale = visualScale;
+  mesh.userData.groundAnchor = visualScale * 0.5;
   mesh.scale.setScalar(visualScale);
   return mesh;
 }
@@ -97,6 +99,7 @@ function createRabbitGroup(template, enemyId, enemy) {
   applyMeshMetadata(group, enemyId, enemy);
   group.userData.visualScale = visualScale;
   group.userData.baseVisualScale = visualScale;
+  group.userData.groundAnchor = 0;
   group.userData.rabbitModelNode = model;
   group.userData.rabbitBaseModelPos = {
     x: model.position.x,
@@ -153,9 +156,11 @@ function applyEnemyMotion(mesh, enemy, nowMs) {
     squash = 1;
   }
 
-  mesh.position.y = bob;
-  mesh.rotation.x = leanX;
-  mesh.rotation.z = rollZ;
+  const baseGroundY = Number(mesh.userData.baseGroundY ?? mesh.position.y ?? 0);
+  const groundTilt = mesh.userData.groundTilt ?? { pitch: 0, roll: 0 };
+  mesh.position.y = baseGroundY + bob;
+  mesh.rotation.x = groundTilt.pitch + leanX;
+  mesh.rotation.z = groundTilt.roll + rollZ;
   mesh.scale.setScalar((mesh.userData.baseVisualScale ?? mesh.userData.visualScale ?? 1) * squash);
 
   const rabbitModelNode = mesh.userData.rabbitModelNode ?? null;
@@ -170,7 +175,15 @@ function applyEnemyMotion(mesh, enemy, nowMs) {
   }
 }
 
-export function syncEnemyMeshes({ entities, selfKey, scene, state, clearSelection, entityPositions }) {
+export function syncEnemyMeshes({
+  entities,
+  selfKey,
+  scene,
+  state,
+  clearSelection,
+  entityPositions,
+  sampleGroundHeight,
+}) {
   const nowMs = performance.now();
   const nextEnemyIds = new Set();
   const enemies = entities.filter((entity) => {
@@ -185,9 +198,11 @@ export function syncEnemyMeshes({ entities, selfKey, scene, state, clearSelectio
     const desiredVisualScale = resolveEnemyVisualScale(enemy);
     nextEnemyIds.add(enemyId);
 
+    const groundY = Number(typeof sampleGroundHeight === "function" ? sampleGroundHeight(enemy.pos?.x ?? 0, enemy.pos?.z ?? 0) : 0);
+
     entityPositions.set(enemyId, {
       x: enemy.pos?.x ?? 0,
-      y: enemy.pos?.y ?? 0.5,
+      y: groundY,
       z: enemy.pos?.z ?? 0,
     });
 
@@ -197,18 +212,6 @@ export function syncEnemyMeshes({ entities, selfKey, scene, state, clearSelectio
     const scaleChanged = Math.abs(currentVisualScale - desiredVisualScale) > 0.0005;
 
     if (!mesh || currentAssetKey !== desiredAssetKey || scaleChanged) {
-      if (desiredAssetKey === "RABBIT") {
-        console.log(
-          "[SYNC_ENEMY] rabbit apply scale",
-          JSON.stringify({
-            enemyId,
-            desiredVisualScale,
-            currentAssetKey,
-            currentVisualScale,
-            scaleChanged,
-          })
-        );
-      }
       if (mesh) {
         scene.remove(mesh);
         state.meshByEnemyIdRef.current.delete(enemyId);
@@ -250,7 +253,13 @@ export function syncEnemyMeshes({ entities, selfKey, scene, state, clearSelectio
     mesh.userData.visualScale = desiredVisualScale;
 
     const { x, z, yaw } = readPosYawFromEntity(enemy);
-    mesh.position.set(x, 0, z);
+    const renderGroundY = Number(typeof sampleGroundHeight === "function" ? sampleGroundHeight(x, z) : 0);
+    const groundTilt = sampleGroundTilt(sampleGroundHeight, x, z);
+    const groundAnchor = Number(mesh.userData?.groundAnchor ?? 0);
+    const baseGroundY = renderGroundY + groundAnchor;
+    mesh.position.set(x, baseGroundY, z);
+    mesh.userData.baseGroundY = baseGroundY;
+    mesh.userData.groundTilt = groundTilt;
     mesh.rotation.y = yaw;
 
     const vitals = readEntityVitals(enemy);

@@ -5,6 +5,7 @@ export function useGameCanvasState(currentWorldTime) {
   const worldTimeRef = useRef(currentWorldTime);
   const runtimeRef = useRef(null);
   const templateRef = useRef(null);
+  const proceduralMapRef = useRef(null);
   const versionRef = useRef(null);
   const actorsRef = useRef([]);
   const cameraRef = useRef(null);
@@ -32,6 +33,7 @@ export function useGameCanvasState(currentWorldTime) {
       worldTimeRef,
       runtimeRef,
       templateRef,
+      proceduralMapRef,
       versionRef,
       actorsRef,
       cameraRef,

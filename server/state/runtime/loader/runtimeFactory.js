@@ -1,6 +1,7 @@
 "use strict";
 
 const { CONNECTION } = require("../constants");
+const { resolveTerrainHeightFromBounds } = require("../../movement/terrain");
 
 function createBaseRuntime({
   row,
@@ -10,12 +11,25 @@ function createBaseRuntime({
   autoFood,
   nowMs,
 }) {
+  const terrainY = resolveTerrainHeightFromBounds(bounds, row.pos_x ?? 0, row.pos_z ?? 0);
+  console.log(
+    "[RUNTIME][TERRAIN]",
+    JSON.stringify({
+      userId: row.user_id,
+      instanceId: row.instance_id,
+      posX: Number(row.pos_x ?? 0),
+      posYDb: Number(row.pos_y ?? 0),
+      posZ: Number(row.pos_z ?? 0),
+      terrainY,
+    })
+  );
+
   return {
     userId: row.user_id,
     instanceId: row.instance_id,
     pos: {
       x: Number(row.pos_x ?? 0),
-      y: Number(row.pos_y ?? 0),
+      y: terrainY,
       z: Number(row.pos_z ?? 0),
     },
     yaw: Number(row.yaw ?? 0),

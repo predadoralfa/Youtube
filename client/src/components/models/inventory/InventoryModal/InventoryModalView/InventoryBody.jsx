@@ -80,6 +80,8 @@ export function InventoryBody(props) {
           macroFoodItemInstanceId={props.macroFoodItemInstanceId}
           macroHungerThreshold={props.macroHungerThreshold}
           hungerMax={props.hungerMax}
+          macroUnlocked={props.macroUnlocked}
+          equipmentUnlocked={props.equipmentUnlocked}
           setMacroHungerThreshold={props.setMacroHungerThreshold}
           setMacroFoodItemInstanceId={props.setMacroFoodItemInstanceId}
           onSetAutoFoodMacro={props.onSetAutoFoodMacro}

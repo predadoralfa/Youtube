@@ -118,15 +118,6 @@ export function InventoryGridSection({
                         event.preventDefault?.();
                         return;
                       }
-                      console.log("[INV][GRID] contextmenu", {
-                        containerId,
-                        slotIndex,
-                        itemInstanceId: instanceId,
-                        itemCode: itemDef?.code ?? null,
-                        itemCategory: itemDef?.category ?? null,
-                        canEat,
-                        qty,
-                      });
                       openContextMenu(
                         { containerId, slotIndex, itemInstanceId: instanceId, qty, itemName, itemDef, canEat },
                         event

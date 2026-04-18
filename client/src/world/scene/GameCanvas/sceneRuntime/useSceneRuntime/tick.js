@@ -6,7 +6,9 @@ import { readPosYawFromRuntime } from "../../helpers";
 import { syncActorMeshes } from "../syncActors";
 import { syncEnemyMeshes } from "../syncEnemies";
 import { syncPlayerMeshes } from "../syncPlayers";
+import { syncProceduralWorld } from "../procedural";
 import { updateOverlayState } from "../overlay";
+import { sampleGroundTilt } from "../terrain";
 
 export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveDir }) {
   let alive = true;
@@ -35,7 +37,13 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveDi
     }
 
     const actors = state.actorsRef.current ?? [];
-    syncActorMeshes({ actors, scene: runtime.scene, state, clearSelection: tools.clearSelection });
+    syncActorMeshes({
+      actors,
+      scene: runtime.scene,
+      state,
+      clearSelection: tools.clearSelection,
+      sampleGroundHeight: runtime.sampleGroundHeight,
+    });
 
     const store = worldStoreRef?.current ?? null;
     const entities = store?.getSnapshot?.() ?? null;
@@ -51,6 +59,7 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveDi
         state,
         clearSelection: tools.clearSelection,
         entityPositions,
+        sampleGroundHeight: runtime.sampleGroundHeight,
       });
 
       syncPlayerMeshes({
@@ -60,10 +69,27 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveDi
         state,
         clearSelection: tools.clearSelection,
         entityPositions,
+        sampleGroundHeight: runtime.sampleGroundHeight,
         update(target) {
           runtime.cameraApi.update(target ?? fallbackTarget, dt);
         },
       });
+
+      const focusPos =
+        (selfKey ? entityPositions.get(selfKey) : null) ??
+        (state.runtimeRef.current
+          ? {
+              x: Number(state.runtimeRef.current.pos?.x ?? 0),
+              z: Number(state.runtimeRef.current.pos?.z ?? 0),
+            }
+          : null);
+      if (focusPos) {
+        runtime.proceduralFocus = {
+          x: Number(focusPos.x ?? 0),
+          z: Number(focusPos.z ?? 0),
+        };
+      }
+      syncProceduralWorld(runtime, state.proceduralMapRef.current ?? null, focusPos?.x ?? 0, focusPos?.z ?? 0);
     } else {
       const rt = state.runtimeRef.current;
       if (rt) {
@@ -77,9 +103,16 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveDi
           state.meshByEntityIdRef.current.set(legacyId, mesh);
           runtime.scene.add(mesh);
         }
-        mesh.position.set(x, y ?? 0, z);
+        const groundY = Number(runtime.sampleGroundHeight?.(x, z) ?? 0);
+        const groundTilt = sampleGroundTilt(runtime.sampleGroundHeight, x, z);
+        const groundAnchor = Number(mesh.userData?.groundAnchor ?? mesh.geometry?.parameters?.height / 2 ?? 0.875);
+        mesh.position.set(x, groundY + groundAnchor, z);
         mesh.rotation.y = yaw;
+        mesh.rotation.x = groundTilt.pitch;
+        mesh.rotation.z = groundTilt.roll;
         runtime.cameraApi.update(mesh, dt);
+        runtime.proceduralFocus = { x, z };
+        syncProceduralWorld(runtime, state.proceduralMapRef.current ?? null, x, z);
       } else {
         runtime.cameraApi.update(fallbackTarget, dt);
       }

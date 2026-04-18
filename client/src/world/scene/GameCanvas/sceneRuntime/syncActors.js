@@ -1,7 +1,7 @@
 import { createActorMesh } from "../../../entities/actors/ActorFactory";
 import { readPosYawFromEntity } from "../helpers";
 
-export function syncActorMeshes({ actors, scene, state, clearSelection }) {
+export function syncActorMeshes({ actors, scene, state, clearSelection, sampleGroundHeight }) {
   const nextActorIds = new Set();
 
   for (const actor of actors) {
@@ -26,7 +26,11 @@ export function syncActorMeshes({ actors, scene, state, clearSelection }) {
     mesh.userData.lootSummary = actor.lootSummary ?? null;
 
     const { x, y, z, yaw } = readPosYawFromEntity(actor);
-    mesh.position.set(x, y ?? 0, z);
+    const groundY = Number(typeof sampleGroundHeight === "function" ? sampleGroundHeight(x, z) : 0);
+    const actorType = String(actor?.actorType ?? actor?.actor_type ?? "").trim().toUpperCase();
+    const isTreeActor = actorType === "TREE" || actorType === "TREE_APPLE" || actorType === "APPLE_TREE";
+    const actorOffsetY = isTreeActor ? 0 : Number(y ?? 0);
+    mesh.position.set(x, groundY + actorOffsetY, z);
     mesh.rotation.y = yaw ?? 0;
   }
 

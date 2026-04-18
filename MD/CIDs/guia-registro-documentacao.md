@@ -10,6 +10,7 @@ A ideia e simples:
 - `struct.md` e o resumo estrutural rapido
 - `MD/CIDs` guarda guias operacionais de cadastro e contratos estaveis
 - `MD/implementacoes` guarda estudos arquiteturais e planos tecnicos
+- quando o tema for mapas procedurais, o trio oficial fica em `MD/implementacoes`: modulo mestre, schema e catalogo de assets
 
 ## Como pensar a pasta MD
 
@@ -52,6 +53,7 @@ Exemplos:
 - fome
 - ciclo visual
 - regeneracao de recursos
+- mapas procedurais
 
 ## Regra para criar um novo MD
 

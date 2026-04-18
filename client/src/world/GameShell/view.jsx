@@ -32,6 +32,7 @@ export function GameShellView({ state, actions }) {
       <InventoryModal
         open={state.inventoryOpen}
         snapshot={state.inventorySnapshot}
+        researchSnapshot={state.snapshot?.research}
         equipmentSnapshot={state.equipmentSnapshot}
         selfVitals={state.selfVitals}
         inventoryMessage={state.inventoryMessage}

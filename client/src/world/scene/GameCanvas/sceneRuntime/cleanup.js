@@ -2,8 +2,10 @@ export function cleanupSceneRuntime({
   scene,
   renderer,
   groundMesh,
+  boundsLine,
   boundsGeometry,
   boundsMaterial,
+  proceduralWorldGroup,
   onResize,
   state,
 }) {
@@ -53,11 +55,34 @@ export function cleanupSceneRuntime({
   }
   state.meshByActorIdRef.current.clear();
 
+  if (proceduralWorldGroup) {
+    scene.remove(proceduralWorldGroup);
+    proceduralWorldGroup.traverse((child) => {
+      if (child.geometry) child.geometry.dispose?.();
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          for (const material of child.material) material?.dispose?.();
+        } else {
+          child.material.dispose?.();
+        }
+      }
+    });
+  }
+
   renderer.dispose();
   groundMesh.geometry.dispose();
   groundMesh.material.dispose();
-  boundsGeometry.dispose();
-  boundsMaterial.dispose();
+  if (boundsLine) {
+    boundsLine.geometry?.dispose?.();
+    if (Array.isArray(boundsLine.material)) {
+      for (const material of boundsLine.material) material?.dispose?.();
+    } else {
+      boundsLine.material?.dispose?.();
+    }
+  } else {
+    boundsGeometry.dispose();
+    boundsMaterial.dispose();
+  }
 
   state.selectedTargetRef.current = null;
   state.selectedObjectRef.current = null;

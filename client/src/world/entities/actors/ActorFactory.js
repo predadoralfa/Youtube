@@ -523,6 +523,7 @@ export function createTreeMesh(actor) {
       });
 
       alignModelToGround(model);
+      model.position.y -= 0.45;
       applyActorUserData(model, actor, true);
       group.add(model);
     })

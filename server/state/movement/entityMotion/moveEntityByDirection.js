@@ -1,6 +1,7 @@
 "use strict";
 
 const { normalize2D } = require("../math");
+const { resolveTerrainHeightFromBounds } = require("../terrain");
 const { resolveDesiredPosition } = require("./resolveDesiredPosition");
 
 function moveEntityByDirection({ pos, dir, speed, dt, bounds }) {
@@ -9,7 +10,7 @@ function moveEntityByDirection({ pos, dir, speed, dt, bounds }) {
     return {
       ok: true,
       moved: false,
-      pos: { x: Number(pos?.x ?? 0), y: Number(pos?.y ?? 0), z: Number(pos?.z ?? 0) },
+      pos: { x: currentPos.x, y: groundY, z: currentPos.z },
       direction,
     };
   }
@@ -19,10 +20,11 @@ function moveEntityByDirection({ pos, dir, speed, dt, bounds }) {
     y: Number(pos?.y ?? 0),
     z: Number(pos?.z ?? 0),
   };
+  const groundY = resolveTerrainHeightFromBounds(bounds, currentPos.x, currentPos.z);
 
   const desired = {
     x: currentPos.x + direction.x * speed * dt,
-    y: currentPos.y,
+    y: groundY,
     z: currentPos.z + direction.z * speed * dt,
   };
 
@@ -32,12 +34,13 @@ function moveEntityByDirection({ pos, dir, speed, dt, bounds }) {
       ok: false,
       reason: resolved.reason ?? "invalid_bounds",
       moved: false,
-      pos: currentPos,
+      pos: { x: currentPos.x, y: groundY, z: currentPos.z },
       direction,
     };
   }
 
   const clampedPos = resolved.pos;
+  clampedPos.y = resolveTerrainHeightFromBounds(bounds, clampedPos.x, clampedPos.z);
   const moved = clampedPos.x !== currentPos.x || clampedPos.z !== currentPos.z;
   return {
     ok: true,

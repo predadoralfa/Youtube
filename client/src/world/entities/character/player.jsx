@@ -43,12 +43,16 @@ export function createPlayerMesh(
     color: new THREE.Color(resolvedColor),
   });
 
+  // Anchora a peça pelos pés para que ela acompanhe melhor rampas e ondulações.
+  geo.translate(0, height / 2, 0);
+
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = false;
 
-  // “pisa” no chão
-  mesh.position.y = height / 2;
+  // A base geométrica agora já nasce no chão.
+  mesh.position.y = 0;
+  mesh.userData.groundAnchor = 0;
 
   // marcação útil para debug (sem depender de nomeplate ainda)
   mesh.userData.isSelf = !!isSelf;

@@ -1,6 +1,7 @@
 "use strict";
 
 const { normalize2D } = require("../math");
+const { resolveTerrainHeightFromBounds } = require("../terrain");
 const { resolveDesiredPosition } = require("./resolveDesiredPosition");
 
 function moveEntityTowardTarget({ pos, target, speed, dt, bounds, stopRadius }) {
@@ -9,6 +10,7 @@ function moveEntityTowardTarget({ pos, target, speed, dt, bounds, stopRadius }) 
     y: Number(pos?.y ?? 0),
     z: Number(pos?.z ?? 0),
   };
+  const groundY = resolveTerrainHeightFromBounds(bounds, currentPos.x, currentPos.z);
 
   const tx = Number(target?.x);
   const tz = Number(target?.z);
@@ -37,7 +39,7 @@ function moveEntityTowardTarget({ pos, target, speed, dt, bounds, stopRadius }) 
       reached: true,
       moved: false,
       distance,
-      pos: currentPos,
+      pos: { x: currentPos.x, y: groundY, z: currentPos.z },
       direction: { x: 0, z: 0 },
       yaw: null,
     };
@@ -50,7 +52,7 @@ function moveEntityTowardTarget({ pos, target, speed, dt, bounds, stopRadius }) 
       reached: false,
       moved: false,
       distance,
-      pos: currentPos,
+      pos: { x: currentPos.x, y: groundY, z: currentPos.z },
       direction,
       yaw: null,
     };
@@ -58,7 +60,7 @@ function moveEntityTowardTarget({ pos, target, speed, dt, bounds, stopRadius }) 
 
   const desired = {
     x: currentPos.x + direction.x * speed * dt,
-    y: currentPos.y,
+    y: groundY,
     z: currentPos.z + direction.z * speed * dt,
   };
 
@@ -70,13 +72,14 @@ function moveEntityTowardTarget({ pos, target, speed, dt, bounds, stopRadius }) 
       reached: false,
       moved: false,
       distance,
-      pos: currentPos,
+      pos: { x: currentPos.x, y: groundY, z: currentPos.z },
       direction,
       yaw: null,
     };
   }
 
   const clampedPos = resolved.pos;
+  clampedPos.y = resolveTerrainHeightFromBounds(bounds, clampedPos.x, clampedPos.z);
   const moved = clampedPos.x !== currentPos.x || clampedPos.z !== currentPos.z;
   return {
     ok: true,

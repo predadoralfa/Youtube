@@ -7,6 +7,7 @@ export function useInventoryModalState(props) {
   const derived = useInventoryModalDerivedState({
     open: props.open,
     snapshot: props.snapshot,
+    researchSnapshot: props.researchSnapshot,
     equipmentSnapshot: props.equipmentSnapshot,
     selfVitals: props.selfVitals,
     inventoryMessage: props.inventoryMessage,

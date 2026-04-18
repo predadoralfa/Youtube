@@ -50,11 +50,11 @@ export function InventoryModal(props) {
       >
         <InventoryHeader onClose={controller.requestCloseInventory} />
 
-        <InventoryBody
-          equipmentNoticeText={state.equipmentNoticeText}
-          setLocalNotice={state.setLocalNotice}
-          setDismissedNoticeText={state.setDismissedNoticeText}
-          cursorPos={state.cursorPos}
+      <InventoryBody
+        equipmentNoticeText={state.equipmentNoticeText}
+        setLocalNotice={state.setLocalNotice}
+        setDismissedNoticeText={state.setDismissedNoticeText}
+        cursorPos={state.cursorPos}
           heldPreviewLabel={state.heldPreviewLabel}
           heldPreviewQty={state.heldPreviewQty}
           heldState={state.heldState}
@@ -90,16 +90,18 @@ export function InventoryModal(props) {
           activeSidebarTab={state.activeSidebarTab}
           setActiveSidebarTab={state.setActiveSidebarTab}
           wearSlotRows={state.wearSlotRows}
-          selectedMacroFood={state.selectedMacroFood}
-          selectedMacroFoodLabel={state.selectedMacroFoodLabel}
-          macroFoodItemInstanceId={state.macroFoodItemInstanceId}
-          macroHungerThreshold={state.macroHungerThreshold}
-          hungerMax={state.hungerMax}
-          setMacroHungerThreshold={state.setMacroHungerThreshold}
-          setMacroFoodItemInstanceId={state.setMacroFoodItemInstanceId}
-          onSetAutoFoodMacro={props.onSetAutoFoodMacro}
-          handleMacroFoodDrop={controller.macroHandlers.handleMacroFoodDrop}
-        />
+        selectedMacroFood={state.selectedMacroFood}
+        selectedMacroFoodLabel={state.selectedMacroFoodLabel}
+        macroFoodItemInstanceId={state.macroFoodItemInstanceId}
+        macroHungerThreshold={state.macroHungerThreshold}
+        hungerMax={state.hungerMax}
+        macroUnlocked={state.macroUnlocked}
+        equipmentUnlocked={state.equipmentUnlocked}
+        setMacroHungerThreshold={state.setMacroHungerThreshold}
+        setMacroFoodItemInstanceId={state.setMacroFoodItemInstanceId}
+        onSetAutoFoodMacro={props.onSetAutoFoodMacro}
+        handleMacroFoodDrop={controller.macroHandlers.handleMacroFoodDrop}
+      />
       </div>
     </div>
   );

@@ -26,6 +26,7 @@ const {
   addEnemy,
   getEnemiesForInstance,
 } = require("./dependencies");
+const { getProceduralMapProfile } = require("../../config/mapProceduralProfiles");
 
 const bootstrap = async (req, res) => {
   try {
@@ -339,6 +340,7 @@ const bootstrap = async (req, res) => {
             bounds: { size_x: sizeX, size_z: sizeZ },
           },
         },
+        proceduralMap: getProceduralMapProfile(instance.id) ?? getProceduralMapProfile(local.id),
         worldClock,
         actors,
       },

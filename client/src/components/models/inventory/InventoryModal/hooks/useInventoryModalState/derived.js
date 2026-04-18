@@ -13,6 +13,7 @@ import {
 export function useInventoryModalDerivedState({
   open,
   snapshot,
+  researchSnapshot,
   equipmentSnapshot,
   selfVitals,
   inventoryMessage,
@@ -94,6 +95,17 @@ export function useInventoryModalDerivedState({
           ? "warn"
           : "ok"
       : "neutral";
+  const unlockedCapabilities = Array.isArray(researchSnapshot?.unlockedCapabilities)
+    ? researchSnapshot.unlockedCapabilities
+    : [];
+  const macroUnlocked =
+    unlockedCapabilities.some((capability) => String(capability ?? "").startsWith("macro.")) ||
+    Boolean(serverAutoFood?.itemInstanceId != null);
+  const equipmentUnlocked = unlockedCapabilities.some(
+    (capability) =>
+      String(capability ?? "").startsWith("ui.equipment:") ||
+      String(capability ?? "").startsWith("equipment.")
+  );
   const selectedMacroFood = macroFoodItemInstanceId
     ? getInventoryItemContext(inventoryIndex, macroFoodItemInstanceId)
     : null;
@@ -122,6 +134,8 @@ export function useInventoryModalDerivedState({
     carryWeightMax: formatWeight(carryWeightMax),
     carryWeightPct,
     carryWeightTone,
+    macroUnlocked,
+    equipmentUnlocked,
     selectedMacroFood,
     selectedMacroFoodLabel,
     isFoodItemAvailable: (itemInstanceId) => isFoodItem(inventoryIndex, itemInstanceId),

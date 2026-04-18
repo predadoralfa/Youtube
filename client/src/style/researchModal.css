@@ -177,6 +177,7 @@
 }
 
 .research-lane--tree {
+  position: relative;
   gap: 38px;
   padding-bottom: 24px;
 }
@@ -204,6 +205,8 @@
 }
 
 .research-tree-node {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -259,40 +262,49 @@
 }
 
 .research-tree-children::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 28px;
-  bottom: 18px;
-  width: 2px;
-  background: linear-gradient(180deg, rgba(0, 255, 255, 0.72), rgba(255, 0, 255, 0.12));
+  display: none;
 }
 
-.research-tree-link {
+.research-graph-lines {
   position: absolute;
-  left: -2px;
-  top: 28px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
 }
 
-.research-tree-link-line {
+.research-graph-lines-group {
+  fill: none;
+}
+
+.research-graph-line {
+  fill: none;
+}
+
+.research-graph-line-glow {
   display: block;
-  width: 38px;
-  height: 2px;
-  background: linear-gradient(90deg, rgba(0, 255, 255, 0.96), rgba(255, 0, 255, 0.22));
-  box-shadow: 0 0 18px rgba(0, 255, 255, 0.18);
+  stroke: rgba(255, 214, 140, 0.16);
+  stroke-width: 22;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: url(#researchRoadGlow);
 }
 
-.research-tree-link-dot {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: var(--research-accent);
-  box-shadow:
-    0 0 0 8px rgba(0, 255, 255, 0.08),
-    0 0 22px rgba(0, 255, 255, 0.42);
+.research-graph-line-main {
+  fill: none;
+  stroke: #6e4728;
+  stroke-width: 14;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+}
+
+.research-graph-line-core {
+  fill: none;
+  stroke: #c98a48;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.95;
 }
 
 .research-tree-children-stack {

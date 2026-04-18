@@ -91,6 +91,10 @@ Documentos principais:
 - [guia-registro-skills-craft.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-skills-craft.md)
 - [estudo-arquitetural-actors-spawn.md](/D:/JS-Projects/Youtube/MD/implementacoes/estudo-arquitetural-actors-spawn.md)
 - [modulo-skills-craft.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-skills-craft.md)
+- [modulo-mapas-procedurais.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-mapas-procedurais.md)
+- [mapa-procedural-schema.md](/D:/JS-Projects/Youtube/MD/implementacoes/mapa-procedural-schema.md)
+- [mapa-procedural-asset-families.md](/D:/JS-Projects/Youtube/MD/implementacoes/mapa-procedural-asset-families.md)
+- [plano-tecnico-mapa-procedural-instancia-3.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-mapa-procedural-instancia-3.md)
 - [plano-tecnico-respawn-inimigos-por-instancia.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-respawn-inimigos-por-instancia.md)
 
 ---
@@ -185,6 +189,13 @@ Regra do backend:
 - `ga_local_visual`
 - `ga_world_clock`
 - `ga_world_month_def`
+
+Leitura complementar para mapas procedurais:
+
+- [modulo-mapas-procedurais.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-mapas-procedurais.md)
+- [mapa-procedural-schema.md](/D:/JS-Projects/Youtube/MD/implementacoes/mapa-procedural-schema.md)
+- [mapa-procedural-asset-families.md](/D:/JS-Projects/Youtube/MD/implementacoes/mapa-procedural-asset-families.md)
+- [plano-tecnico-mapa-procedural-instancia-3.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-mapa-procedural-instancia-3.md)
 
 ### Jogador
 

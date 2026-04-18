@@ -52,6 +52,10 @@ Estrutura atual:
      |-- estudo-arquitetural-actors-spawn.md
      |-- implementacao-ciclo-visual-dia-noite.md
      |-- implementacao-sistema-de-fome.md
+     |-- mapa-procedural-asset-families.md
+     |-- mapa-procedural-schema.md
+     |-- modulo-mapas-procedurais.md
+     |-- plano-tecnico-mapa-procedural-instancia-3.md
      |-- modulo-skills-craft.md
      |-- modulo-research.md
      |-- plano-regeneracao-recursos.md
@@ -84,6 +88,10 @@ Atalhos:
 - skills e craft: [guia-registro-skills-craft.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-skills-craft.md)
 - documentacao: [guia-registro-documentacao.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-documentacao.md)
 - container CID: [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
+- mapas procedurais: [modulo-mapas-procedurais.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-mapas-procedurais.md)
+- schema de mapas: [mapa-procedural-schema.md](/D:/JS-Projects/Youtube/MD/implementacoes/mapa-procedural-schema.md)
+- catalogo de assets: [mapa-procedural-asset-families.md](/D:/JS-Projects/Youtube/MD/implementacoes/mapa-procedural-asset-families.md)
+- instancia 3 procedural: [plano-tecnico-mapa-procedural-instancia-3.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-mapa-procedural-instancia-3.md)
 - actors e spawn: [estudo-arquitetural-actors-spawn.md](/D:/JS-Projects/Youtube/MD/implementacoes/estudo-arquitetural-actors-spawn.md)
 - skills e craft: [modulo-skills-craft.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-skills-craft.md)
 - research: [modulo-research.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-research.md)
@@ -196,6 +204,13 @@ O mundo separa:
 - `ga_instance`: instancia concreta daquele local
 - `ga_local_geometry`: dados geometricos do mapa
 - `ga_local_visual`: configuracao visual do local
+
+Os mapas procedurais devem seguir o trio de documentos:
+
+- [modulo-mapas-procedurais.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-mapas-procedurais.md)
+- [mapa-procedural-schema.md](/D:/JS-Projects/Youtube/MD/implementacoes/mapa-procedural-schema.md)
+- [mapa-procedural-asset-families.md](/D:/JS-Projects/Youtube/MD/implementacoes/mapa-procedural-asset-families.md)
+- [plano-tecnico-mapa-procedural-instancia-3.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-mapa-procedural-instancia-3.md)
 
 Isso permite:
 

@@ -66,6 +66,7 @@ function buildResearchPayload(rt) {
     ok: true,
     serverNowMs: Date.now(),
     activeResearchCode: research?.activeResearchCode ?? null,
+    unlockedCapabilities: Array.from(listUnlockedCapabilities(rt)).sort(),
     studies: studies.map(buildStudyPayload),
   };
 }

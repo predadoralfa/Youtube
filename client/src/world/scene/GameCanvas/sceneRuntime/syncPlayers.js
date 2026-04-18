@@ -1,7 +1,22 @@
 import { createPlayerMesh } from "../../../entities/character/player";
-import { applySelfColor, isEnemyEntity, readEntityVitals, readPosYawFromEntity } from "../helpers";
+import {
+  applySelfColor,
+  isEnemyEntity,
+  readEntityVitals,
+  readPosYawFromEntity,
+} from "../helpers";
+import { sampleGroundTilt } from "./terrain";
 
-export function syncPlayerMeshes({ entities, selfKey, scene, state, clearSelection, entityPositions, update }) {
+export function syncPlayerMeshes({
+  entities,
+  selfKey,
+  scene,
+  state,
+  clearSelection,
+  entityPositions,
+  sampleGroundHeight,
+  update,
+}) {
   if (state.lastSelfIdRef.current !== selfKey) {
     for (const [id, mesh] of state.meshByEntityIdRef.current.entries()) {
       applySelfColor(mesh, selfKey != null && id === selfKey);
@@ -47,9 +62,13 @@ export function syncPlayerMeshes({ entities, selfKey, scene, state, clearSelecti
     const entityId = String(entityIdRaw);
     nextIds.add(entityId);
 
+    const groundY = Number(
+      typeof sampleGroundHeight === "function" ? sampleGroundHeight(entity?.pos?.x ?? 0, entity?.pos?.z ?? 0) : 0
+    );
+
     entityPositions.set(entityId, {
       x: entity.pos?.x ?? 0,
-      y: entity.pos?.y ?? 0,
+      y: groundY,
       z: entity.pos?.z ?? 0,
     });
 
@@ -72,8 +91,13 @@ export function syncPlayerMeshes({ entities, selfKey, scene, state, clearSelecti
     }
 
     const { x, y, z, yaw } = readPosYawFromEntity(entity);
-    mesh.position.set(x, y ?? 0, z);
+    const meshGroundY = Number(typeof sampleGroundHeight === "function" ? sampleGroundHeight(x, z) : 0);
+    const groundTilt = sampleGroundTilt(sampleGroundHeight, x, z);
+    const groundAnchor = Number(mesh.userData?.groundAnchor ?? mesh.geometry?.parameters?.height / 2 ?? 0.875);
+    mesh.position.set(x, meshGroundY + groundAnchor, z);
     mesh.rotation.y = yaw;
+    mesh.rotation.x = groundTilt.pitch;
+    mesh.rotation.z = groundTilt.roll;
   }
 
   for (const [entityId, mesh] of state.meshByEntityIdRef.current.entries()) {
