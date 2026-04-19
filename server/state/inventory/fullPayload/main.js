@@ -219,6 +219,42 @@ function buildCraftSection(invRt, research) {
   };
 }
 
+function buildSkillSummaryPayload(skill, fallbackCode = null) {
+  const skillCode = String(skill?.skillCode ?? skill?.code ?? fallbackCode ?? "").trim();
+  const currentLevel = Math.max(
+    1,
+    readNumber(skill?.currentLevel ?? skill?.current_level ?? 1, 1)
+  );
+
+  return {
+    skillCode,
+    skillName: skill?.skillName ?? skill?.name ?? skillCode,
+    currentLevel,
+    currentXp: String(skill?.currentXp ?? skill?.current_xp ?? "0"),
+    totalXp: String(skill?.totalXp ?? skill?.total_xp ?? "0"),
+    requiredXp: String(skill?.requiredXp ?? skill?.required_xp ?? "100"),
+    maxLevel: Math.max(1, readNumber(skill?.maxLevel ?? skill?.max_level ?? 1, 1)),
+  };
+}
+
+function buildSkillsSection(invRt) {
+  const rawSkills = invRt?.skills ?? {};
+  const skillList = Array.isArray(rawSkills)
+    ? rawSkills
+    : Object.entries(rawSkills).map(([skillCode, skill]) => ({
+        ...skill,
+        skillCode: skill?.skillCode ?? skill?.code ?? skillCode,
+      }));
+  const preferredOrder = ["SKILL_CRAFTING", "SKILL_BUILDING", "SKILL_COOKING", "SKILL_GATHERING"];
+  const orderMap = new Map(preferredOrder.map((code, index) => [code, index]));
+
+  return stableSortBy(skillList, (skill) => {
+    const code = String(skill?.skillCode ?? skill?.code ?? "").toUpperCase();
+    const order = orderMap.has(code) ? orderMap.get(code) : preferredOrder.length + 1;
+    return `${String(order).padStart(2, "0")}:${code}`;
+  }).map((skill) => buildSkillSummaryPayload(skill));
+}
+
 function buildItemInstanceSummary(invRt, itemInstanceId) {
   if (!itemInstanceId) return null;
 
@@ -387,6 +423,7 @@ function buildInventoryFull(invRt, equipmentRt = null) {
       isOverCapacity: carryWeightMax > 0 ? carryWeightCurrent > carryWeightMax : false,
     },
     craft: buildCraftSection(invRt, research),
+    skills: buildSkillsSection(invRt),
     equipment,
   };
 }

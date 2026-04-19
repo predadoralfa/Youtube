@@ -1,0 +1,1 @@
+export { SkillsModal } from "./SkillsModalView";

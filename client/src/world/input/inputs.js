@@ -8,6 +8,7 @@ import {
   intentUiToggleInventory,
   intentUiToggleResearch,
   intentUiToggleBuild,
+  intentUiToggleSkills,
   intentUiCancel,
   intentInteractPress,
   intentInteractRelease,
@@ -167,6 +168,13 @@ export function bindInputs(domElement, bus) {
     // B = build
     if (k === "b") {
       bus.emit(intentUiToggleBuild());
+      e.preventDefault();
+      return;
+    }
+
+    // G = skills
+    if (k === "g") {
+      bus.emit(intentUiToggleSkills());
       e.preventDefault();
       return;
     }

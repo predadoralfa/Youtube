@@ -43,6 +43,10 @@ export function useGameShellTargetingActions(state) {
     state.setBuildOpen(false);
   }, [state]);
 
+  const closeSkills = useCallback(() => {
+    state.setSkillsOpen(false);
+  }, [state]);
+
   const onTargetSelect = useCallback((target) => {
     if (!target?.kind || target?.id == null) return;
     state.selectedTargetRef.current = {
@@ -66,6 +70,7 @@ export function useGameShellTargetingActions(state) {
     closeInventory,
     closeResearch,
     closeBuild,
+    closeSkills,
     onTargetSelect,
     onTargetClear,
   };

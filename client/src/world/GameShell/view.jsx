@@ -3,6 +3,7 @@ import { LoadingOverlay } from "@/components/overlays/LoadingOverlay";
 import { InventoryModal } from "@/components/models/inventory/InventoryModal";
 import { BuildModal } from "@/components/models/build/BuildModal";
 import { ResearchModal } from "@/components/models/research/ResearchModal";
+import { SkillsModal } from "@/components/models/skills/SkillsModal";
 import { WorldClockPanel } from "@/world/ui/WorldClockPanel";
 import { PlayerStatusPanel } from "@/world/ui/PlayerStatusPanel";
 
@@ -68,6 +69,12 @@ export function GameShellView({ state, actions }) {
         onClose={actions.closeResearch}
         onStartStudy={actions.emitResearchStart}
         onRequestInventoryFull={actions.requestInventoryFull}
+      />
+
+      <SkillsModal
+        open={state.skillsOpen}
+        snapshot={state.inventorySnapshot?.skills ?? state.snapshot?.skills ?? null}
+        onClose={actions.closeSkills}
       />
 
       <BuildModal open={state.buildOpen} onClose={actions.closeBuild} />

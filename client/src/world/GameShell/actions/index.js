@@ -14,6 +14,7 @@ export function useGameShellActions(state) {
     closeBuild: targetingActions.closeBuild,
     closeResearch: targetingActions.closeResearch,
     closeInventory: targetingActions.closeInventory,
+    closeSkills: targetingActions.closeSkills,
     emitInteractStart: targetingActions.emitInteractStart,
     emitInteractStop: targetingActions.emitInteractStop,
   });
@@ -46,6 +47,7 @@ export function useGameShellActions(state) {
       targetingActions.closeInventory,
       targetingActions.closeResearch,
       targetingActions.closeBuild,
+      targetingActions.closeSkills,
       targetingActions.onTargetSelect,
       targetingActions.onTargetClear,
       handleInputIntent,

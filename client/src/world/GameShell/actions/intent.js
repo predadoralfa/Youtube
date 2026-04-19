@@ -43,13 +43,14 @@ function findNearestCollectableActor(snapshot, maxRadius = 2.4) {
 export function useGameShellIntentAction(state, handlers) {
   const {
     requestInventoryFull,
-    requestResearchFull,
-    closeBuild,
-    closeResearch,
-    closeInventory,
-    emitInteractStart,
-    emitInteractStop,
-  } = handlers;
+      requestResearchFull,
+      closeBuild,
+      closeResearch,
+      closeInventory,
+      closeSkills,
+      emitInteractStart,
+      emitInteractStop,
+    } = handlers;
 
   return useCallback(
     (intent) => {
@@ -60,6 +61,7 @@ export function useGameShellIntentAction(state, handlers) {
           const next = !prev;
           if (next) {
             state.setResearchOpen(false);
+            state.setSkillsOpen(false);
             state.pendingInvRequestRef.current = true;
             const ok = requestInventoryFull();
             if (ok) state.pendingInvRequestRef.current = false;
@@ -75,6 +77,7 @@ export function useGameShellIntentAction(state, handlers) {
           if (next) {
             state.setInventoryOpen(false);
             state.setBuildOpen(false);
+            state.setSkillsOpen(false);
             requestInventoryFull();
             requestResearchFull();
           }
@@ -89,6 +92,20 @@ export function useGameShellIntentAction(state, handlers) {
           if (next) {
             state.setInventoryOpen(false);
             state.setResearchOpen(false);
+            state.setSkillsOpen(false);
+          }
+          return next;
+        });
+        return;
+      }
+
+      if (intent.type === IntentType.UI_TOGGLE_SKILLS) {
+        state.setSkillsOpen((prev) => {
+          const next = !prev;
+          if (next) {
+            state.setInventoryOpen(false);
+            state.setResearchOpen(false);
+            state.setBuildOpen(false);
           }
           return next;
         });
@@ -96,6 +113,7 @@ export function useGameShellIntentAction(state, handlers) {
       }
 
       if (intent.type === IntentType.UI_CANCEL) {
+        if (state.skillsOpen) return closeSkills();
         if (state.buildOpen) return closeBuild();
         if (state.researchOpen) return closeResearch();
         if (state.inventoryOpen) return closeInventory();
@@ -158,6 +176,7 @@ export function useGameShellIntentAction(state, handlers) {
       closeBuild,
       closeResearch,
       closeInventory,
+      closeSkills,
       emitInteractStart,
       emitInteractStop,
     ]

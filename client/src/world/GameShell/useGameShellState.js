@@ -9,6 +9,7 @@ export function useGameShellState() {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [researchOpen, setResearchOpen] = useState(false);
   const [buildOpen, setBuildOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
   const [inventorySnapshot, setInventorySnapshot] = useState(null);
   const [equipmentSnapshot, setEquipmentSnapshot] = useState(null);
   const [inventoryMessage, setInventoryMessage] = useState(null);
@@ -44,6 +45,7 @@ export function useGameShellState() {
       setInventoryOpen,
       setResearchOpen,
       setBuildOpen,
+      setSkillsOpen,
       setInventorySnapshot,
       setEquipmentSnapshot,
       setInventoryMessage,
@@ -64,6 +66,7 @@ export function useGameShellState() {
       inventoryOpen,
       researchOpen,
       buildOpen,
+      skillsOpen,
       inventorySnapshot,
       equipmentSnapshot,
       inventoryMessage,
@@ -81,6 +84,7 @@ export function useGameShellState() {
   stateRef.current.inventoryOpen = inventoryOpen;
   stateRef.current.researchOpen = researchOpen;
   stateRef.current.buildOpen = buildOpen;
+  stateRef.current.skillsOpen = skillsOpen;
   stateRef.current.inventorySnapshot = inventorySnapshot;
   stateRef.current.equipmentSnapshot = equipmentSnapshot;
   stateRef.current.inventoryMessage = inventoryMessage;
