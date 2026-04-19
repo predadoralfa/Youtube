@@ -282,6 +282,7 @@ Documento de apoio:
 
 - actors usam definicao, spawn e runtime separados
 - coleta e validada no servidor
+- coleta manual sem ferramenta consome `1` stamina por acao e bloqueia com aviso quando a barra nao suporta
 - containers sustentam recursos, loot e baus
 
 ### Inimigos e respawn
@@ -301,6 +302,13 @@ Documento de apoio:
 - dreno por tempo real
 - calculo autoritativo no servidor
 - suporte a auto food por macro
+
+### Estamina
+
+- consumo autoritativo no servidor
+- runtime e persistencia precisam ficar sincronizados
+- combate, movimento e coleta compartilham a mesma base de leitura
+- coletar sem ferramenta consome `1` stamina por acao
 
 ### Research
 

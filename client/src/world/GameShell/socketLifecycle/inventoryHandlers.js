@@ -6,6 +6,8 @@ function resolveActorNoticeTone(message) {
   if (
     value.includes("carry weight") ||
     value.includes("weight limit") ||
+    value.includes("stamina") ||
+    value.includes("exhaust") ||
     value.includes("peso") ||
     value.includes("limite de peso")
   ) {

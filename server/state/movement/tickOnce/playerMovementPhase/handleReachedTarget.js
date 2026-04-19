@@ -1,12 +1,13 @@
 "use strict";
 
-const { markRuntimeDirty } = require("../../../runtimeStore");
+const { markRuntimeDirty, markStatsDirty } = require("../../../runtimeStore");
 const { getActiveSocket } = require("../../../../socket/sessionIndex");
 const { bumpRev } = require("../../entity");
 const { attemptCollectFromActor } = require("../../../../service/actorCollectService");
 const { getActor } = require("../../../actorsRuntimeStore");
 const { resolveActorCollectCooldownMs } = require("../../../../service/actorCollectService");
 const { emitPlayerState } = require("./emitPlayerState");
+const { syncRuntimeStamina } = require("../../stamina.js");
 
 async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
   if (rt.interact?.active && rt.interact?.kind === "ACTOR") {
@@ -63,6 +64,18 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
               }
             }
 
+            if (result?.error === "INSUFFICIENT_STAMINA" || result?.error === "PLAYER_STATS_NOT_FOUND") {
+              if (activeSocket) {
+                activeSocket.emit("actor:collected", {
+                  actorId: String(interactActorId),
+                  actorDisabled: false,
+                  inventory: null,
+                  loot: null,
+                  message: result?.message || "Not enough stamina to collect",
+                });
+              }
+            }
+
             console.warn(
               `[COLLECT] Erro ao coletar: userId=${rt.userId} actorId=${interactActorId} error=${result?.error}`
             );
@@ -74,6 +87,15 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
             rt.moveTarget = null;
             rt.moveMode = "STOP";
             rt.action = "idle";
+          }
+
+          if (result?.stamina && Number.isFinite(Number(result.stamina.after))) {
+            syncRuntimeStamina(
+              rt,
+              Number(result.stamina.after),
+              Number(result.stamina.max ?? result.stamina.after)
+            );
+            markStatsDirty(rt.userId);
           }
 
           if (!result?.actorDisabled && interactActorId != null) {

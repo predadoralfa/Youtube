@@ -8,6 +8,7 @@ const { ensureEquipmentLoaded } = require("../state/equipment/loader");
 const { assertCanAddItemWeight, loadCarryWeightStats } = require("../state/inventory/weight");
 const { getRuntime } = require("../state/runtime/store");
 const { ensureStarterInventory } = require("./inventoryProvisioning");
+const { consumeGatheringStamina } = require("./gatheringStaminaService");
 const { awardSkillXp, loadUserSkillSummary } = require("./skillProgressionService");
 const { DEFAULT_COLLECT_COOLDOWN_MS } = require("../config/interactionConstants");
 const {
@@ -241,7 +242,8 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     return { ok: false, error: "INVALID_ACTOR_ID" };
   }
 
-  return await db.sequelize.transaction(async (tx) => {
+  try {
+    return await db.sequelize.transaction(async (tx) => {
     async function destroyActorAndLootContainer(actorIdToDestroy, lootContainerIdToDestroy, lootContainerRow) {
       await db.GaActorRuntime.update(
         { status: "DISABLED" },
@@ -690,6 +692,17 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
 
     console.log("[COLLECT] Slots atualizados no DB");
 
+    const staminaSpend = await consumeGatheringStamina(userId, tx, 1);
+    if (!staminaSpend?.ok) {
+      const staminaError = new Error(staminaSpend?.message ?? "Not enough stamina to collect");
+      staminaError.collectResult = {
+        ok: false,
+        error: staminaSpend?.error ?? "INSUFFICIENT_STAMINA",
+        message: staminaSpend?.message ?? "Not enough stamina to collect",
+      };
+      throw staminaError;
+    }
+
     const canAwardGatheringXp =
       actorDefCode === "TREE_APPLE" ||
       actorDefCode === "ROCK_NODE_SMALL" ||
@@ -859,6 +872,12 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
       actorDisabled,
       inventoryFull,
       actorUpdate,
+      stamina: {
+        cost: staminaSpend.staminaCost,
+        before: staminaSpend.staminaBefore,
+        after: staminaSpend.staminaAfter,
+        max: staminaSpend.staminaMax,
+      },
       loot: {
         itemDefId: String(itemDef.id),
         itemName: itemDef.name ?? itemDef.code ?? null,
@@ -879,6 +898,12 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
       message: actorWouldBeEmpty && !shouldDespawnWhenEmpty ? "This tree has no more fruits right now" : null,
     };
   });
+  } catch (err) {
+    if (err?.collectResult) {
+      return err.collectResult;
+    }
+    throw err;
+  }
 }
 
 module.exports = {
