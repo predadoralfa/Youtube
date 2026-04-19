@@ -4,7 +4,10 @@
 const db = require("../models");
 const { ensureInventoryLoaded } = require("../state/inventory/loader");
 const { buildInventoryFull } = require("../state/inventory/fullPayload");
-const { loadCarryWeightStats } = require("../state/inventory/weight");
+const { assertCanAddItemWeight, loadCarryWeightStats } = require("../state/inventory/weight");
+const { ensureEquipmentLoaded } = require("../state/equipment/loader");
+const { getRuntime } = require("../state/runtime/store");
+const { ensureResearchLoaded } = require("./researchService");
 
 async function pickupFromChestToHands(userIdRaw, actorIdRaw) {
   const userId = String(userIdRaw);
@@ -41,6 +44,17 @@ async function pickupFromChestToHands(userIdRaw, actorIdRaw) {
     const src = srcSlots.find((s) => s.item_instance_id != null && Number(s.qty || 0) > 0);
     if (!src) return { ok: false, error: { code: "CHEST_EMPTY" } };
 
+    const srcInstance = await db.GaItemInstance.findByPk(src.item_instance_id, {
+      transaction: tx,
+      lock: tx.LOCK.UPDATE,
+    });
+    if (!srcInstance) return { ok: false, error: { code: "ITEM_INSTANCE_NOT_FOUND" } };
+
+    const srcItemDef = await db.GaItemDef.findByPk(srcInstance.item_def_id, {
+      transaction: tx,
+    });
+    if (!srcItemDef) return { ok: false, error: { code: "ITEM_DEF_NOT_FOUND" } };
+
     // 3) resolve containers das mãos do player
     const handOwners = await db.GaContainerOwner.findAll({
       where: { owner_kind: "PLAYER", owner_id: userId, slot_role: ["HAND_R", "HAND_L"] },
@@ -68,6 +82,31 @@ async function pickupFromChestToHands(userIdRaw, actorIdRaw) {
     let dst = await firstEmptySlot(handR);
     if (!dst) dst = await firstEmptySlot(handL);
     if (!dst) return { ok: false, error: { code: "INVENTORY_FULL" } };
+
+    const invRtForWeight = await ensureInventoryLoaded(userId);
+    if (invRtForWeight?.heldState) {
+      return { ok: false, error: { code: "HELD_STATE_ACTIVE" } };
+    }
+    invRtForWeight.carryWeight = await loadCarryWeightStats(userId);
+    const eqRtForWeight = await ensureEquipmentLoaded(userId);
+    const rtForWeight = getRuntime(userId);
+    const researchForWeight = await ensureResearchLoaded(userId, rtForWeight ?? { userId });
+    invRtForWeight.research = researchForWeight;
+    try {
+      assertCanAddItemWeight(invRtForWeight, eqRtForWeight, researchForWeight, srcItemDef, src.qty);
+    } catch (err) {
+      if (err?.code === "CARRY_WEIGHT_LIMIT") {
+        return {
+          ok: false,
+          error: {
+            code: "CARRY_WEIGHT_LIMIT",
+            message: err.message,
+            meta: err.meta,
+          },
+        };
+      }
+      throw err;
+    }
 
     // 5) transfer (1 stack inteira por enquanto)
     dst.item_instance_id = src.item_instance_id;

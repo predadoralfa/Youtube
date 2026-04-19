@@ -15,6 +15,7 @@ export function useGameShellState() {
   const [equipmentMessage, setEquipmentMessage] = useState(null);
   const [researchMessage, setResearchMessage] = useState(null);
   const [lootNotifications, setLootNotifications] = useState([]);
+  const [worldNotifications, setWorldNotifications] = useState([]);
 
   const socketRef = useRef(null);
   const joinedRef = useRef(false);
@@ -49,6 +50,7 @@ export function useGameShellState() {
       setEquipmentMessage,
       setResearchMessage,
       setLootNotifications,
+      setWorldNotifications,
       socketRef,
       joinedRef,
       pendingInvRequestRef,
@@ -68,6 +70,7 @@ export function useGameShellState() {
       equipmentMessage,
       researchMessage,
       lootNotifications,
+      worldNotifications,
       selfVitals,
     };
   }
@@ -84,6 +87,7 @@ export function useGameShellState() {
   stateRef.current.equipmentMessage = equipmentMessage;
   stateRef.current.researchMessage = researchMessage;
   stateRef.current.lootNotifications = lootNotifications;
+  stateRef.current.worldNotifications = worldNotifications;
   stateRef.current.selfVitals = selfVitals;
 
   return stateRef.current;

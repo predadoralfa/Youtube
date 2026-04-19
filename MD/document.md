@@ -46,6 +46,7 @@ Estrutura atual:
  |   `-- guia-registro-itens.md
  |-- seeds/
  |   |-- guia-registro-actors.md
+ |   |-- guia-registro-itens-com-container.md
  |   |-- guia-registro-itens.md
  |   `-- guia-registro-skills-craft.md
  `-- implementacoes/
@@ -86,6 +87,7 @@ Atalhos:
 - itens: [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
 - research: [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-research.md)
 - skills e craft: [guia-registro-skills-craft.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-skills-craft.md)
+- itens com container: [guia-registro-itens-com-container.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens-com-container.md)
 - documentacao: [guia-registro-documentacao.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-documentacao.md)
 - container CID: [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
 - mapas procedurais: [modulo-mapas-procedurais.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-mapas-procedurais.md)
@@ -325,6 +327,7 @@ Uso pratico:
 Documento principal:
 
 - [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
+- [guia-registro-itens-com-container.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens-com-container.md)
 
 ---
 

@@ -43,8 +43,8 @@ function buildItemDefPayload(def) {
     code: def.code,
     name: def.name,
     category: def.category ?? null,
-    weight: def.weight ?? null,
-    stackMax: def.stackMax ?? 1,
+    weight: def.weight ?? def.unit_weight ?? null,
+    stackMax: def.stackMax ?? def.stack_max ?? 1,
     canEat: isFoodDef(def),
     components: Array.isArray(def.components)
       ? stableSortBy(def.components, (c) => String(c.id)).map((c) => ({
@@ -54,6 +54,168 @@ function buildItemDefPayload(def) {
           version: c.version ?? 1,
         }))
       : [],
+  };
+}
+
+function readNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function readModelValue(row, camelKey, snakeKey = camelKey) {
+  return row?.[camelKey] ?? row?.[snakeKey] ?? row?.get?.(snakeKey) ?? row?.get?.(camelKey) ?? null;
+}
+
+function getCompletedResearchLevel(research, researchDefId) {
+  if (researchDefId == null) return Infinity;
+  const studies = Array.isArray(research?.studies) ? research.studies : [];
+  const study = studies.find((item) => Number(item.researchDefId) === Number(researchDefId));
+  return readNumber(study?.currentLevel, 0);
+}
+
+function isCraftUnlocked(craftDef, research) {
+  const requiredResearchDefId = readModelValue(craftDef, "requiredResearchDefId", "required_research_def_id");
+  if (requiredResearchDefId == null) return true;
+  const requiredLevel = Math.max(
+    1,
+    readNumber(readModelValue(craftDef, "requiredResearchLevel", "required_research_level"), 1)
+  );
+  return getCompletedResearchLevel(research, requiredResearchDefId) >= requiredLevel;
+}
+
+function getCraftTimeReductionMs(craftingSkillLevel) {
+  const level = Math.max(1, readNumber(craftingSkillLevel, 1));
+  return Math.max(0, level - 1) * 30000;
+}
+
+function getCraftTimeForSkill(baseCraftTimeMs, craftingSkillLevel) {
+  const base = Math.max(0, readNumber(baseCraftTimeMs, 0));
+  const reduced = base - getCraftTimeReductionMs(craftingSkillLevel);
+  return Math.max(1000, reduced);
+}
+
+function buildCraftPayload(craftDef, craftingSkillLevel) {
+  const recipeItems = Array.isArray(craftDef?.recipeItems) ? craftDef.recipeItems : [];
+  const baseCraftTimeMs = readNumber(readModelValue(craftDef, "craftTimeMs", "craft_time_ms"), 0);
+  const effectiveCraftTimeMs = getCraftTimeForSkill(baseCraftTimeMs, craftingSkillLevel);
+
+  return {
+    id: String(craftDef.id),
+    code: craftDef.code,
+    name: craftDef.name,
+    description: craftDef.description ?? null,
+    requiredSkillLevel: readNumber(
+      readModelValue(craftDef, "requiredSkillLevel", "required_skill_level"),
+      1
+    ),
+    requiredResearchDefId:
+      readModelValue(craftDef, "requiredResearchDefId", "required_research_def_id") == null
+        ? null
+        : Number(readModelValue(craftDef, "requiredResearchDefId", "required_research_def_id")),
+    requiredResearchLevel: readNumber(
+      readModelValue(craftDef, "requiredResearchLevel", "required_research_level"),
+      1
+    ),
+    outputQty: readNumber(readModelValue(craftDef, "outputQty", "output_qty"), 1),
+    craftTimeMs: effectiveCraftTimeMs,
+    craftTimeBaseMs: baseCraftTimeMs,
+    staminaCostTotal: readNumber(
+      readModelValue(craftDef, "staminaCostTotal", "stamina_cost_total"),
+      0
+    ),
+    xpReward: readNumber(readModelValue(craftDef, "xpReward", "xp_reward"), 0),
+    skillDef: craftDef.skillDef
+      ? {
+          id: String(craftDef.skillDef.id),
+          code: craftDef.skillDef.code,
+          name: craftDef.skillDef.name,
+        }
+      : null,
+    requiredResearchDef: craftDef.requiredResearchDef
+      ? {
+          id: String(craftDef.requiredResearchDef.id),
+          code: craftDef.requiredResearchDef.code,
+          name: craftDef.requiredResearchDef.name,
+        }
+      : null,
+    outputItemDef: craftDef.outputItemDef ? buildItemDefPayload(craftDef.outputItemDef) : null,
+    recipeItems: stableSortBy(recipeItems, (item) =>
+      `${readNumber(readModelValue(item, "sortOrder", "sort_order"), 0)}:${item.id}`
+    ).map((item) => ({
+      id: String(item.id),
+      itemDefId: String(readModelValue(item, "itemDefId", "item_def_id")),
+      quantity: readNumber(item.quantity, 1),
+      role: item.role ?? "INPUT",
+      sortOrder: readNumber(readModelValue(item, "sortOrder", "sort_order"), 0),
+      itemDef: item.itemDef ? buildItemDefPayload(item.itemDef) : null,
+    })),
+  };
+}
+
+function buildCraftJobPayload(job) {
+  const craftDef = job?.craftDef ?? null;
+  const craftTimeMs = readNumber(
+    readModelValue(job, "craftTimeMs", "craft_time_ms"),
+    craftDef == null ? 0 : readNumber(readModelValue(craftDef, "craftTimeMs", "craft_time_ms"), 0)
+  );
+
+  return {
+    id: String(job.id),
+    craftDefId: String(readModelValue(job, "craftDefId", "craft_def_id")),
+    craftCode: craftDef?.code ?? null,
+    name: craftDef?.name ?? null,
+    status: job.status ?? "PENDING",
+    progressMs: readNumber(readModelValue(job, "currentProgressMs", "current_progress_ms"), 0),
+    craftTimeMs,
+    outputQty: craftDef == null ? 1 : readNumber(readModelValue(craftDef, "outputQty", "output_qty"), 1),
+    outputItemDef: craftDef?.outputItemDef ? buildItemDefPayload(craftDef.outputItemDef) : null,
+    startedAtMs:
+      readModelValue(job, "startedAtMs", "started_at_ms") == null
+        ? null
+        : readNumber(readModelValue(job, "startedAtMs", "started_at_ms"), null),
+    pausedAtMs:
+      readModelValue(job, "pausedAtMs", "paused_at_ms") == null
+        ? null
+        : readNumber(readModelValue(job, "pausedAtMs", "paused_at_ms"), null),
+    completedAtMs:
+      readModelValue(job, "completedAtMs", "completed_at_ms") == null
+        ? null
+        : readNumber(readModelValue(job, "completedAtMs", "completed_at_ms"), null),
+  };
+}
+
+function buildCraftSection(invRt, research) {
+  const craftDefs = Array.isArray(invRt?.craftDefs) ? invRt.craftDefs : [];
+  const available = craftDefs.filter((craftDef) => isCraftUnlocked(craftDef, research));
+  const activeJobs = Array.isArray(invRt?.craftJobs) ? invRt.craftJobs : [];
+  const craftingSkillLevel = readNumber(invRt?.skills?.SKILL_CRAFTING?.currentLevel, 1);
+  const gatheringSkillLevel = readNumber(invRt?.skills?.SKILL_GATHERING?.currentLevel, 1);
+
+  return {
+    available: stableSortBy(available, (craftDef) => String(craftDef.code ?? craftDef.id)).map(
+      (craftDef) => buildCraftPayload(craftDef, craftingSkillLevel)
+    ),
+    activeJobs: stableSortBy(activeJobs, (job) => String(job.id)).map(buildCraftJobPayload),
+    skills: {
+      crafting: invRt?.skills?.SKILL_CRAFTING ?? {
+        skillCode: "SKILL_CRAFTING",
+        skillName: "Crafting",
+        currentLevel: craftingSkillLevel,
+        currentXp: "0",
+        totalXp: "0",
+        requiredXp: "100",
+        maxLevel: 50,
+      },
+      gathering: invRt?.skills?.SKILL_GATHERING ?? {
+        skillCode: "SKILL_GATHERING",
+        skillName: "Gathering",
+        currentLevel: gatheringSkillLevel,
+        currentXp: "0",
+        totalXp: "0",
+        requiredXp: "100",
+        maxLevel: 100,
+      },
+    },
   };
 }
 
@@ -146,30 +308,28 @@ function buildInventoryFull(invRt, equipmentRt = null) {
       .map((id) => String(id))
   );
 
-  const itemDefs = referencedDefIds
-    .map((id) => invRt.itemDefsById?.get(id) || invRt.itemDefsById?.get(Number(id)))
+  const equipmentItemDefIds = uniq(
+    Object.values(equipmentRt?.equipmentBySlotCode ?? {})
+      .map((equipped) => equipped?.itemDef?.id ?? equipped?.itemDefId ?? null)
+      .filter((id) => id != null)
+      .map((id) => String(id))
+  );
+
+  const allReferencedDefIds = uniq([...referencedDefIds, ...equipmentItemDefIds]);
+
+  const itemDefs = allReferencedDefIds
+    .map(
+      (id) =>
+        invRt.itemDefsById?.get(id) ||
+        invRt.itemDefsById?.get(Number(id)) ||
+        equipmentRt?.itemDefsById?.get?.(id) ||
+        equipmentRt?.itemDefsById?.get?.(Number(id))
+    )
     .filter(Boolean);
 
   const itemDefsPayload = stableSortBy(itemDefs, (d) => String(d.id)).map((d) => ({
     ...buildItemDefPayload(d),
   }));
-
-  if (process.env.NODE_ENV !== "production") {
-    const defById = new Map(itemDefsPayload.map((def) => [String(def.id), def]));
-    for (const inst of itemInstancesPayload) {
-      if (String(inst.itemInstanceId) !== "103") continue;
-      const def = defById.get(String(inst.itemDefId)) ?? null;
-      console.log("[INV][FULL] item snapshot", {
-        itemInstanceId: inst.itemInstanceId,
-        itemDefId: inst.itemDefId,
-        code: def?.code ?? null,
-        name: def?.name ?? null,
-        category: def?.category ?? null,
-        canEat: def?.canEat ?? null,
-        components: Array.isArray(def?.components) ? def.components.map((c) => c.componentType ?? null) : [],
-      });
-    }
-  }
 
   const heldStatePayload = heldState
     ? {
@@ -193,7 +353,15 @@ function buildInventoryFull(invRt, equipmentRt = null) {
     : null;
 
   const equipment = equipmentRt && equipmentRt.userId ? buildEquipmentFull(equipmentRt, invRt) : null;
-  const research = getRuntime(invRt?.userId)?.research ?? null;
+  const research = getRuntime(invRt?.userId)?.research ?? invRt?.research ?? null;
+  const equipmentSlotsForLog = Object.entries(equipmentRt?.equipmentBySlotCode ?? {}).map(
+    ([slotCode, equipped]) => ({
+      slotCode,
+      itemInstanceId: equipped?.itemInstanceId ?? null,
+      itemCode: equipped?.itemDef?.code ?? null,
+      itemName: equipped?.itemDef?.name ?? null,
+    })
+  );
   const computedCarryWeight = computeCarryWeight(invRt, equipmentRt, research);
   const carryWeightMax = computedCarryWeight.max;
   const carryWeightCurrent = computedCarryWeight.current;
@@ -218,6 +386,7 @@ function buildInventoryFull(invRt, equipmentRt = null) {
         carryWeightMax > 0 ? Math.min(100, Math.max(0, carryWeightRatio * 100)) : 0,
       isOverCapacity: carryWeightMax > 0 ? carryWeightCurrent > carryWeightMax : false,
     },
+    craft: buildCraftSection(invRt, research),
     equipment,
   };
 }

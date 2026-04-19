@@ -2,6 +2,7 @@
 
 const db = require("../../models");
 const { resolveResearchItemWeightDelta } = require("../../service/researchService");
+const { INV_ERR, invError } = require("./validate/errors");
 
 function toNum(value, fallback = 0) {
   const n = Number(value);
@@ -14,10 +15,25 @@ function getDefWeight(def) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+function getContainerEffectiveMaxWeight(container) {
+  const base = Math.max(0, toNum(container?.def?.maxWeight, 0));
+  if (base > 0) return base;
+
+  const code = String(container?.def?.code ?? "").trim().toUpperCase();
+  if (code === "BASKET") return 2.5;
+
+  return 0;
+}
+
 function getInventoryMaxWeight(invRt) {
   return (invRt?.containers ?? [])
-    .filter((container) => String(container?.state ?? "ACTIVE") === "ACTIVE")
-    .reduce((sum, container) => sum + Math.max(0, toNum(container?.def?.maxWeight, 0)), 0);
+    .filter((container) => {
+      const state = String(container?.state ?? "ACTIVE");
+      if (state !== "ACTIVE") return false;
+      const role = String(container?.slotRole ?? "").trim().toUpperCase();
+      return !role.startsWith("GRANTED:");
+    })
+    .reduce((sum, container) => sum + getContainerEffectiveMaxWeight(container), 0);
 }
 
 function resolveCarryWeightMax(invRt, fallback = 20) {
@@ -46,6 +62,89 @@ function addWeightedInstance(state, itemInstanceId, itemDefId, qty) {
   const researchWeightDelta = resolveResearchItemWeightDelta(state.research, def?.code ?? null);
   const effectiveWeight = Math.max(0, baseWeight + researchWeightDelta);
   state.current += effectiveWeight * Math.max(1, toNum(qty, 1));
+}
+
+function getEffectiveUnitWeight(research, def) {
+  const baseWeight = getDefWeight(def);
+  const researchWeightDelta = resolveResearchItemWeightDelta(research, def?.code ?? null);
+  return Math.max(0, baseWeight + researchWeightDelta);
+}
+
+function computeAdditionalItemWeight(research, def, qty = 1) {
+  return getEffectiveUnitWeight(research, def) * Math.max(1, toNum(qty, 1));
+}
+
+function getGrantedContainerFallbackWeight(itemDef, component) {
+  const data = component?.dataJson ?? component?.data_json ?? null;
+  const containerCode = String(
+    data?.containerDefCode ?? data?.container_def_code ?? itemDef?.code ?? ""
+  )
+    .trim()
+    .toUpperCase();
+
+  if (containerCode === "BASKET") return 2.5;
+  return 0;
+}
+
+function getEquippedGrantedContainerBonus(itemDef, component) {
+  const code = String(itemDef?.code ?? "").trim().toUpperCase();
+  if (code === "BASKET") return 2.5;
+  return getGrantedContainerFallbackWeight(itemDef, component);
+}
+
+function getGrantedContainerBonusFromItemDef(itemDef) {
+  if (!itemDef) return 0;
+
+  const components = Array.isArray(itemDef?.components) ? itemDef.components : [];
+  const component = components.find((entry) => {
+    const type = String(entry?.componentType ?? entry?.component_type ?? "").toUpperCase();
+    return type === "GRANTS_CONTAINER";
+  });
+  if (!component) return 0;
+
+  return getEquippedGrantedContainerBonus(itemDef, component);
+}
+
+function computeGrantedContainerBonus(invRt, eqRt = null) {
+  let bonus = 0;
+  const seen = new Set();
+
+  for (const container of invRt?.containers ?? []) {
+    if (String(container?.state ?? "ACTIVE").toUpperCase() !== "ACTIVE") continue;
+    for (const slot of container?.slots ?? []) {
+      if (!slot?.itemInstanceId) continue;
+
+      const itemInstanceId = String(slot.itemInstanceId);
+      if (seen.has(itemInstanceId)) continue;
+      seen.add(itemInstanceId);
+
+      const itemInstance = invRt?.itemInstanceById?.get?.(itemInstanceId) ?? null;
+      if (!itemInstance) continue;
+
+      const itemDef =
+        invRt?.itemDefsById?.get?.(String(itemInstance.itemDefId)) ||
+        eqRt?.itemDefsById?.get?.(String(itemInstance.itemDefId)) ||
+        null;
+      bonus += getGrantedContainerBonusFromItemDef(itemDef);
+    }
+  }
+
+  for (const equipped of Object.values(eqRt?.equipmentBySlotCode ?? {})) {
+    const itemDef = equipped?.itemDef ?? null;
+    if (!itemDef) continue;
+
+    const components = Array.isArray(itemDef?.components) ? itemDef.components : [];
+    const component = components.find((entry) => {
+      const type = String(entry?.componentType ?? entry?.component_type ?? "").toUpperCase();
+      return type === "GRANTS_CONTAINER";
+    });
+
+    const bonusWeight = getEquippedGrantedContainerBonus(itemDef, component);
+    if (bonusWeight <= 0) continue;
+    bonus += bonusWeight;
+  }
+
+  return bonus;
 }
 
 function computeCarryWeight(invRt, eqRt = null, research = null) {
@@ -90,7 +189,9 @@ function computeCarryWeight(invRt, eqRt = null, research = null) {
     }
   }
 
-  const max = resolveCarryWeightMax(invRt);
+  const baseMax = resolveCarryWeightMax(invRt);
+  const grantedBonus = computeGrantedContainerBonus(invRt, eqRt);
+  const max = baseMax + grantedBonus;
   const ratio = max > 0 ? state.current / max : 0;
   const percent = max > 0 ? Math.min(100, Math.max(0, ratio * 100)) : 0;
 
@@ -100,6 +201,33 @@ function computeCarryWeight(invRt, eqRt = null, research = null) {
     ratio,
     percent,
     isOverCapacity: max > 0 ? state.current > max : false,
+  };
+}
+
+function assertCanAddItemWeight(invRt, eqRt, research, def, qty = 1) {
+  const carryWeight = computeCarryWeight(invRt, eqRt, research);
+  const additionalWeight = computeAdditionalItemWeight(research, def, qty);
+  const nextWeight = carryWeight.current + additionalWeight;
+
+  if (carryWeight.max > 0 && nextWeight > carryWeight.max + 0.000001) {
+    throw invError(
+      INV_ERR.CARRY_WEIGHT_LIMIT,
+      `Carry weight limit reached (${nextWeight.toFixed(1)}/${carryWeight.max.toFixed(1)} kg).`,
+      {
+        current: carryWeight.current,
+        max: carryWeight.max,
+        additional: additionalWeight,
+        next: nextWeight,
+        itemCode: def?.code ?? null,
+        qty: Math.max(1, toNum(qty, 1)),
+      }
+    );
+  }
+
+  return {
+    ...carryWeight,
+    additional: additionalWeight,
+    next: nextWeight,
   };
 }
 
@@ -117,6 +245,8 @@ async function loadCarryWeightStats(userIdRaw) {
 
 module.exports = {
   computeCarryWeight,
+  computeAdditionalItemWeight,
+  assertCanAddItemWeight,
   getInventoryMaxWeight,
   resolveCarryWeightMax,
   loadCarryWeightStats,

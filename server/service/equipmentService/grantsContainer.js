@@ -58,6 +58,8 @@ async function ensureGrantedContainerForItem({ playerId, slotCode, itemDef, tx }
   }
 
   const role = getGrantedContainerSlotRole(itemDef, slotCode);
+  let created = false;
+  const now = new Date();
   let owner = await db.GaContainerOwner.findOne({
     where: {
       owner_kind: "PLAYER",
@@ -70,12 +72,15 @@ async function ensureGrantedContainerForItem({ playerId, slotCode, itemDef, tx }
 
   let container = null;
   if (!owner) {
+    created = true;
     container = await db.GaContainer.create(
       {
         container_def_id: Number(containerDef.id),
         slot_role: role,
         state: "ACTIVE",
         rev: 1,
+        created_at: now,
+        updated_at: now,
       },
       { transaction: tx }
     );
@@ -127,10 +132,16 @@ async function ensureGrantedContainerForItem({ playerId, slotCode, itemDef, tx }
     });
   }
 
-  return { changed: true, container, owner };
+  return { changed: true, created, container, owner };
 }
 
-async function removeGrantedContainerForItem({ playerId, slotCode, itemDef, tx }) {
+async function removeGrantedContainerForItem({
+  playerId,
+  slotCode,
+  itemDef,
+  tx,
+  destinationContainerId = null,
+}) {
   const component = pickGrantsContainerComponent(itemDef);
   if (!component) return { changed: false, removed: false };
 
@@ -163,14 +174,90 @@ async function removeGrantedContainerForItem({ playerId, slotCode, itemDef, tx }
   });
 
   const hasItems = slots.some((slot) => Number(slot.qty ?? 0) > 0 || slot.item_instance_id != null);
-  if (hasItems) {
+
+  if (hasItems && destinationContainerId == null) {
     throw Object.assign(new Error(`GRANTED_CONTAINER_NOT_EMPTY:${role}`), {
       code: "GRANTED_CONTAINER_NOT_EMPTY",
     });
   }
 
+  const movedSlots = [];
+  if (hasItems && destinationContainerId != null) {
+    const destination = await db.GaContainer.findByPk(destinationContainerId, {
+      transaction: tx,
+      lock: tx ? tx.LOCK.UPDATE : undefined,
+    });
+    if (!destination) {
+      throw Object.assign(new Error(`GRANTED_CONTAINER_DESTINATION_NOT_FOUND:${destinationContainerId}`), {
+        code: "GRANTED_CONTAINER_DESTINATION_NOT_FOUND",
+      });
+    }
+
+    const destinationSlots = await db.GaContainerSlot.findAll({
+      where: { container_id: destination.id },
+      transaction: tx,
+      lock: tx ? tx.LOCK.UPDATE : undefined,
+      order: [["slot_index", "ASC"]],
+    });
+
+    const emptyDestinationSlots = destinationSlots.filter(
+      (slot) => slot.item_instance_id == null || Number(slot.qty ?? 0) <= 0
+    );
+    const occupiedSourceSlots = slots.filter(
+      (slot) => slot.item_instance_id != null && Number(slot.qty ?? 0) > 0
+    );
+
+    if (emptyDestinationSlots.length < occupiedSourceSlots.length) {
+      throw Object.assign(new Error(`GRANTED_CONTAINER_DESTINATION_FULL:${destinationContainerId}`), {
+        code: "GRANTED_CONTAINER_DESTINATION_FULL",
+      });
+    }
+
+    for (let i = 0; i < occupiedSourceSlots.length; i++) {
+      const srcSlot = occupiedSourceSlots[i];
+      const dstSlot = emptyDestinationSlots[i];
+
+      await db.GaContainerSlot.update(
+        {
+          item_instance_id: srcSlot.item_instance_id,
+          qty: Number(srcSlot.qty ?? 0),
+        },
+        {
+          where: {
+            container_id: destination.id,
+            slot_index: dstSlot.slot_index,
+          },
+          transaction: tx,
+        }
+      );
+
+      await db.GaContainerSlot.update(
+        {
+          item_instance_id: null,
+          qty: 0,
+        },
+        {
+          where: {
+            container_id: container.id,
+            slot_index: srcSlot.slot_index,
+          },
+          transaction: tx,
+        }
+      );
+
+      movedSlots.push({
+        fromSlotIndex: Number(srcSlot.slot_index),
+        toContainerId: String(destination.id),
+        toSlotIndex: Number(dstSlot.slot_index),
+        itemInstanceId: String(srcSlot.item_instance_id),
+        qty: Number(srcSlot.qty ?? 0),
+      });
+    }
+  }
+
   await container.destroy({ transaction: tx });
-  return { changed: true, removed: true };
+  await owner.destroy({ transaction: tx });
+  return { changed: true, removed: true, movedSlots };
 }
 
 module.exports = {

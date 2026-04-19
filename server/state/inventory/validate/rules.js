@@ -8,6 +8,13 @@ function assertContainerActive(container) {
   }
 }
 
+function assertContainerActiveOrRole(container, role) {
+  if (!container && !role) throw invError(INV_ERR.CONTAINER_NOT_FOUND);
+  if (container && container.state && container.state !== "ACTIVE") {
+    throw invError(INV_ERR.CONTAINER_DISABLED);
+  }
+}
+
 function assertSlotIndex(container, slotIndex) {
   const max = container.slotCount;
   if (slotIndex < 0 || slotIndex >= max) {
@@ -24,6 +31,7 @@ function assertQtyPositive(qty) {
 
 module.exports = {
   assertContainerActive,
+  assertContainerActiveOrRole,
   assertSlotIndex,
   assertQtyPositive,
 };

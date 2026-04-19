@@ -11,6 +11,7 @@ const {
   GaRenderMaterial,
   loadPlayerCombatStats,
   ensureInventoryLoaded,
+  loadActiveCraftDefs,
   buildInventoryFull,
   ensureEquipmentLoaded,
   DEFAULT_LOCAL_VISUAL_VERSION,
@@ -170,7 +171,10 @@ const bootstrap = async (req, res) => {
 
     console.log(`[BOOTSTRAP] Local: id=${local.id} code=${local.code} size=(${sizeX}, ${sizeZ})`);
 
+    const research = await ensureResearchLoaded(userId);
     const invRt = await ensureInventoryLoaded(userId);
+    invRt.research = research;
+    invRt.craftDefs = await loadActiveCraftDefs();
     const eqRt = await ensureEquipmentLoaded(userId);
     const inventory = buildInventoryFull(invRt, eqRt);
     inventory.macro = {
@@ -228,7 +232,6 @@ const bootstrap = async (req, res) => {
     }
 
     const worldClock = await getWorldClockBootstrap();
-    const research = await ensureResearchLoaded(userId);
 
     const responsePayload = {
       ok: true,

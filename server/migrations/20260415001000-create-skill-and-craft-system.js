@@ -146,7 +146,7 @@ module.exports = {
             allowNull: false,
           },
           required_xp: {
-            type: Sequelize.BIGINT.UNSIGNED,
+            type: Sequelize.DECIMAL(65, 0),
             allowNull: false,
             defaultValue: 0,
           },
@@ -202,12 +202,12 @@ module.exports = {
             defaultValue: 0,
           },
           current_xp: {
-            type: Sequelize.BIGINT.UNSIGNED,
+            type: Sequelize.DECIMAL(65, 0),
             allowNull: false,
             defaultValue: 0,
           },
           total_xp: {
-            type: Sequelize.BIGINT.UNSIGNED,
+            type: Sequelize.DECIMAL(65, 0),
             allowNull: false,
             defaultValue: 0,
           },

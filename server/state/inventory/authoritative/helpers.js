@@ -10,7 +10,12 @@ function toNum(v, fallback = 0) {
 }
 
 function getContainerById(invRt, containerId) {
-  return invRt?.containersById?.get(String(containerId)) || null;
+  const key = String(containerId);
+  return (
+    invRt?.containersById?.get(key) ||
+    invRt?.containersByRole?.get(key) ||
+    null
+  );
 }
 
 function getSlot(invRt, containerId, slotIndex) {

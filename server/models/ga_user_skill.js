@@ -29,12 +29,12 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 0,
       },
       current_xp: {
-        type: DataTypes.BIGINT.UNSIGNED,
+        type: DataTypes.DECIMAL(65, 0),
         allowNull: false,
         defaultValue: 0,
       },
       total_xp: {
-        type: DataTypes.BIGINT.UNSIGNED,
+        type: DataTypes.DECIMAL(65, 0),
         allowNull: false,
         defaultValue: 0,
       },

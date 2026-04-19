@@ -69,6 +69,22 @@ export function useGameShellInventoryActions({ emitInventoryAction, emitEquipmen
     [emitInventoryAction]
   );
 
+  const onCraftRecipe = useCallback(
+    ({ code, craftCode }) =>
+      emitInventoryAction("craft:start", {
+        craftCode: String(craftCode ?? code),
+      }),
+    [emitInventoryAction]
+  );
+
+  const onClaimCraftJob = useCallback(
+    ({ id, jobId }) =>
+      emitInventoryAction("craft:claim", {
+        jobId: String(jobId ?? id),
+      }),
+    [emitInventoryAction]
+  );
+
   const onEquipItemToSlot = useCallback(
     ({ itemInstanceId, slotCode }) =>
       emitEquipmentAction("equipment:equip", {
@@ -103,6 +119,8 @@ export function useGameShellInventoryActions({ emitInventoryAction, emitEquipmen
     onMoveInventoryItem,
     onCancelHeldState,
     onSetAutoFoodMacro,
+    onCraftRecipe,
+    onClaimCraftJob,
     onEquipItemToSlot,
     onUnequipItemFromSlot,
     onSwapEquipmentSlots,

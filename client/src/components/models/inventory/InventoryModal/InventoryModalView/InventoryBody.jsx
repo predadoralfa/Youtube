@@ -6,7 +6,7 @@ export function InventoryBody(props) {
   return (
     <div className="inv-body">
       {props.equipmentNoticeText ? (
-        <div className="inv-notice">
+        <div className={`inv-notice inv-notice--${props.equipmentNoticeTone || "neutral"}`}>
           <span className="inv-notice-text">{props.equipmentNoticeText}</span>
           <button
             type="button"
@@ -40,7 +40,8 @@ export function InventoryBody(props) {
       />
 
       <div className="inv-layout">
-        <InventoryPanel
+      <InventoryPanel
+          equipmentSnapshot={props.equipmentSnapshot}
           containers={props.containers}
           inventoryIndex={props.inventoryIndex}
           heldState={props.heldState}
@@ -52,6 +53,7 @@ export function InventoryBody(props) {
           setLocalNotice={props.setLocalNotice}
           handleDragStart={props.handleDragStart}
           handleDragEnd={props.handleDragEnd}
+          handleInventorySlotDrop={props.handleInventorySlotDrop}
           openContextMenu={props.openContextMenu}
           openContextMenuFromMouseDown={props.openContextMenuFromMouseDown}
           onPickupInventoryItem={props.onPickupInventoryItem}
@@ -82,6 +84,9 @@ export function InventoryBody(props) {
           hungerMax={props.hungerMax}
           macroUnlocked={props.macroUnlocked}
           equipmentUnlocked={props.equipmentUnlocked}
+          craftRecipes={props.craftRecipes}
+          onCraftRecipe={props.onCraftRecipe}
+          onClaimCraftJob={props.onClaimCraftJob}
           setMacroHungerThreshold={props.setMacroHungerThreshold}
           setMacroFoodItemInstanceId={props.setMacroFoodItemInstanceId}
           onSetAutoFoodMacro={props.onSetAutoFoodMacro}

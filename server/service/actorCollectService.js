@@ -5,9 +5,10 @@ const db = require("../models");
 const { ensureInventoryLoaded } = require("../state/inventory/loader");
 const { buildInventoryFull } = require("../state/inventory/fullPayload");
 const { ensureEquipmentLoaded } = require("../state/equipment/loader");
-const { loadCarryWeightStats } = require("../state/inventory/weight");
+const { assertCanAddItemWeight, loadCarryWeightStats } = require("../state/inventory/weight");
 const { getRuntime } = require("../state/runtime/store");
 const { ensureStarterInventory } = require("./inventoryProvisioning");
+const { awardSkillXp, loadUserSkillSummary } = require("./skillProgressionService");
 const { DEFAULT_COLLECT_COOLDOWN_MS } = require("../config/interactionConstants");
 const {
   ensureResearchLoaded,
@@ -70,8 +71,20 @@ async function resolveActorCollectCooldownMs(userId, actor, fallbackMs = DEFAULT
     return fallback;
   }
   const collectCooldownDelta = resolveResearchItemCollectTimeDelta(research, itemCode);
+  const baseCooldownMs = Math.max(30, fallback + collectCooldownDelta);
 
-  return Math.max(500, DEFAULT_COLLECT_COOLDOWN_MS + collectCooldownDelta);
+  const gatheringSkill = await loadUserSkillSummary(userId, "SKILL_GATHERING");
+  const gatheringLevel = Math.max(1, Number(gatheringSkill?.currentLevel ?? 1));
+  const maxLevel = Math.max(1, Number(gatheringSkill?.maxLevel ?? 100));
+  const effectiveLevel = Math.min(maxLevel, gatheringLevel);
+  const targetMinCooldownMs = 30;
+  const reductionPerLevelMs = Math.max(0, (baseCooldownMs - targetMinCooldownMs) / maxLevel);
+  const reducedCooldownMs = Math.max(
+    targetMinCooldownMs,
+    Math.round(baseCooldownMs - reductionPerLevelMs * effectiveLevel)
+  );
+
+  return reducedCooldownMs;
 }
 
 function hasResearchLevelReached(research, researchCode, minimumLevel) {
@@ -504,6 +517,47 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
       emptySlots: playerSlots.filter((s) => s.item_instance_id == null).length,
     });
 
+    const invRtForWeight = await ensureInventoryLoaded(userId);
+    if (invRtForWeight?.heldState) {
+      return { ok: false, error: "HELD_STATE_ACTIVE" };
+    }
+    invRtForWeight.carryWeight = await loadCarryWeightStats(userId);
+    if (invRtForWeight.itemDefsById && !invRtForWeight.itemDefsById.has(String(itemDef.id))) {
+      invRtForWeight.itemDefsById.set(String(itemDef.id), {
+        id: String(itemDef.id),
+        code: itemDef.code ?? null,
+        name: itemDef.name ?? null,
+        category: itemDef.category ?? itemDef.categoria ?? null,
+        weight:
+          itemDef.unit_weight == null
+            ? itemDef.weight == null
+              ? itemDef.peso == null
+                ? null
+                : Number(itemDef.peso)
+              : Number(itemDef.weight)
+            : Number(itemDef.unit_weight),
+        stackMax: Number(itemDef.stack_max ?? itemDef.stackMax ?? 1) || 1,
+        components: [],
+      });
+    }
+    const eqRtForWeight = await ensureEquipmentLoaded(userId);
+    const rtForWeight = getRuntime(userId);
+    const researchForWeight = await ensureResearchLoaded(userId, rtForWeight ?? { userId });
+    invRtForWeight.research = researchForWeight;
+    try {
+      assertCanAddItemWeight(invRtForWeight, eqRtForWeight, researchForWeight, itemDef, 1);
+    } catch (err) {
+      if (err?.code === "CARRY_WEIGHT_LIMIT") {
+        return {
+          ok: false,
+          error: "CARRY_WEIGHT_LIMIT",
+          message: err.message,
+          meta: err.meta,
+        };
+      }
+      throw err;
+    }
+
     let dstSlot = null;
     let createdInstance = null;
 
@@ -635,6 +689,37 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
     ]);
 
     console.log("[COLLECT] Slots atualizados no DB");
+
+    const canAwardGatheringXp =
+      actorDefCode === "TREE_APPLE" ||
+      actorDefCode === "ROCK_NODE_SMALL" ||
+      actorDefCode === "FIBER_PATCH";
+
+    let xpAward = null;
+    if (canAwardGatheringXp) {
+      try {
+        xpAward = await awardSkillXp(userId, "SKILL_GATHERING", qtyToMove, tx);
+      } catch (err) {
+        console.warn("[COLLECT] XP gathering failed, continuing collect", {
+          userId,
+          actorId,
+          error: String(err?.message ?? err),
+        });
+        xpAward = null;
+      }
+    }
+    if (xpAward) {
+      invRtForWeight.skills = invRtForWeight.skills || {};
+      invRtForWeight.skills.SKILL_GATHERING = {
+        skillCode: "SKILL_GATHERING",
+        skillName: xpAward.skillName ?? "Gathering",
+        currentLevel: xpAward.level,
+        currentXp: xpAward.currentXp,
+        totalXp: xpAward.totalXp,
+        requiredXp: xpAward.requiredXp,
+        maxLevel: 100,
+      };
+    }
 
     // ================================================================
     // 9) INCREMENTAR REV DOS CONTAINERS TOCADOS
@@ -779,6 +864,18 @@ async function attemptCollectFromActor(userIdRaw, actorIdRaw) {
         itemName: itemDef.name ?? itemDef.code ?? null,
         qty: qtyToMove,
       },
+      xp: xpAward
+        ? {
+            skillCode: xpAward.skillCode,
+            skillName: xpAward.skillName,
+            xpGained: xpAward.xpGained,
+            level: xpAward.level,
+            currentXp: xpAward.currentXp,
+            requiredXp: xpAward.requiredXp,
+            totalXp: xpAward.totalXp,
+            leveledUp: xpAward.leveledUp,
+          }
+        : null,
       message: actorWouldBeEmpty && !shouldDespawnWhenEmpty ? "This tree has no more fruits right now" : null,
     };
   });

@@ -21,7 +21,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       required_xp: {
-        type: DataTypes.BIGINT.UNSIGNED,
+        type: DataTypes.DECIMAL(65, 0),
         allowNull: false,
         defaultValue: 0,
       },

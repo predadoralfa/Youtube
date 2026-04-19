@@ -34,6 +34,9 @@ export function SidebarColumn(props) {
         hungerMax={props.hungerMax}
         macroUnlocked={props.macroUnlocked}
         equipmentUnlocked={props.equipmentUnlocked}
+        craftRecipes={props.craftRecipes}
+        onCraftRecipe={props.onCraftRecipe}
+        onClaimCraftJob={props.onClaimCraftJob}
         setMacroHungerThreshold={props.setMacroHungerThreshold}
         setMacroFoodItemInstanceId={props.setMacroFoodItemInstanceId}
         onSetAutoFoodMacro={props.onSetAutoFoodMacro}

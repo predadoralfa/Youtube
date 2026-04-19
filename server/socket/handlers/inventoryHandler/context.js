@@ -2,10 +2,13 @@
 
 const { getRuntime } = require("../../../state/runtimeStore");
 const { ensureInventoryLoaded } = require("../../../state/inventory/loader");
+const { loadActiveCraftDefs, loadActiveCraftJobs } = require("../../../state/inventory/loader/queries");
 const { buildInventoryFull } = require("../../../state/inventory/fullPayload");
 const { ensureEquipmentLoaded } = require("../../../state/equipment/loader");
 const { loadCarryWeightStats } = require("../../../state/inventory/weight");
 const { buildAutoFoodPayload } = require("../../../service/autoFoodService");
+const { ensureResearchLoaded } = require("../../../service/researchService");
+const { loadUserSkillSummaries } = require("../../../service/skillProgressionService");
 const { safeAck } = require("./shared");
 
 function requireUser(socket) {
@@ -37,8 +40,18 @@ async function emitFullAndAck(socket, invRt, eqRt, ack) {
     });
   }
 
-  const full = buildInventoryFull(invRt, eqRt);
   const rt = getRuntime(invRt.userId);
+  invRt.research = await ensureResearchLoaded(invRt.userId, rt ?? { userId: invRt.userId });
+  invRt.craftDefs = await loadActiveCraftDefs();
+  invRt.craftJobs = await loadActiveCraftJobs(invRt.userId);
+  invRt.skills = await loadUserSkillSummaries(invRt.userId, [
+    "SKILL_CRAFTING",
+    "SKILL_BUILDING",
+    "SKILL_COOKING",
+    "SKILL_GATHERING",
+  ]);
+
+  const full = buildInventoryFull(invRt, eqRt);
   if (rt) {
     full.macro = {
       autoFood: buildAutoFoodPayload(rt),

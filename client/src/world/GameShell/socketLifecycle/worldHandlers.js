@@ -7,6 +7,10 @@ export function createWorldHandlers(state, requestInventoryFull, socket, store, 
     const normalizedActor = normalizeSpawnedActor(actor, store);
     if (!normalizedActor) return;
 
+    if (store?.applySpawn) {
+      store.applySpawn(normalizedActor);
+    }
+
     state.setSnapshot((prev) => {
       if (!prev) return prev;
       const actors = Array.isArray(prev.actors) ? prev.actors : [];

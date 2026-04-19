@@ -21,6 +21,7 @@ export function createInventoryModalController(state, props) {
   const dragHandlers = createDragHandlers({
     dragItem: state.dragItem,
     setDragItem: state.setDragItem,
+    heldStateActive: state.heldStateActive,
     equipmentIndex: state.equipmentIndex,
     setLocalNotice: state.setLocalNotice,
     dropHandledRef: state.dropHandledRef,
@@ -28,6 +29,7 @@ export function createInventoryModalController(state, props) {
     onSwapEquipmentSlots: props.onSwapEquipmentSlots,
     onEquipItemToSlot: props.onEquipItemToSlot,
     onDropItemToWorld: props.onDropItemToWorld,
+    onPlaceHeldItem: props.onPlaceHeldItem,
   });
 
   const menuHandlers = createMenuHandlers({

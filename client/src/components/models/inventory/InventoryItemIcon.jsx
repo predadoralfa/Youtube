@@ -69,6 +69,21 @@ function FallbackGlyph({ label }) {
   return <span className="inv-item-icon-fallback">{glyph}</span>;
 }
 
+function FallbackCube() {
+  return (
+    <mesh rotation={[0.35, 0.55, 0.15]}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial
+        color="#ff4fd8"
+        emissive="#ff2bc1"
+        emissiveIntensity={0.28}
+        metalness={0.18}
+        roughness={0.34}
+      />
+    </mesh>
+  );
+}
+
 function InventoryModelPreview({ spec }) {
   const gltf = useGLTF(spec.url);
   const scene = useMemo(() => gltf.scene.clone(true), [gltf]);
@@ -93,7 +108,16 @@ export function InventoryItemIcon({ itemDef, label, className = "" }) {
   if (!spec?.url) {
     return (
       <div className={["inv-item-icon-shell", className].filter(Boolean).join(" ")}>
-        <FallbackGlyph label={label} />
+        <Canvas
+          dpr={[1, 1.5]}
+          gl={{ alpha: true, antialias: true }}
+          camera={{ position: [0, 0, 3], fov: 26 }}
+        >
+          <ambientLight intensity={2.1} />
+          <directionalLight position={[3, 4, 5]} intensity={1.6} />
+          <directionalLight position={[-2, 2, 3]} intensity={1.1} />
+          <FallbackCube />
+        </Canvas>
       </div>
     );
   }

@@ -1,6 +1,7 @@
 export function createDragHandlers({
   dragItem,
   setDragItem,
+  heldStateActive,
   equipmentIndex,
   setLocalNotice,
   dropHandledRef,
@@ -89,6 +90,51 @@ export function createDragHandlers({
     clearDrag();
   };
 
+  const handleInventorySlotDrop = ({ containerId, slotIndex, role }) => (event) => {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    dropHandledRef.current = true;
+
+    const raw = event.dataTransfer?.getData("application/json");
+    if (!raw) return;
+
+    let payload = null;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      payload = null;
+    }
+
+    if (!payload?.itemInstanceId) return;
+
+    const fromRole = payload.sourceRole ?? payload.fromSlotCode ?? null;
+    const fromSlotIndex = payload.sourceSlotIndex ?? null;
+    const sourceContainerId = payload.sourceContainerId ?? null;
+    const toRole = role;
+    const toSlotIndex = slotIndex;
+    const isSameTarget =
+      String(sourceContainerId ?? "") === String(containerId) && Number(fromSlotIndex) === Number(slotIndex);
+
+    if (!isSameTarget && fromRole != null && fromSlotIndex != null) {
+      const ok = onMoveInventoryItem?.({
+        fromRole,
+        fromSlotIndex,
+        toRole,
+        toSlotIndex,
+        qty: payload.qty == null ? 1 : Number(payload.qty),
+      });
+      setLocalNotice(ok ? null : "Inventory move is not available right now");
+      clearDrag();
+      return;
+    }
+
+    if (heldStateActive) {
+      const ok = onPlaceHeldItem?.({ containerId, slotIndex });
+      setLocalNotice(ok ? null : "Place is not available right now");
+      clearDrag();
+    }
+  };
+
   const handleDropToWorld = () => {
     const pending = dragItem;
     dropHandledRef.current = true;
@@ -114,6 +160,7 @@ export function createDragHandlers({
     clearDrag,
     handleDragStart,
     handleInventoryDropHint,
+    handleInventorySlotDrop,
     handleDropToWorld,
     handleDragEnd,
   };

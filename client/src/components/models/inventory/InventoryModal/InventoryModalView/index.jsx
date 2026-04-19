@@ -51,7 +51,9 @@ export function InventoryModal(props) {
         <InventoryHeader onClose={controller.requestCloseInventory} />
 
       <InventoryBody
+        equipmentSnapshot={props.equipmentSnapshot}
         equipmentNoticeText={state.equipmentNoticeText}
+        equipmentNoticeTone={state.equipmentNoticeTone}
         setLocalNotice={state.setLocalNotice}
         setDismissedNoticeText={state.setDismissedNoticeText}
         cursorPos={state.cursorPos}
@@ -75,6 +77,7 @@ export function InventoryModal(props) {
           setCursorPos={state.setCursorPos}
           handleDragStart={controller.dragHandlers.handleDragStart}
           handleDragEnd={controller.dragHandlers.handleDragEnd}
+          handleInventorySlotDrop={controller.dragHandlers.handleInventorySlotDrop}
           openContextMenu={controller.menuHandlers.openContextMenu}
           openContextMenuFromMouseDown={controller.menuHandlers.openContextMenuFromMouseDown}
           onPickupInventoryItem={props.onPickupInventoryItem}
@@ -97,6 +100,9 @@ export function InventoryModal(props) {
         hungerMax={state.hungerMax}
         macroUnlocked={state.macroUnlocked}
         equipmentUnlocked={state.equipmentUnlocked}
+        craftRecipes={state.craftRecipes}
+        onCraftRecipe={props.onCraftRecipe}
+        onClaimCraftJob={props.onClaimCraftJob}
         setMacroHungerThreshold={state.setMacroHungerThreshold}
         setMacroFoodItemInstanceId={state.setMacroFoodItemInstanceId}
         onSetAutoFoodMacro={props.onSetAutoFoodMacro}

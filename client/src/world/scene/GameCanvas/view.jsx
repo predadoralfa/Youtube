@@ -6,7 +6,7 @@ import { TargetLootCard } from "../TargetLootCard";
 import { TargetPlayerCard } from "../TargetPlayerCard";
 import { TargetMarker } from "../TargetMarker";
 
-export function GameCanvasView({ state, lootNotifications = [] }) {
+export function GameCanvasView({ state, lootNotifications = [], worldNotifications = [] }) {
   return (
     <div
       ref={state.containerRef}
@@ -24,6 +24,10 @@ export function GameCanvasView({ state, lootNotifications = [] }) {
 
       <div style={{ position: "fixed", inset: 0, zIndex: 1090, pointerEvents: "none" }}>
         <FloatingLootText loots={lootNotifications} />
+      </div>
+
+      <div style={{ position: "fixed", inset: 0, zIndex: 1090, pointerEvents: "none" }}>
+        <FloatingLootText loots={worldNotifications} />
       </div>
 
       <div style={{ position: "absolute", inset: 0, zIndex: 10, pointerEvents: "none" }}>

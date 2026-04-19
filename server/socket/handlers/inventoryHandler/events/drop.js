@@ -2,6 +2,10 @@
 
 const db = require("../../../../models");
 const { withInventoryLock } = require("../../../../state/inventory/store");
+const { clearInventory } = require("../../../../state/inventory/store");
+const { clearEquipment } = require("../../../../state/equipment/store");
+const { ensureInventoryLoaded } = require("../../../../state/inventory/loader");
+const { ensureEquipmentLoaded } = require("../../../../state/equipment/loader");
 const { getRuntime } = require("../../../../state/runtimeStore");
 const { addActor } = require("../../../../state/actorsRuntimeStore");
 const { buildInventoryFull } = require("../../../../state/inventory/fullPayload");
@@ -37,7 +41,6 @@ function registerDropEvent(socket) {
           return;
         }
 
-        const full = buildInventoryFull(invRt, eqRt);
         await tx.commit();
 
         const actor = result.actor ?? null;
@@ -48,6 +51,12 @@ function registerDropEvent(socket) {
             actor,
           });
         }
+
+        clearInventory(userId);
+        clearEquipment(userId);
+        const invRtFresh = await ensureInventoryLoaded(userId);
+        const eqRtFresh = await ensureEquipmentLoaded(userId);
+        const full = buildInventoryFull(invRtFresh, eqRtFresh);
 
         socket.emit("inv:full", full);
         safeAck(ack, { ok: true, inventory: full, actor });

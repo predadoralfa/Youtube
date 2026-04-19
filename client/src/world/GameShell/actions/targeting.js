@@ -1,11 +1,11 @@
 import { useCallback } from "react";
 
 export function useGameShellTargetingActions(state) {
-  const emitInteractStart = useCallback(() => {
+  const emitInteractStart = useCallback((targetOverride = null) => {
     const s = state.socketRef.current;
     if (!s || !state.joinedRef.current) return false;
 
-    const target = state.selectedTargetRef.current;
+    const target = targetOverride ?? state.selectedTargetRef.current;
     if (target?.kind && target?.id) {
       s.emit("interact:start", {
         target: {

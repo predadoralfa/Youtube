@@ -38,6 +38,10 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0,
       },
+      craft_time_ms: {
+        type: DataTypes.BIGINT.UNSIGNED,
+        allowNull: true,
+      },
       started_at_ms: {
         type: DataTypes.BIGINT,
         allowNull: true,

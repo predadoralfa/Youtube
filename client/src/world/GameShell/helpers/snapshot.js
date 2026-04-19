@@ -87,9 +87,11 @@ export function mergeSnapshotActor(prevSnapshot, actorUpdate) {
   const nextActorPatch = actorUpdate?.actor ?? actorUpdate;
   const actors = Array.isArray(prevSnapshot.actors) ? prevSnapshot.actors : [];
   let changed = false;
+  let found = false;
 
   const nextActors = actors.map((actor) => {
     if (toId(actor?.id ?? null) !== actorId) return actor;
+    found = true;
     changed = true;
     return {
       ...actor,
@@ -97,6 +99,14 @@ export function mergeSnapshotActor(prevSnapshot, actorUpdate) {
       id: actor?.id ?? nextActorPatch?.id ?? actorId,
     };
   });
+
+  if (!found) {
+    changed = true;
+    nextActors.push({
+      id: nextActorPatch?.id ?? actorId,
+      ...nextActorPatch,
+    });
+  }
 
   if (!changed) return prevSnapshot;
 

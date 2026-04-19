@@ -79,6 +79,132 @@ async function loadItemDefComponents(itemDefIds) {
   });
 }
 
+async function loadActiveCraftDefs() {
+  const GaCraftDef = db.GaCraftDef;
+
+  return GaCraftDef.findAll({
+    where: { is_active: true },
+    include: [
+      {
+        model: db.GaSkillDef,
+        as: "skillDef",
+        required: false,
+      },
+      {
+        model: db.GaResearchDef,
+        as: "requiredResearchDef",
+        required: false,
+      },
+      {
+        model: db.GaItemDef,
+        as: "outputItemDef",
+        required: true,
+        include: [
+          {
+            model: db.GaItemDefComponent,
+            as: "components",
+            required: false,
+          },
+        ],
+      },
+      {
+        model: db.GaCraftRecipeItem,
+        as: "recipeItems",
+        required: false,
+        include: [
+          {
+            model: db.GaItemDef,
+            as: "itemDef",
+            required: true,
+            include: [
+              {
+                model: db.GaItemDefComponent,
+                as: "components",
+                required: false,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    order: [
+      ["id", "ASC"],
+      [{ model: db.GaCraftRecipeItem, as: "recipeItems" }, "sort_order", "ASC"],
+      [{ model: db.GaCraftRecipeItem, as: "recipeItems" }, "id", "ASC"],
+    ],
+  });
+}
+
+async function loadActiveCraftJobs(userId) {
+  const GaUserCraftJob = db.GaUserCraftJob;
+  await completeDueCraftJobs(userId);
+
+  return GaUserCraftJob.findAll({
+    where: {
+      user_id: userId,
+      status: ["PENDING", "RUNNING", "PAUSED", "COMPLETED"],
+    },
+    include: [
+      {
+        model: db.GaCraftDef,
+        as: "craftDef",
+        required: true,
+        include: [
+          {
+            model: db.GaItemDef,
+            as: "outputItemDef",
+            required: true,
+            include: [
+              {
+                model: db.GaItemDefComponent,
+                as: "components",
+                required: false,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    order: [
+      ["created_at", "ASC"],
+      ["id", "ASC"],
+    ],
+  });
+}
+
+async function completeDueCraftJobs(userId) {
+  const jobs = await db.GaUserCraftJob.findAll({
+    where: {
+      user_id: userId,
+      status: "RUNNING",
+    },
+    include: [
+      {
+        model: db.GaCraftDef,
+        as: "craftDef",
+        required: true,
+      },
+    ],
+    order: [["id", "ASC"]],
+  });
+  const nowMs = Date.now();
+  const now = new Date();
+
+  for (const job of jobs) {
+    const startedAtMs = Number(job.started_at_ms ?? 0);
+    const craftTimeMs = Number(job.craft_time_ms ?? job.craftDef?.craft_time_ms ?? job.craftDef?.craftTimeMs ?? 0);
+    if (!Number.isFinite(startedAtMs) || !Number.isFinite(craftTimeMs) || craftTimeMs <= 0) continue;
+    if (nowMs - startedAtMs < craftTimeMs) continue;
+
+    await job.update({
+      status: "COMPLETED",
+      current_progress_ms: Math.floor(craftTimeMs),
+      completed_at_ms: startedAtMs + craftTimeMs,
+      updated_at: now,
+    });
+  }
+}
+
 module.exports = {
   loadOwnersForPlayer,
   loadContainersByIds,
@@ -87,4 +213,7 @@ module.exports = {
   loadItemInstances,
   loadItemDefs,
   loadItemDefComponents,
+  loadActiveCraftDefs,
+  loadActiveCraftJobs,
+  completeDueCraftJobs,
 };

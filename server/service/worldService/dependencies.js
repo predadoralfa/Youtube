@@ -12,6 +12,7 @@ const {
 } = require("../../models");
 const { loadPlayerCombatStats } = require("../../state/runtime/combatLoader");
 const { ensureInventoryLoaded } = require("../../state/inventory/loader");
+const { loadActiveCraftDefs } = require("../../state/inventory/loader/queries");
 const { buildInventoryFull } = require("../../state/inventory/fullPayload");
 const { ensureEquipmentLoaded } = require("../../state/equipment/loader");
 const {
@@ -43,6 +44,7 @@ module.exports = {
   GaRenderMaterial,
   loadPlayerCombatStats,
   ensureInventoryLoaded,
+  loadActiveCraftDefs,
   buildInventoryFull,
   ensureEquipmentLoaded,
   DEFAULT_LOCAL_VISUAL_VERSION,

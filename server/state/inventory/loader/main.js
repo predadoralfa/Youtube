@@ -1,6 +1,12 @@
 "use strict";
 
+const db = require("../../../models");
 const { loadCarryWeightStats } = require("../weight");
+const { ensureEquipmentLoaded } = require("../../equipment/loader");
+const {
+  ensureGrantedContainerForItem,
+  getGrantedContainerSlotRole,
+} = require("../../../service/equipmentService/grantsContainer");
 const {
   loadOwnersForPlayer,
   loadContainersByIds,
@@ -9,7 +15,10 @@ const {
   loadItemInstances,
   loadItemDefs,
   loadItemDefComponents,
+  loadActiveCraftDefs,
+  loadActiveCraftJobs,
 } = require("./queries");
+const { loadUserSkillSummaries } = require("../../../service/skillProgressionService");
 const {
   uniq,
   makeEmptySlots,
@@ -23,11 +32,120 @@ const {
   normalizeItemDefComponentRow,
 } = require("./normalize");
 
-async function loadInventoryRuntime(userIdRaw) {
+function hasGrantedContainerComponent(def) {
+  const components = Array.isArray(def?.components) ? def.components : [];
+  return components.some((component) => {
+    const type = String(component?.componentType ?? component?.component_type ?? "").toUpperCase();
+    return type === "GRANTS_CONTAINER";
+  });
+}
+
+function getGrantedContainerComponent(def) {
+  const components = Array.isArray(def?.components) ? def.components : [];
+  return (
+    components.find((component) => {
+      const type = String(component?.componentType ?? component?.component_type ?? "").toUpperCase();
+      return type === "GRANTS_CONTAINER";
+    }) ?? null
+  );
+}
+
+function firstEmptySlot(container) {
+  if (!container || !Array.isArray(container.slots)) return null;
+  const slotIndex = container.slots.findIndex((slot) => !slot?.itemInstanceId);
+  if (slotIndex < 0) return null;
+  return { container, slotIndex, slot: container.slots[slotIndex] };
+}
+
+async function repairSelfContainedGrantedContainers(invRt, equipmentRt) {
+  const repairOps = [];
+  const equipmentSlots = Object.values(equipmentRt?.equipmentBySlotCode ?? {});
+
+  for (const equipped of equipmentSlots) {
+    const itemDef = equipped?.itemDef ?? null;
+    if (!itemDef || !hasGrantedContainerComponent(itemDef)) continue;
+
+    const sourceRole = String(equipped.slotCode ?? "").trim();
+    if (!sourceRole) continue;
+
+    const grantedRole = getGrantedContainerSlotRole(itemDef, sourceRole);
+    const grantedContainer = invRt.containersByRole.get(grantedRole) ?? null;
+    if (!grantedContainer) continue;
+
+    const selfSlot = (grantedContainer.slots ?? []).find(
+      (slot) => String(slot?.itemInstanceId ?? "") === String(equipped.itemInstanceId ?? "")
+    );
+    if (!selfSlot) continue;
+
+    const sourceContainer = invRt.containersByRole.get(sourceRole) ?? null;
+    let target = firstEmptySlot(sourceContainer);
+    if (!target) {
+      target = invRt.containers.find((container) => {
+        const role = String(container?.slotRole ?? "");
+        if (!role || role.startsWith("GRANTED:")) return false;
+        if (role === sourceRole) return false;
+        return Array.isArray(container?.slots) && container.slots.some((slot) => !slot?.itemInstanceId);
+      });
+      target = target ? firstEmptySlot(target) : null;
+    }
+
+    if (!target) continue;
+
+    const carriedQty = Number(selfSlot.qty ?? 1);
+    repairOps.push(async () => {
+      await db.GaContainerSlot.update(
+        { item_instance_id: null, qty: 0 },
+        {
+          where: {
+            container_id: grantedContainer.id,
+            slot_index: selfSlot.slotIndex,
+          },
+        }
+      );
+
+      await db.GaContainerSlot.upsert({
+        container_id: target.container.id,
+        slot_index: target.slotIndex,
+        item_instance_id: Number(equipped.itemInstanceId),
+        qty: carriedQty,
+      });
+
+      selfSlot.itemInstanceId = null;
+      selfSlot.qty = 0;
+      target.slot.itemInstanceId = String(equipped.itemInstanceId);
+      target.slot.qty = carriedQty;
+    });
+  }
+
+  for (const op of repairOps) {
+    await op();
+  }
+}
+
+async function loadInventoryRuntime(userIdRaw, options = {}) {
   const userId = String(userIdRaw);
   const { ensureStarterInventory } = require("../../../service/inventoryProvisioning");
 
   await ensureStarterInventory(userId);
+  const equipmentRt = await ensureEquipmentLoaded(userId);
+
+  for (const equipped of Object.values(equipmentRt?.equipmentBySlotCode ?? {})) {
+    if (!equipped?.itemDef?.components?.length) continue;
+
+    const hasGrantedContainer = equipped.itemDef.components.some((component) => {
+      const type = String(component?.componentType ?? component?.component_type ?? "").toUpperCase();
+      return type === "GRANTS_CONTAINER";
+    });
+
+    if (!hasGrantedContainer) continue;
+
+    await ensureGrantedContainerForItem({
+      playerId: userId,
+      slotCode: equipped.slotCode,
+      itemDef: equipped.itemDef,
+    });
+  }
+
   const ownerRows = await loadOwnersForPlayer(userId);
   const owners = ownerRows.map(normalizeOwnerRow);
 
@@ -91,6 +209,14 @@ async function loadInventoryRuntime(userIdRaw) {
     if (c.slotRole) containersByRole.set(c.slotRole, c);
   }
 
+  await repairSelfContainedGrantedContainers(
+    {
+      containers,
+      containersByRole,
+    },
+    equipmentRt
+  );
+
   const itemInstanceIds = uniq(
     containers
       .flatMap((c) => c.slots ?? [])
@@ -132,7 +258,47 @@ async function loadInventoryRuntime(userIdRaw) {
     def.components = itemDefComponentsById.get(String(id)) || [];
   }
 
+  if (!options.skipGrantedContainerRepair) {
+    let createdGrantedContainer = false;
+    for (const container of containers) {
+      const sourceRole = String(container?.slotRole ?? "").trim();
+      if (!sourceRole || sourceRole.startsWith("GRANTED:")) continue;
+
+      for (const slot of container?.slots ?? []) {
+        if (!slot?.itemInstanceId) continue;
+
+        const itemInstance = itemInstanceById.get(String(slot.itemInstanceId)) || null;
+        if (!itemInstance) continue;
+
+        const itemDef = itemDefsById.get(String(itemInstance.itemDefId)) || null;
+        if (!itemDef || !hasGrantedContainerComponent(itemDef)) continue;
+
+        const result = await ensureGrantedContainerForItem({
+          playerId: userId,
+          slotCode: sourceRole,
+          itemDef,
+        });
+
+        if (result?.created) {
+          createdGrantedContainer = true;
+        }
+      }
+    }
+
+    if (createdGrantedContainer) {
+      return loadInventoryRuntime(userId, { skipGrantedContainerRepair: true });
+    }
+  }
+
   const carryWeight = await loadCarryWeightStats(userId);
+  const craftDefs = await loadActiveCraftDefs();
+  const craftJobs = await loadActiveCraftJobs(userId);
+  const skills = await loadUserSkillSummaries(userId, [
+    "SKILL_CRAFTING",
+    "SKILL_BUILDING",
+    "SKILL_COOKING",
+    "SKILL_GATHERING",
+  ]);
 
   return {
     userId,
@@ -143,6 +309,9 @@ async function loadInventoryRuntime(userIdRaw) {
     carryWeight,
     containers,
     itemDefsById,
+    craftDefs,
+    craftJobs,
+    skills,
     dirtyContainers: new Set(),
     loadedAtMs: Date.now(),
   };

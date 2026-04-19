@@ -101,8 +101,12 @@ export function updateOverlayState({
   }
 
   if (selected?.kind === "ACTOR") {
-    const mesh = state.meshByActorIdRef.current.get(String(selected.id));
-    const lootSummary = mesh?.userData?.lootSummary ?? null;
+    const actorId = String(selected.id);
+    const mesh = state.meshByActorIdRef.current.get(actorId);
+    const snapshotActor = Array.isArray(state.actorsRef.current)
+      ? state.actorsRef.current.find((actor) => String(actor?.id) === actorId) ?? null
+      : null;
+    const lootSummary = mesh?.userData?.lootSummary ?? snapshotActor?.lootSummary ?? null;
 
     if (!mesh || !lootSummary || !Array.isArray(lootSummary.items) || lootSummary.items.length === 0) {
       state.setTargetLootCard(null);
@@ -118,13 +122,15 @@ export function updateOverlayState({
       state.setTargetLootCard(null);
     } else {
       state.setTargetLootCard({
-        id: String(selected.id),
+        id: actorId,
         x: screenPos.x,
         y: screenPos.y,
         actorName:
           mesh?.userData?.displayName ??
+          snapshotActor?.displayName ??
           mesh?.userData?.actorType ??
-          `Actor ${String(selected.id)}`,
+          snapshotActor?.actorType ??
+          `Actor ${actorId}`,
         lootSummary,
       });
     }

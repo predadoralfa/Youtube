@@ -86,6 +86,7 @@ Documentos principais:
 - [guia-registro-documentacao.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-documentacao.md)
 - [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
 - [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
+- [guia-registro-itens-com-container.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens-com-container.md)
 - [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-research.md)
 - [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
 - [guia-registro-skills-craft.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-skills-craft.md)
@@ -222,6 +223,10 @@ Leitura complementar para mapas procedurais:
 - `ga_item_def`
 - `ga_item_def_component`
 - `ga_item_instance`
+
+Documento de apoio:
+
+- [guia-registro-itens-com-container.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens-com-container.md)
 
 ### Inimigos e Spawn
 

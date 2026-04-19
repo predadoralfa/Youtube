@@ -4,6 +4,7 @@ import { InventoryModal } from "@/components/models/inventory/InventoryModal";
 import { BuildModal } from "@/components/models/build/BuildModal";
 import { ResearchModal } from "@/components/models/research/ResearchModal";
 import { WorldClockPanel } from "@/world/ui/WorldClockPanel";
+import { PlayerStatusPanel } from "@/world/ui/PlayerStatusPanel";
 
 export function GameShellView({ state, actions }) {
   if (state.sessionReplaced) {
@@ -25,9 +26,14 @@ export function GameShellView({ state, actions }) {
         onTargetSelect={actions.onTargetSelect}
         onTargetClear={actions.onTargetClear}
         lootNotifications={state.lootNotifications}
+        worldNotifications={state.worldNotifications}
       />
 
       <WorldClockPanel worldClock={state.snapshot?.worldClock} />
+      <PlayerStatusPanel
+        researchSnapshot={state.snapshot?.research}
+        inventorySnapshot={state.inventorySnapshot}
+      />
 
       <InventoryModal
         open={state.inventoryOpen}
@@ -49,6 +55,8 @@ export function GameShellView({ state, actions }) {
         onDropItemToWorld={actions.emitInventoryDrop}
         onConsumeInventoryItem={actions.onConsumeInventoryItem}
         onSetAutoFoodMacro={actions.onSetAutoFoodMacro}
+        onCraftRecipe={actions.onCraftRecipe}
+        onClaimCraftJob={actions.onClaimCraftJob}
       />
 
       <ResearchModal

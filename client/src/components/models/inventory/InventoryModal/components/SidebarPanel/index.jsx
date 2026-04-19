@@ -2,6 +2,7 @@ import { SidebarTabs } from "./SidebarTabs";
 import { EquipmentTab } from "./EquipmentTab";
 import { MacroTab } from "./MacroTab";
 import { PlaceholderTab } from "./PlaceholderTab";
+import { CraftTab } from "./CraftTab";
 
 export function SidebarPanel(props) {
   const macroLocked = props.activeSidebarTab === "macro" && !props.macroUnlocked;
@@ -49,6 +50,13 @@ export function SidebarPanel(props) {
         <PlaceholderTab
           activeSidebarTab={props.activeSidebarTab}
           message="Keep researching to unlock this feature."
+        />
+      ) : props.activeSidebarTab === "craft" ? (
+        <CraftTab
+          craftRecipes={props.craftRecipes}
+          onCraftRecipe={props.onCraftRecipe}
+          onClaimCraftJob={props.onClaimCraftJob}
+          setLocalNotice={props.setLocalNotice}
         />
       ) : (
         <PlaceholderTab activeSidebarTab={props.activeSidebarTab} />

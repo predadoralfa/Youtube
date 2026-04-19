@@ -59,6 +59,10 @@ export function syncPlayerMeshes({
     const entityIdRaw = entity?.entityId;
     if (entityIdRaw == null || isEnemyEntity(entity)) continue;
 
+    const kind = String(entity?.kind ?? "").trim().toUpperCase();
+    const isSelfEntity = selfKey != null && String(entityIdRaw) === selfKey;
+    if (kind !== "PLAYER" && !isSelfEntity) continue;
+
     const entityId = String(entityIdRaw);
     nextIds.add(entityId);
 

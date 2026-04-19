@@ -38,6 +38,18 @@ Exemplos:
 - `CHAIR_WOOD`
 - `CHEST_TEST`
 
+Atores de recurso ja usados no projeto:
+
+- `TREE_APPLE` = arvore de maca
+- `ROCK_NODE_SMALL` = nodo de pedra pequeno
+- `FIBER_PATCH` = patch de grama/fibra
+
+Regra pratica:
+
+- quando voce quiser mais grama ou fibra, replique `FIBER_PATCH`
+- nao crie um nome novo se a familia ja existe
+- use `visual_hint = GRASS` para esse tipo de patch
+
 ### `ga_actor_spawn`
 
 Define onde o actor existe no mapa de forma fixa.

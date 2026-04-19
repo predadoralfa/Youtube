@@ -13,11 +13,30 @@ export function InventoryGridSection({
   setLocalNotice,
   handleDragStart,
   handleDragEnd,
+  handleInventorySlotDrop,
   openContextMenu,
   openContextMenuFromMouseDown,
   onPickupInventoryItem,
   onPlaceHeldItem,
+  compact = false,
 }) {
+  function formatContainerTitle(container, role) {
+    const name = String(container?.def?.name ?? "").trim();
+    if (name) return name;
+
+    const rawRole = String(role ?? "").trim();
+    if (!rawRole) return "CONTAINER";
+
+    if (rawRole.startsWith("GRANTED:")) {
+      const parts = rawRole.split(":");
+      const itemCode = String(parts[1] ?? "").trim();
+      if (itemCode) return itemCode.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+      return "Granted Storage";
+    }
+
+    return rawRole.toUpperCase();
+  }
+
   return (
     <>
       {containers.map((container, cIndex) => {
@@ -26,8 +45,8 @@ export function InventoryGridSection({
 
         return (
           <div className="inv-container" key={cIndex}>
-            <div className="inv-container-title">{String(role).toUpperCase()}</div>
-            <div className="inv-grid">
+            <div className="inv-container-title">{formatContainerTitle(container, role)}</div>
+            <div className={compact ? "inv-grid inv-grid--compact" : "inv-grid"}>
               {slots.map((slot, sIndex) => {
                 const slotIndex = slot?.slotIndex ?? slot?.slot ?? sIndex;
                 const containerId = container?.id ?? container?.containerId ?? cIndex;
@@ -57,6 +76,7 @@ export function InventoryGridSection({
                           isFoodItem(inventoryIndex, instanceId)
                       )
                     : false;
+                const hoverLabel = instanceId != null ? itemName || formatContainerTitle(container, role) : null;
 
                 const isHeldSource =
                   heldStateActive &&
@@ -65,9 +85,16 @@ export function InventoryGridSection({
 
                 return (
                   <div
-                    className={["inv-slot", instanceId ? "is-occupied" : "is-empty", isHeldSource ? "is-held-source" : ""].filter(Boolean).join(" ")}
+                    className={[
+                      "inv-slot",
+                      compact ? "inv-slot--compact" : "",
+                      instanceId ? "is-occupied" : "is-empty",
+                      dragItem ? "is-drop-ready" : "",
+                      isHeldSource ? "is-held-source" : "",
+                    ].filter(Boolean).join(" ")}
                     key={`${cIndex}-${sIndex}`}
                     draggable={Boolean(instanceId) && !heldStateActive}
+                    title={compact ? hoverLabel : undefined}
                     onDragStart={
                       instanceId
                         ? handleDragStart({
@@ -84,6 +111,10 @@ export function InventoryGridSection({
                         : undefined
                     }
                     onDragEnd={instanceId ? handleDragEnd : undefined}
+                    onDragOver={(event) => {
+                      if (dragItem) event.preventDefault?.();
+                    }}
+                    onDrop={handleInventorySlotDrop?.({ containerId, slotIndex, role })}
                     onMouseUp={(event) => {
                       if (event.button != null && event.button !== 0) return;
                       event.preventDefault?.();
@@ -118,20 +149,20 @@ export function InventoryGridSection({
                         event.preventDefault?.();
                         return;
                       }
-                      openContextMenu(
-                        { containerId, slotIndex, itemInstanceId: instanceId, qty, itemName, itemDef, canEat },
-                        event
-                      );
-                    }}
+                        openContextMenu(
+                          { containerId, slotIndex, itemInstanceId: instanceId, qty, itemName, itemDef, canEat },
+                          event
+                        );
+                      }}
                   >
-                    <div className="inv-slot-index">{String(slotIndex).padStart(2, "0")}</div>
-                    {itemName ? (
-                      <div className="inv-item-card" draggable={false}>
+                      {!compact ? <div className="inv-slot-index">{String(slotIndex).padStart(2, "0")}</div> : null}
+                      {itemName ? (
+                      <div className={compact ? "inv-item-card inv-item-card--compact" : "inv-item-card"} draggable={false}>
                         <div className="inv-item-top">
                           <InventoryItemIcon itemDef={itemDef} label={itemName} className="inv-item-icon" />
-                          <div className="inv-item-name">{itemName}</div>
+                          {!compact ? <div className="inv-item-name">{itemName}</div> : null}
                         </div>
-                        {allowedSlots.length ? (
+                        {!compact && allowedSlots.length ? (
                           <div className="inv-item-tags">
                             {allowedSlots.map((allowed) => (
                               <span className="inv-tag" key={allowed}>{allowed}</span>

@@ -1,11 +1,25 @@
 "use strict";
 
 const db = require("../../models");
+const { clearInventory } = require("../../state/inventory/store");
+const { clearEquipment } = require("../../state/equipment/store");
+const { ensureInventoryLoaded } = require("../../state/inventory/loader");
+const { ensureEquipmentLoaded } = require("../../state/equipment/loader");
 const { getRuntime } = require("../../state/runtimeStore");
 const { createActorWithContainer, resolveActorDef } = require("../actorService");
+const { getGrantedContainerSlotRole } = require("../equipmentService/grantsContainer");
+const { removeGrantedContainerForItem } = require("../equipmentService/grantsContainer");
 const { toNum, resolveDropVisualHint } = require("./shared");
 const { findInventorySourceSlot, findEquipmentSourceSlot } = require("./sources");
 const { findFirstEmptyLootSlot, resolveLootContainerDef } = require("./containers");
+
+function hasGrantedContainerComponent(itemDef) {
+  const components = Array.isArray(itemDef?.components) ? itemDef.components : [];
+  return components.some((component) => {
+    const type = String(component?.component_type ?? component?.componentType ?? "").toUpperCase();
+    return type === "GRANTS_CONTAINER";
+  });
+}
 
 async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}) {
   const userId = Number(userIdRaw);
@@ -63,7 +77,26 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
       equipmentSource?.qty ??
       (effectiveItemInstance ? 1 : 0)
   ) || 1;
+  const sourceSlotCode = String(inventorySource?.container?.slotRole ?? equipmentSource?.slotCode ?? "").trim();
   const visualHint = resolveDropVisualHint(itemDef, effectiveItemInstance);
+
+  const grantedRole = itemDef && sourceSlotCode && hasGrantedContainerComponent(itemDef)
+    ? getGrantedContainerSlotRole(itemDef, sourceSlotCode)
+    : null;
+  if (grantedRole) {
+    const grantedContainer = invRt.containersByRole?.get?.(grantedRole) ?? null;
+    const grantedHasItems = Array.isArray(grantedContainer?.slots)
+      ? grantedContainer.slots.some((slot) => Number(slot?.qty ?? 0) > 0 || slot?.itemInstanceId != null)
+      : false;
+
+    if (grantedHasItems) {
+      return {
+        ok: false,
+        code: "GRANTED_CONTAINER_NOT_EMPTY",
+        message: "Empty the basket before dropping it.",
+      };
+    }
+  }
 
   const run = async (tx) => {
     const actorDef = await resolveActorDef({ actorDefCode: "GROUND_LOOT" }, tx);
@@ -103,6 +136,25 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
 
     const actorId = Number(created.actor.id);
     const containerId = Number(created.container.id);
+    const lootSummary = {
+      items: [
+        {
+          itemInstanceId: String(itemInstanceId),
+          itemDefId: String(effectiveItemInstance.itemDefId),
+          code: itemDef?.code ?? null,
+          name: itemDef?.name ?? itemDef?.code ?? null,
+          qty: sourceQty,
+        },
+      ],
+      totalQty: sourceQty,
+      primaryItem: {
+        itemInstanceId: String(itemInstanceId),
+        itemDefId: String(effectiveItemInstance.itemDefId),
+        code: itemDef?.code ?? null,
+        name: itemDef?.name ?? itemDef?.code ?? null,
+        qty: sourceQty,
+      },
+    };
 
     if (inventorySource) {
       const sourceContainer = inventorySource.container;
@@ -143,6 +195,15 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
       }
     }
 
+    if (itemDef && sourceSlotCode) {
+      await removeGrantedContainerForItem({
+        playerId: userId,
+        slotCode: sourceSlotCode,
+        itemDef,
+        tx,
+      });
+    }
+
     const lootSlot = await findFirstEmptyLootSlot(containerId, tx);
     if (!lootSlot) {
       return {
@@ -176,6 +237,7 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
         instanceId: Number(runtime.instanceId),
         pos: dropPos,
         status: "ACTIVE",
+        lootSummary,
         state: {
           dropSource: inventorySource ? "inventory" : "equipment",
           userId,
@@ -207,7 +269,15 @@ async function dropInventoryItemToGround(userIdRaw, itemInstanceIdRaw, opts = {}
     return await run(opts.transaction);
   }
 
-  return await db.sequelize.transaction(async (tx) => run(tx));
+  const result = await db.sequelize.transaction(async (tx) => run(tx));
+  if (!result?.ok) return result;
+
+  clearInventory(userId);
+  clearEquipment(userId);
+  await ensureInventoryLoaded(userId);
+  await ensureEquipmentLoaded(userId);
+
+  return result;
 }
 
 module.exports = {

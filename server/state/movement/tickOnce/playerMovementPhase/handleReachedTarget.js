@@ -4,6 +4,8 @@ const { markRuntimeDirty } = require("../../../runtimeStore");
 const { getActiveSocket } = require("../../../../socket/sessionIndex");
 const { bumpRev } = require("../../entity");
 const { attemptCollectFromActor } = require("../../../../service/actorCollectService");
+const { getActor } = require("../../../actorsRuntimeStore");
+const { resolveActorCollectCooldownMs } = require("../../../../service/actorCollectService");
 const { emitPlayerState } = require("./emitPlayerState");
 
 async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
@@ -49,6 +51,18 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
               }
             }
 
+            if (result?.error === "CARRY_WEIGHT_LIMIT") {
+              if (activeSocket) {
+                activeSocket.emit("actor:collected", {
+                  actorId: String(interactActorId),
+                  actorDisabled: false,
+                  inventory: result?.inventoryFull ?? null,
+                  loot: null,
+                  message: result?.message || "Carry weight limit reached",
+                });
+              }
+            }
+
             console.warn(
               `[COLLECT] Erro ao coletar: userId=${rt.userId} actorId=${interactActorId} error=${result?.error}`
             );
@@ -62,15 +76,40 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
             rt.action = "idle";
           }
 
+          if (!result?.actorDisabled && interactActorId != null) {
+            const actor = getActor(String(interactActorId));
+            if (actor) {
+              resolveActorCollectCooldownMs(rt.userId, actor, rt.collectCooldownMs ?? null)
+                .then((nextCooldownMs) => {
+                  if (Number.isFinite(Number(nextCooldownMs)) && Number(nextCooldownMs) > 0) {
+                    rt.collectCooldownMs = Number(nextCooldownMs);
+                  }
+                })
+                .catch(() => {});
+            }
+          }
+
           if (activeSocket) {
             activeSocket.emit("actor:collected", {
               actorId: String(interactActorId),
               actorDisabled: result.actorDisabled,
               inventory: result.inventoryFull,
               loot: result.loot ?? null,
+              xp: result.xp ?? null,
               actorUpdate: result.actorUpdate ?? null,
               message: result.message ?? null,
             });
+
+            if (result.inventoryFull) {
+              activeSocket.emit("inv:full", result.inventoryFull);
+            }
+
+            if (result.actorUpdate) {
+              activeSocket.emit("actor:updated", {
+                actorId: String(interactActorId),
+                actor: result.actorUpdate,
+              });
+            }
           }
 
           if (result?.actorUpdate && roomName && activeSocket) {

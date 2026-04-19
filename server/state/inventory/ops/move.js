@@ -1,6 +1,7 @@
 // server/state/inventory/ops/move.js
 const { assertContainerActive, assertSlotIndex, assertQtyPositive } = require("../validate/rules");
 const { INV_ERR, invError } = require("../validate/errors");
+const { getGrantedContainerSlotRole } = require("../../../service/equipmentService/grantsContainer");
 
 function getContainerByRole(invRt, role) {
   return invRt.containersByRole.get(role) || null;
@@ -32,6 +33,22 @@ function move(invRt, intent) {
   const dst = dstC.slots[toSlot];
 
   if (!src.itemInstanceId) throw invError(INV_ERR.EMPTY_SOURCE);
+
+  const srcItem = invRt?.itemInstanceById?.get?.(String(src.itemInstanceId)) || null;
+  const srcDef = srcItem?.itemDefId ? invRt?.itemDefsById?.get?.(String(srcItem.itemDefId)) || null : null;
+  const ownGrantedRole =
+    srcDef && srcC?.slotRole ? getGrantedContainerSlotRole(srcDef, srcC.slotRole) : null;
+  if (ownGrantedRole && String(dstC?.slotRole ?? "") === String(ownGrantedRole)) {
+    throw invError(
+      INV_ERR.INVALID_TARGET,
+      "cannot move an item into the container it grants",
+      {
+        itemInstanceId: src.itemInstanceId,
+        sourceRole: srcC?.slotRole ?? null,
+        targetRole: dstC?.slotRole ?? null,
+      }
+    );
+  }
 
   // move completo (MVP)
   if (!dst.itemInstanceId) {

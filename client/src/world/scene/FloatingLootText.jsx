@@ -42,6 +42,35 @@ export function FloatingLootText({ loots }) {
         const offsetY = progress * 68;
         const opacity = Math.max(0, 1 - progress);
         const label = String(loot?.text ?? loot?.label ?? "Loot recebido");
+        const subLabel = String(loot?.subtext ?? loot?.secondaryText ?? "").trim();
+        const tone = String(loot?.tone ?? loot?.variant ?? "loot").toLowerCase();
+        const isWarn = tone === "warn";
+        const isDanger = tone === "danger";
+        const borderColor = isDanger
+          ? "rgba(255, 82, 120, 0.48)"
+          : isWarn
+            ? "rgba(255, 145, 0, 0.48)"
+            : "rgba(74, 222, 128, 0.42)";
+        const shadowColor = isDanger
+          ? "rgba(255, 82, 120, 0.14)"
+          : isWarn
+            ? "rgba(255, 145, 0, 0.14)"
+            : "rgba(74, 222, 128, 0.14)";
+        const textColor = isDanger
+          ? "#ffe4ea"
+          : isWarn
+            ? "#ffe2be"
+            : "#dcfce7";
+        const kickerColor = isDanger
+          ? "#fda4af"
+          : isWarn
+            ? "#fdba74"
+            : "#86efac";
+        const subColor = isDanger
+          ? "#fecdd3"
+          : isWarn
+            ? "#fed7aa"
+            : "#93c5fd";
 
         return (
           <div
@@ -61,10 +90,14 @@ export function FloatingLootText({ loots }) {
                 maxWidth: 320,
                 padding: "8px 12px",
                 borderRadius: 12,
-                background: "rgba(7, 16, 24, 0.92)",
-                border: "1px solid rgba(74, 222, 128, 0.42)",
-                boxShadow: "0 0 18px rgba(74, 222, 128, 0.14)",
-                color: "#dcfce7",
+                background: isDanger
+                  ? "linear-gradient(180deg, rgba(56, 11, 22, 0.84), rgba(28, 5, 12, 0.92))"
+                  : isWarn
+                    ? "linear-gradient(180deg, rgba(61, 28, 0, 0.82), rgba(28, 12, 0, 0.9))"
+                    : "rgba(7, 16, 24, 0.92)",
+                border: `1px solid ${borderColor}`,
+                boxShadow: `0 0 18px ${shadowColor}`,
+                color: textColor,
                 textAlign: "right",
                 backdropFilter: "blur(8px)",
               }}
@@ -74,29 +107,45 @@ export function FloatingLootText({ loots }) {
                   fontSize: 10,
                   letterSpacing: "0.12em",
                   textTransform: "uppercase",
-                  color: "#86efac",
+                  color: kickerColor,
                   marginBottom: 2,
                 }}
               >
-                Loot
+                {isDanger ? "Warning" : isWarn ? "Warning" : "Loot"}
               </div>
               <div
                 style={{
                   fontSize: 14,
                   fontWeight: 700,
-                  color: "#f0fdf4",
-                  textShadow: "0 0 8px rgba(74,222,128,0.16)",
+                color: textColor,
+                textShadow: `0 0 8px ${shadowColor}`,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {label}
+            </div>
+            {subLabel ? (
+              <div
+                style={{
+                  marginTop: 4,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: subColor,
+                  textShadow: `0 0 8px ${isDanger ? "rgba(255,82,120,0.18)" : isWarn ? "rgba(255,145,0,0.18)" : "rgba(59,130,246,0.18)"}`,
                   whiteSpace: "nowrap",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                 }}
               >
-                {label}
+                {subLabel}
               </div>
-            </div>
+            ) : null}
           </div>
-        );
-      })}
+        </div>
+      );
+    })}
     </div>
   );
 }

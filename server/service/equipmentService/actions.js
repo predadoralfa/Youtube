@@ -1,11 +1,13 @@
 "use strict";
 
 const db = require("../../models");
+const { ensureInventoryLoaded } = require("../../state/inventory/loader");
 const { withEquipmentLock } = require("../../state/equipment/store");
 const { isItemAllowedInSlot } = require("./shared");
 const {
   ensureGrantedContainerForItem,
   removeGrantedContainerForItem,
+  getGrantedContainerSlotRole,
 } = require("./grantsContainer");
 const {
   loadItemForEquip,
@@ -14,6 +16,24 @@ const {
   loadEquippedByItemInstance,
 } = require("./queries");
 const { rebuildEquipmentPayload } = require("./refresh");
+
+function hasGrantedContainerComponent(itemDef) {
+  const components = Array.isArray(itemDef?.components) ? itemDef.components : [];
+  return components.some((component) => {
+    const type = String(component?.component_type ?? component?.componentType ?? "").toUpperCase();
+    return type === "GRANTS_CONTAINER";
+  });
+}
+
+function grantedContainerIsEmpty(invRt, itemDef, slotCode) {
+  if (!itemDef || !slotCode || !hasGrantedContainerComponent(itemDef)) return true;
+  const role = getGrantedContainerSlotRole(itemDef, slotCode);
+  const container = invRt?.containersByRole?.get?.(role) ?? null;
+  if (!container) return true;
+  return !Array.isArray(container.slots)
+    ? true
+    : !container.slots.some((slot) => Number(slot?.qty ?? 0) > 0 || slot?.itemInstanceId != null);
+}
 
 async function equipItemToSlot(playerIdRaw, itemInstanceIdRaw, slotCode) {
   const playerId = String(playerIdRaw);
@@ -115,6 +135,11 @@ async function swapEquipmentSlots(playerIdRaw, fromSlotCode, toSlotCode) {
         throw new Error("SOURCE_ITEM_NOT_FOUND");
       }
 
+      const invRt = await ensureInventoryLoaded(playerId);
+      if (!grantedContainerIsEmpty(invRt, sourceItem.def, sourceSlotCode)) {
+        throw new Error("GRANTED_CONTAINER_NOT_EMPTY");
+      }
+
       if (!isItemAllowedInSlot(sourceItem.def, targetSlotCode)) {
         throw new Error("TARGET_SLOT_NOT_ALLOWED");
       }
@@ -129,6 +154,10 @@ async function swapEquipmentSlots(playerIdRaw, fromSlotCode, toSlotCode) {
         if (!isItemAllowedInSlot(targetItem.def, sourceSlotCode)) {
           throw new Error("SOURCE_SLOT_NOT_ALLOWED");
         }
+      }
+
+      if (targetItem?.def && !grantedContainerIsEmpty(invRt, targetItem.def, targetSlotCode)) {
+        throw new Error("GRANTED_CONTAINER_NOT_EMPTY");
       }
 
       if (sourceItem?.def) {
@@ -223,6 +252,10 @@ async function unequipItemFromSlot(playerIdRaw, slotCode) {
       }
 
       const equippedItem = await loadItemForEquip(row.item_instance_id, tx);
+      const invRt = await ensureInventoryLoaded(playerId);
+      if (!grantedContainerIsEmpty(invRt, equippedItem?.def, targetSlotCode)) {
+        throw new Error("GRANTED_CONTAINER_NOT_EMPTY");
+      }
       if (equippedItem?.def) {
         await removeGrantedContainerForItem({
           playerId,

@@ -2,6 +2,44 @@ import { useCallback } from "react";
 import { IntentType } from "../../input/intents";
 import { isInteractDown, isInteractUp } from "../helpers";
 
+function findNearestCollectableActor(snapshot, maxRadius = 2.4) {
+  const playerPos = snapshot?.runtime?.pos ?? null;
+  const px = Number(playerPos?.x);
+  const pz = Number(playerPos?.z);
+  if (!Number.isFinite(px) || !Number.isFinite(pz)) return null;
+
+  const actors = Array.isArray(snapshot?.actors) ? snapshot.actors : [];
+  const maxDistSq = Number(maxRadius) * Number(maxRadius);
+  let best = null;
+  let bestDistSq = Number.POSITIVE_INFINITY;
+
+  for (const actor of actors) {
+    if (!actor || String(actor.status ?? "ACTIVE") !== "ACTIVE") continue;
+
+    const hasLootContainer = Array.isArray(actor.containers)
+      ? actor.containers.some((container) => String(container?.slotRole ?? "").toUpperCase() === "LOOT")
+      : false;
+    if (!hasLootContainer) continue;
+
+    const ax = Number(actor.pos?.x ?? NaN);
+    const az = Number(actor.pos?.z ?? NaN);
+    const dx = ax - px;
+    const dz = az - pz;
+    const distSq = dx * dx + dz * dz;
+    if (!Number.isFinite(distSq) || distSq > maxDistSq) continue;
+    if (distSq >= bestDistSq) continue;
+
+    best = actor;
+    bestDistSq = distSq;
+  }
+
+  if (!best?.id) return null;
+  return {
+    kind: "ACTOR",
+    id: String(best.id),
+  };
+}
+
 export function useGameShellIntentAction(state, handlers) {
   const {
     requestInventoryFull,
@@ -97,7 +135,12 @@ export function useGameShellIntentAction(state, handlers) {
           return;
         }
 
-        emitInteractStart();
+        const actorTarget =
+          target?.kind === "ACTOR" && target?.id != null
+            ? { kind: "ACTOR", id: String(target.id) }
+            : findNearestCollectableActor(state.snapshot, 2.4);
+
+        emitInteractStart(actorTarget);
         return;
       }
 

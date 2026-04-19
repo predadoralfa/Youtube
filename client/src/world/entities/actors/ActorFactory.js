@@ -335,6 +335,9 @@ function resolveDroppedItemVisual(actor) {
   if (token.includes("APPLE") || token.includes("MACA")) {
     return "APPLE";
   }
+  if (token.includes("BASKET") || token.includes("CESTA")) {
+    return "DEFAULT";
+  }
   if (token.includes("FIBER") || token.includes("GRASS") || token.includes("GRAMA")) {
     return "GRASS";
   }
@@ -346,7 +349,7 @@ function resolveDroppedItemVisual(actor) {
     null
   );
   if (normalizedActorType === "ITEM_DROP") {
-    return "ROCK";
+    return "DEFAULT";
   }
 
   return "DEFAULT";
@@ -392,9 +395,9 @@ function createDroppedItemFallbackMesh(actor) {
   const base = new THREE.Mesh(
     new THREE.BoxGeometry(0.36, 0.36, 0.36),
     new THREE.MeshStandardMaterial({
-      color: 0xc1c7d0,
-      roughness: 0.28,
-      metalness: 0.82,
+      color: 0xff59c7,
+      roughness: 0.42,
+      metalness: 0.18,
     })
   );
   base.castShadow = true;

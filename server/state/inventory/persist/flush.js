@@ -89,6 +89,24 @@ async function flush(invRt, result, tx, eqRt = null) {
 
   await lockContainersAndSlots(invRt.userId, containerIds, slotKeys, tx);
 
+  const currentRows = new Map();
+  if (slotKeys.length) {
+    const current = await db.GaContainerSlot.findAll({
+      where: {
+        [db.Sequelize.Op.or]: slotKeys.map((k) => ({
+          container_id: String(k.containerId),
+          slot_index: Number(k.slotIndex),
+        })),
+      },
+      transaction: tx,
+      lock: tx.LOCK.UPDATE,
+    });
+
+    for (const row of current) {
+      currentRows.set(`${String(row.container_id)}:${Number(row.slot_index)}`, row);
+    }
+  }
+
   // split: resolve __NEW__ placeholder
   let newInstanceId = null;
   if (result.needsNewInstance) {
@@ -96,6 +114,33 @@ async function flush(invRt, result, tx, eqRt = null) {
   }
 
   // persiste slots tocados
+  for (const touched of result.touchedSlots || []) {
+    const cid = String(touched.containerId);
+    const idx = Number(touched.slotIndex);
+    const slot = touched.slot;
+    const key = `${cid}:${idx}`;
+    const currentRow = currentRows.get(key) || null;
+    const itemInstanceId = slot.itemInstanceId === "__NEW__" ? newInstanceId : slot.itemInstanceId;
+    const currentItemInstanceId =
+      currentRow?.item_instance_id != null ? String(currentRow.item_instance_id) : null;
+
+    if (currentItemInstanceId != null && currentItemInstanceId !== String(itemInstanceId ?? "")) {
+      await db.GaContainerSlot.update(
+        {
+          item_instance_id: null,
+          qty: 0,
+        },
+        {
+          where: {
+            container_id: cid,
+            slot_index: idx,
+          },
+          transaction: tx,
+        }
+      );
+    }
+  }
+
   for (const touched of result.touchedSlots || []) {
     const cid = String(touched.containerId);
     const idx = Number(touched.slotIndex);
