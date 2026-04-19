@@ -76,6 +76,10 @@ export function readEntityVitals(entity) {
     entity?.vitals?.hunger?.current ?? entity?.hungerCurrent ?? entity?.hunger_current ?? 0;
   const hungerMax =
     entity?.vitals?.hunger?.max ?? entity?.hungerMax ?? entity?.hunger_max ?? 0;
+  const thirstCurrent =
+    entity?.vitals?.thirst?.current ?? entity?.thirstCurrent ?? entity?.thirst_current ?? 0;
+  const thirstMax =
+    entity?.vitals?.thirst?.max ?? entity?.thirstMax ?? entity?.thirst_max ?? 0;
 
   return {
     hpCurrent: toDisplayInt(hpCurrent, 0),
@@ -84,6 +88,8 @@ export function readEntityVitals(entity) {
     staminaMax: toDisplayInt(staminaMax, 0),
     hungerCurrent: toDisplayInt(hungerCurrent, 0),
     hungerMax: toDisplayInt(hungerMax, 0),
+    thirstCurrent: toDisplayInt(thirstCurrent, 0),
+    thirstMax: toDisplayInt(thirstMax, 0),
   };
 }
 

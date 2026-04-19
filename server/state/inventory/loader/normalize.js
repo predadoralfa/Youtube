@@ -111,6 +111,7 @@ function normalizeItemDefRow(row) {
     id: String(plain.id),
     code: plain.code ?? null,
     name: plain.name ?? null,
+    assetKey: plain.asset_key ?? plain.assetKey ?? null,
     category: plain.categoria ?? plain.category ?? null,
     weight:
       plain.unit_weight == null

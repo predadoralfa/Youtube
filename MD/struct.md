@@ -77,6 +77,7 @@ Organizacao atual:
 
 - `document.md`: documento mestre
 - `struct.md`: resumo estrutural
+- `status-checklist-temporario.md`: controle temporario da implementacao
 - `MD/CIDs`: guias de cadastro e identificadores estaveis
 - `MD/implementacoes`: estudos arquiteturais e planos tecnicos
 
@@ -97,6 +98,13 @@ Documentos principais:
 - [mapa-procedural-asset-families.md](/D:/JS-Projects/Youtube/MD/implementacoes/mapa-procedural-asset-families.md)
 - [plano-tecnico-mapa-procedural-instancia-3.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-mapa-procedural-instancia-3.md)
 - [plano-tecnico-respawn-inimigos-por-instancia.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-respawn-inimigos-por-instancia.md)
+- [plano-sistema-de-status.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-sistema-de-status.md)
+- [status-contrato-tecnico.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-contrato-tecnico.md)
+- [status-imunidade.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-imunidade.md)
+- [status-doenca.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-doenca.md)
+- [status-debuffs.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-debuffs.md)
+- [status-sono-xp.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-sono-xp.md)
+- [status-economia-medica.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-economia-medica.md)
 
 ---
 

@@ -7,8 +7,9 @@ Implantar o consumo automatico da barra de fome como um sistema base de sobreviv
 A fome:
 
 - comeca cheia em `100`
-- zera em `1 dia do jogo`
-- `1 dia do jogo` equivale a `8 horas do mundo real`
+- zera em `8 horas do mundo`
+- `8 horas do mundo` equivalem a `2h40` reais quando `time_factor = 3`
+- completa `3 ciclos` por dia do jogo
 - influencia a regeneracao de HP e stamina
 - sera recuperada instantaneamente por itens consumiveis no futuro
 
@@ -16,7 +17,7 @@ A fome:
 
 - A barra de fome inicial do jogador e `100 / 100`
 - O consumo acontece com base em tempo real decorrido no servidor
-- O relogio do mundo entra apenas como fator de conversao de balanceamento
+- O relogio do mundo entra como fator de conversao de balanceamento
 - A fome nao sera consumida por tick de movimento
 - A fome nao sera regenerada ao longo do tempo por itens
 - A fome continua valendo tambem no retorno do jogador ao jogo, usando o tempo real decorrido
@@ -28,21 +29,22 @@ A fome:
 Configuracao atual:
 
 - `hunger_max = 100`
-- `1 dia do jogo = 24 horas do jogo`
 - `time_factor = 3`
-- `1 dia do jogo = 8 horas reais = 480 minutos reais`
+- `hunger_world_hours_to_empty = 8`
+- `1 barra cheia = 8 horas do mundo = 160 minutos reais`
 
 Consumo base:
 
-- `100 / 480 = 0.2083333333` de fome por minuto real
+- `100 / 160 = 0.625` de fome por minuto real
+- `100 / 960 = 0.1041666667` de fome por minuto do mundo
 
 Formula geral:
 
-`hungerDrain = (hungerMax / minutosParaZerarNoTempoDeJogo) * timeFactor * minutosReaisDecorridos`
+`hungerDrain = hungerMax * (timeFactor / (hungerWorldHoursToEmpty * 60 * 60)) * segundosReaisDecorridos`
 
-Como `minutosParaZerarNoTempoDeJogo = 1440`, tambem pode ser expresso como:
+Ou, de forma equivalente:
 
-`hungerDrain = hungerMax * (timeFactor / 1440) * minutosReaisDecorridos`
+`hungerDrain = hungerMax * (timeFactor / 480) * minutosReaisDecorridos`
 
 ## Decisoes Tecnicas
 
@@ -65,6 +67,7 @@ Como `minutosParaZerarNoTempoDeJogo = 1440`, tambem pode ser expresso como:
 - Adicionar timestamp dedicado para fome no runtime
 - Calcular tempo decorrido com seguranca
 - Consumir fome com base no `time_factor` do relogio do mundo
+- Reaplicar a mesma regra no carregamento offline do personagem
 
 ### 3. Loop Global
 
@@ -90,7 +93,8 @@ Como `minutosParaZerarNoTempoDeJogo = 1440`, tambem pode ser expresso como:
 
 Ao final desta implementacao:
 
-- todo jogador perde fome continuamente ao longo de `8 horas reais`
+- todo jogador perde fome continuamente ao longo de `8 horas do mundo`
+- a barra zera aproximadamente a cada `2h40` reais com o clock atual
 - a barra passa a refletir o metabolismo basico do personagem
 - o sistema de regen passa a ter efeito pratico no jogo
 - o projeto fica pronto para receber itens de comida depois

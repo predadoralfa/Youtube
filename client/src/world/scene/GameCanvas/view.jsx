@@ -1,12 +1,21 @@
 import { FloatingDamageText } from "../FloatingDamageText";
 import { FloatingLootText } from "../FloatingLootText";
+import { BuildTraceMarker } from "../BuildTraceMarker";
 import { HPBar } from "../HPBar";
 import { TargetEnemyCard } from "../TargetEnemyCard";
 import { TargetLootCard } from "../TargetLootCard";
 import { TargetPlayerCard } from "../TargetPlayerCard";
 import { TargetMarker } from "../TargetMarker";
+import { TargetBuildCard } from "../TargetBuildCard";
 
-export function GameCanvasView({ state, lootNotifications = [], worldNotifications = [] }) {
+export function GameCanvasView({
+  state,
+  lootNotifications = [],
+  worldNotifications = [],
+  onClearBuildPlacement = null,
+  onCancelBuild = null,
+  onCloseTargetBuildCard = null,
+}) {
   return (
     <div
       ref={state.containerRef}
@@ -16,6 +25,11 @@ export function GameCanvasView({ state, lootNotifications = [], worldNotificatio
         overflow: "hidden",
         position: "relative",
         isolation: "isolate",
+      }}
+      onContextMenu={(e) => {
+        if (state.buildPlacementRef?.current?.visible || state.targetBuildCard) {
+          e.preventDefault();
+        }
       }}
     >
       <div style={{ position: "fixed", inset: 0, zIndex: 1090, pointerEvents: "none" }}>
@@ -32,6 +46,15 @@ export function GameCanvasView({ state, lootNotifications = [], worldNotificatio
 
       <div style={{ position: "absolute", inset: 0, zIndex: 10, pointerEvents: "none" }}>
         <TargetMarker visible={state.marker.visible} x={state.marker.x} y={state.marker.y} />
+
+        <BuildTraceMarker
+          visible={state.buildPlacementMarker?.visible ?? false}
+          x={state.buildPlacementMarker?.x ?? 0}
+          y={state.buildPlacementMarker?.y ?? 0}
+          width={state.buildPlacementMarker?.width ?? 128}
+          height={state.buildPlacementMarker?.height ?? 64}
+          label={state.buildPlacementMarker?.label ?? "Primitive Shelter"}
+        />
 
         {state.targetLootCard ? (
           <TargetLootCard
@@ -78,11 +101,15 @@ export function GameCanvasView({ state, lootNotifications = [], worldNotificatio
               staminaMax={state.selfHpBar.staminaMax}
               hungerCurrent={state.selfHpBar.hungerCurrent}
               hungerMax={state.selfHpBar.hungerMax}
+              thirstCurrent={state.selfHpBar.thirstCurrent}
+              thirstMax={state.selfHpBar.thirstMax}
               showHpText={true}
               showStamina={true}
               showStaminaText={true}
               showHunger={true}
               showHungerText={true}
+              showThirst={true}
+              showThirstText={true}
             />
           </div>
         ) : null}
@@ -98,6 +125,46 @@ export function GameCanvasView({ state, lootNotifications = [], worldNotificatio
           />
         ) : null}
       </div>
+
+      {state.targetBuildCard ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1126,
+            pointerEvents: "auto",
+            background: "transparent",
+          }}
+          onMouseDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            onCloseTargetBuildCard?.();
+          }}
+          onContextMenu={(e) => {
+            if (e.target === e.currentTarget) {
+              e.preventDefault();
+            }
+          }}
+        >
+          <TargetBuildCard
+            visible={true}
+            x={state.targetBuildCard.x}
+            y={state.targetBuildCard.y}
+            displayName={state.targetBuildCard.displayName}
+            ownerName={state.targetBuildCard.ownerName}
+            stateLabel={state.targetBuildCard.stateLabel}
+            canCancel={state.targetBuildCard.canCancel}
+            canBuild={state.targetBuildCard.canBuild}
+            canSleep={state.targetBuildCard.canSleep}
+            buildState={state.targetBuildCard.buildState}
+            buildDurationLabel={state.targetBuildCard.buildDurationLabel}
+            xpReward={state.targetBuildCard.xpReward}
+            onCancel={state.targetBuildCard.onCancel}
+            onBuild={state.targetBuildCard.onBuild}
+            onSleep={state.targetBuildCard.onSleep}
+            onClose={onCloseTargetBuildCard}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -9,6 +9,8 @@ const {
   DEFAULT_HP_REGEN_MULTIPLIER,
   HUNGER_TICK_INTERVAL_MS,
   HUNGER_WORLD_HOURS_TO_EMPTY,
+  THIRST_TICK_INTERVAL_MS,
+  THIRST_WORLD_HOURS_TO_EMPTY,
 } = require("./stamina/shared");
 const {
   readRuntimeHpCurrent,
@@ -17,6 +19,9 @@ const {
   readRuntimeHungerCurrent,
   readRuntimeHungerMax,
   syncRuntimeHunger,
+  readRuntimeThirstCurrent,
+  readRuntimeThirstMax,
+  syncRuntimeThirst,
   readRuntimeStaminaCurrent,
   readRuntimeStaminaMax,
   syncRuntimeStamina,
@@ -30,6 +35,11 @@ const {
   resolveHungerDrainPerSecond,
   applyHungerTick,
 } = require("./stamina/hunger");
+const {
+  resolveThirstRegenMultiplier,
+  resolveThirstDrainPerSecond,
+  applyThirstTick,
+} = require("./stamina/thirst");
 const {
   resolveCarryWeightDrainMultiplier,
   resolveMoveSpeedMultiplierFromStamina,
@@ -49,12 +59,17 @@ module.exports = {
   DEFAULT_HP_REGEN_MULTIPLIER,
   HUNGER_TICK_INTERVAL_MS,
   HUNGER_WORLD_HOURS_TO_EMPTY,
+  THIRST_TICK_INTERVAL_MS,
+  THIRST_WORLD_HOURS_TO_EMPTY,
   readRuntimeHpCurrent,
   readRuntimeHpMax,
   syncRuntimeHp,
   readRuntimeHungerCurrent,
   readRuntimeHungerMax,
   syncRuntimeHunger,
+  readRuntimeThirstCurrent,
+  readRuntimeThirstMax,
+  syncRuntimeThirst,
   readRuntimeStaminaCurrent,
   readRuntimeStaminaMax,
   syncRuntimeStamina,
@@ -63,9 +78,12 @@ module.exports = {
   applyHungerTick,
   resolveHungerRegenMultiplier,
   resolveHungerDrainPerSecond,
+  resolveThirstRegenMultiplier,
+  resolveThirstDrainPerSecond,
   resolveCarryWeightDrainMultiplier,
   resolveMoveSpeedMultiplierFromStamina,
   resolveStaminaPersistBucket,
   syncStaminaPersistMarkers,
   shouldQueueStaminaPersist,
+  applyThirstTick,
 };

@@ -42,6 +42,10 @@ function resolveCollectUnlockCode(actorDefCode, actorState) {
     return "actor.collect:FIBER_PATCH";
   }
 
+  if (actorDefCode === "TWIG_PATCH" && resourceType === "TWIG_PATCH") {
+    return "actor.collect:TWIG_PATCH";
+  }
+
   return null;
 }
 
@@ -49,6 +53,7 @@ function resolveCollectResearchCode(actorDefCode) {
   if (actorDefCode === "TREE_APPLE") return "RESEARCH_APPLE";
   if (actorDefCode === "ROCK_NODE_SMALL") return "RESEARCH_STONE";
   if (actorDefCode === "FIBER_PATCH") return "RESEARCH_FIBER";
+  if (actorDefCode === "TWIG_PATCH") return "RESEARCH_TWIG";
   return null;
 }
 
@@ -56,6 +61,7 @@ function resolveCollectItemCode(actorDefCode) {
   if (actorDefCode === "TREE_APPLE") return "FOOD-APPLE";
   if (actorDefCode === "ROCK_NODE_SMALL") return "SMALL_STONE";
   if (actorDefCode === "FIBER_PATCH") return "FIBER";
+  if (actorDefCode === "TWIG_PATCH") return "GRAVETO";
   return null;
 }
 

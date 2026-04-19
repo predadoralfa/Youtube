@@ -9,6 +9,8 @@
  * Suporta:
  * - HP
  * - stamina (opcional)
+ * - hunger
+ * - thirst
  * - texto numérico opcional
  */
 
@@ -111,12 +113,15 @@ export function HPBar({
   staminaMax = null,
   hungerCurrent = null,
   hungerMax = null,
+  thirstCurrent = null,
+  thirstMax = null,
 
   // aparência
   width = 60,
   hpHeight = 8,
   staminaHeight = 6,
   hungerHeight = 6,
+  thirstHeight = 6,
   gap = 4,
 
   // modo
@@ -124,17 +129,21 @@ export function HPBar({
   showHpText = true,
   showStaminaText = false,
   showHungerText = false,
+  showThirstText = false,
   showStamina = false,
   showHunger = false,
+  showThirst = false,
   hpTextFontSize = "11px",
   staminaTextFontSize = "10px",
   hungerTextFontSize = "10px",
+  thirstTextFontSize = "10px",
 
   // cores
   hpColorHigh = "#ef4444",
   hpColorLow = "#b91c1c",
   staminaColor = "#facc15",
   hungerColor = "#38bdf8",
+  thirstColor = "#22d3ee",
   trackColor = "#1a1a1a",
   borderColor = "#444",
   textColor = "#ffffff",
@@ -158,6 +167,12 @@ export function HPBar({
     hungerCurrent != null &&
     hungerMax != null &&
     Number(hungerMax) > 0;
+
+  const hasThirst =
+    showThirst &&
+    thirstCurrent != null &&
+    thirstMax != null &&
+    Number(thirstMax) > 0;
 
   const wrapperStyle =
     mode === "hud"
@@ -224,6 +239,22 @@ export function HPBar({
           showText={showHungerText}
           textColor={textColor}
           fontSize={hungerTextFontSize}
+          label=""
+        />
+      ) : null}
+
+      {hasThirst ? (
+        <VitalRow
+          width={`${width}px`}
+          height={thirstHeight}
+          current={thirstCurrent}
+          max={thirstMax}
+          fillColor={thirstColor}
+          backgroundColor={trackColor}
+          borderColor={borderColor}
+          showText={showThirstText}
+          textColor={textColor}
+          fontSize={thirstTextFontSize}
           label=""
         />
       ) : null}

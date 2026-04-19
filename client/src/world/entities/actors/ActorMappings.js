@@ -7,6 +7,8 @@
 
 import { ChestActor } from "./ChestActor";
 import { TreeActor } from "./TreeActor";
+import { TwigActor } from "./TwigActor";
+import { PrimitiveShelterActor } from "./PrimitiveShelterActor";
 import { NPCActor } from "./NPCActor";
 import { DefaultActor } from "./DefaultActor";
 
@@ -23,6 +25,8 @@ export function getActorComponent(actorType) {
     TREE_APPLE: TreeActor,
     APPLE_TREE: TreeActor,
     TREE: TreeActor,
+    TWIG_PATCH: TwigActor,
+    PRIMITIVE_SHELTER: PrimitiveShelterActor,
     NPC: NPCActor,
     // Adicione mais tipos aqui conforme necessário
   };
@@ -69,6 +73,18 @@ export const ACTOR_CONFIG = {
     interactive: false,
     label: "Árvore de maçã",
     color: 0x228b22,
+  },
+  TWIG_PATCH: {
+    scale: 1,
+    interactive: true,
+    label: "Galho",
+    color: 0x8b5a2b,
+  },
+  PRIMITIVE_SHELTER: {
+    scale: 1,
+    interactive: true,
+    label: "Primitive Shelter",
+    color: 0xe5e7eb,
   },
   NPC: {
     scale: 1.5,

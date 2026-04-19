@@ -33,6 +33,8 @@ function registerClickMoveHandler(socket) {
         return;
       }
 
+      if (rt.buildLock?.active || rt.sleepLock?.active) return;
+
       const x = payload?.x;
       const z = payload?.z;
 

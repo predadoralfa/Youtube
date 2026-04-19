@@ -249,13 +249,6 @@
   gap: 34px;
 }
 
-.research-tree-children--depth-0 .research-tree-link {
-  position: relative;
-  top: 26px;
-  left: 0;
-  flex: 0 0 auto;
-}
-
 .research-tree-children--depth-0 .research-tree-children-stack {
   flex: 1 1 auto;
   min-width: 0;
@@ -263,48 +256,6 @@
 
 .research-tree-children::before {
   display: none;
-}
-
-.research-graph-lines {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.research-graph-lines-group {
-  fill: none;
-}
-
-.research-graph-line {
-  fill: none;
-}
-
-.research-graph-line-glow {
-  display: block;
-  stroke: rgba(255, 214, 140, 0.16);
-  stroke-width: 22;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  filter: url(#researchRoadGlow);
-}
-
-.research-graph-line-main {
-  fill: none;
-  stroke: #6e4728;
-  stroke-width: 14;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.9;
-}
-
-.research-graph-line-core {
-  fill: none;
-  stroke: #c98a48;
-  stroke-width: 4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.95;
 }
 
 .research-tree-children-stack {
@@ -372,6 +323,23 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 0 0 1px rgba(255, 211, 138, 0.12),
     0 16px 38px rgba(0, 0, 0, 0.22);
+}
+
+.build-stage {
+  position: relative;
+}
+
+.build-stage-column {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  width: 360px;
+  align-items: flex-start;
+}
+
+.build-card {
+  width: min(360px, 100%);
+  flex: 0 0 auto;
 }
 
 .research-locked-note {
@@ -559,48 +527,47 @@
   cursor: not-allowed;
 }
 
-.research-connector {
+.research-action--danger {
+  border-color: rgba(248, 113, 113, 0.34);
+  background:
+    linear-gradient(180deg, rgba(80, 16, 16, 0.96), rgba(43, 10, 10, 0.96)),
+    rgba(7, 12, 21, 0.96);
+  color: #fee2e2;
+}
+
+.research-action--danger:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(120, 22, 22, 0.96), rgba(60, 12, 12, 0.98)),
+    rgba(7, 12, 21, 0.98);
+}
+
+.research-progress {
   display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.research-line {
-  flex: 0 0 140px;
-  height: 2px;
-  background: linear-gradient(90deg, rgba(0, 255, 255, 0.95), rgba(255, 0, 255, 0.2));
-}
-
-.research-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--research-accent);
-  box-shadow: 0 0 0 10px rgba(0, 255, 255, 0.08);
-}
-
-.research-placeholder {
-  display: inline-flex;
   flex-direction: column;
-  padding: 14px 16px;
-  border: 1px dashed rgba(0, 255, 255, 0.18);
-  border-radius: 16px;
-  color: var(--research-text);
-  background: linear-gradient(180deg, rgba(0, 255, 255, 0.04), rgba(255, 0, 255, 0.03));
+  gap: 8px;
+  margin-top: 14px;
 }
 
-.research-placeholder small {
-  margin-top: 4px;
+.research-progress-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(0, 255, 255, 0.12);
+}
+
+.research-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(255, 211, 138, 0.95), rgba(0, 255, 255, 0.92));
+  transition: width 160ms linear;
+}
+
+.research-progress-copy {
   color: var(--research-muted);
-}
-
-.research-branch {
-  position: absolute;
-  left: calc(100% - 520px);
-  top: calc(100% - 22px);
-  width: 2px;
-  height: 48px;
-  background: linear-gradient(180deg, rgba(0, 255, 255, 0.68), rgba(255, 0, 255, 0.08));
+  font-size: 0.84rem;
+  letter-spacing: 0.04em;
 }
 
 .research-footer {
@@ -654,10 +621,6 @@
   .research-tree-children {
     margin-left: 24px;
     padding-left: 24px;
-  }
-
-  .research-tree-link-line {
-    width: 22px;
   }
 
   .research-footer {

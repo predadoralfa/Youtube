@@ -51,6 +51,20 @@ export function createSelectionTools({
     return { target, hitObject };
   }
 
+  function tryPickGround(clientX, clientY) {
+    setMouseFromClientToNdc(clientX, clientY);
+    raycaster.setFromCamera(mouseNdc, camera);
+    const hits = raycaster.intersectObject(groundMesh, false);
+    if (!hits?.length) return null;
+
+    const point = hits[0].point;
+    const x = Number(point?.x);
+    const z = Number(point?.z);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+
+    return { x, z };
+  }
+
   function clearSelection() {
     state.selectedTargetRef.current = null;
     state.selectedObjectRef.current = null;
@@ -80,6 +94,17 @@ export function createSelectionTools({
     const socket = getSocket();
     if (!socket) return;
 
+    const buildPlacement = state.buildPlacementRef?.current ?? null;
+    if (buildPlacement?.visible) {
+      const ground = tryPickGround(clientX, clientY);
+      if (!ground) return;
+      onInputIntent?.({
+        type: IntentType.BUILD_PLACE_CONFIRM,
+        worldPos: ground,
+      });
+      return;
+    }
+
     const picked = tryPickTarget(clientX, clientY);
     if (picked?.target) {
       setSelection(picked.target, picked.hitObject);
@@ -102,8 +127,20 @@ export function createSelectionTools({
     socket.emit("move:click", { x, z });
   }
 
+  function emitContextMenu(clientX, clientY) {
+    const picked = tryPickTarget(clientX, clientY);
+    if (picked?.target) {
+      setSelection(picked.target, picked.hitObject);
+      return picked.target;
+    }
+
+    return null;
+  }
+
   return {
     emitClick,
+    emitContextMenu,
+    tryPickGround,
     clearSelection,
   };
 }

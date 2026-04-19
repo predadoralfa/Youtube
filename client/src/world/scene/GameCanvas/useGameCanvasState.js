@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-export function useGameCanvasState(currentWorldTime) {
+export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
   const containerRef = useRef(null);
   const worldTimeRef = useRef(currentWorldTime);
   const runtimeRef = useRef(null);
@@ -18,13 +18,17 @@ export function useGameCanvasState(currentWorldTime) {
   const entityVitalsRef = useRef(new Map());
   const entityPositionsRef = useRef(new Map());
   const seenDamageEventIdsRef = useRef(new Set());
+  const inventorySnapshotRef = useRef(null);
+  const buildPlacementRef = useRef(buildPlacement);
 
   const [marker, setMarker] = useState({ visible: false, x: 0, y: 0 });
   const [floatingDamages, setFloatingDamages] = useState([]);
   const [targetHpBar, setTargetHpBar] = useState(null);
   const [targetPlayerCard, setTargetPlayerCard] = useState(null);
   const [targetLootCard, setTargetLootCard] = useState(null);
+  const [targetBuildCard, setTargetBuildCard] = useState(null);
   const [selfHpBar, setSelfHpBar] = useState(null);
+  const [buildPlacementMarker, setBuildPlacementMarker] = useState(null);
   const stateRef = useRef(null);
 
   if (!stateRef.current) {
@@ -46,18 +50,24 @@ export function useGameCanvasState(currentWorldTime) {
       entityVitalsRef,
       entityPositionsRef,
       seenDamageEventIdsRef,
+      inventorySnapshotRef,
+      buildPlacementRef,
       setMarker,
       setFloatingDamages,
       setTargetHpBar,
       setTargetPlayerCard,
       setTargetLootCard,
+      setTargetBuildCard,
       setSelfHpBar,
+      setBuildPlacementMarker,
       marker,
       floatingDamages,
       targetHpBar,
       targetPlayerCard,
       targetLootCard,
+      targetBuildCard,
       selfHpBar,
+      buildPlacementMarker,
     };
   }
 
@@ -66,7 +76,10 @@ export function useGameCanvasState(currentWorldTime) {
   stateRef.current.targetHpBar = targetHpBar;
   stateRef.current.targetPlayerCard = targetPlayerCard;
   stateRef.current.targetLootCard = targetLootCard;
+  stateRef.current.targetBuildCard = targetBuildCard;
   stateRef.current.selfHpBar = selfHpBar;
+  stateRef.current.buildPlacementMarker = buildPlacementMarker;
+  stateRef.current.buildPlacementRef.current = buildPlacement;
 
   return stateRef.current;
 }

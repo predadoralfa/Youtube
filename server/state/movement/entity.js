@@ -66,6 +66,26 @@ function readHungerMax(rt) {
   );
 }
 
+function readThirstCurrent(rt) {
+  return toNum(
+    rt?.thirstCurrent ??
+      rt?.thirst_current ??
+      rt?.stats?.thirstCurrent ??
+      rt?.stats?.thirst_current,
+    0
+  );
+}
+
+function readThirstMax(rt) {
+  return toNum(
+    rt?.thirstMax ??
+      rt?.thirst_max ??
+      rt?.stats?.thirstMax ??
+      rt?.stats?.thirst_max,
+    0
+  );
+}
+
 function bumpRev(rt) {
   const cur = Number(rt.rev ?? 0);
   rt.rev = Number.isFinite(cur) ? cur + 1 : 1;
@@ -78,6 +98,8 @@ function toEntity(rt) {
   const staminaMax = readStaminaMax(rt);
   const hungerCurrent = readHungerCurrent(rt);
   const hungerMax = readHungerMax(rt);
+  const thirstCurrent = readThirstCurrent(rt);
+  const thirstMax = readThirstMax(rt);
 
   return {
     entityId: String(rt.userId),
@@ -88,6 +110,8 @@ function toEntity(rt) {
     hp: hpCurrent, // compat legado
     action: rt.action ?? "idle",
     rev: rt.rev ?? 0,
+    buildLock: rt.buildLock ?? null,
+    sleepLock: rt.sleepLock ?? null,
 
     vitals: {
       hp: {
@@ -101,6 +125,10 @@ function toEntity(rt) {
       hunger: {
         current: hungerCurrent,
         max: hungerMax,
+      },
+      thirst: {
+        current: thirstCurrent,
+        max: thirstMax,
       },
     },
   };
@@ -113,6 +141,8 @@ function toDelta(rt) {
   const staminaMax = readStaminaMax(rt);
   const hungerCurrent = readHungerCurrent(rt);
   const hungerMax = readHungerMax(rt);
+  const thirstCurrent = readThirstCurrent(rt);
+  const thirstMax = readThirstMax(rt);
 
   return {
     entityId: String(rt.userId),
@@ -122,6 +152,8 @@ function toDelta(rt) {
     hp: hpCurrent, // compat legado
     action: rt.action ?? "idle",
     rev: rt.rev ?? 0,
+    buildLock: rt.buildLock ?? null,
+    sleepLock: rt.sleepLock ?? null,
 
     vitals: {
       hp: {
@@ -135,6 +167,10 @@ function toDelta(rt) {
       hunger: {
         current: hungerCurrent,
         max: hungerMax,
+      },
+      thirst: {
+        current: thirstCurrent,
+        max: thirstMax,
       },
     },
   };

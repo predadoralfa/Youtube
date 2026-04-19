@@ -69,6 +69,8 @@ const bootstrap = async (req, res) => {
     const staminaMax = combatStats.staminaMax;
     const hungerCurrent = combatStats.hungerCurrent;
     const hungerMax = combatStats.hungerMax;
+    const thirstCurrent = combatStats.thirstCurrent;
+    const thirstMax = combatStats.thirstMax;
 
     const instance = await GaInstance.findByPk(runtime.instance_id, {
       attributes: ["id", "local_id", "instance_type", "status"],
@@ -260,6 +262,10 @@ const bootstrap = async (req, res) => {
               current: hungerCurrent,
               max: hungerMax,
             },
+            thirst: {
+              current: thirstCurrent,
+              max: thirstMax,
+            },
           },
           connection_state: runtime.connection_state,
           disconnected_at: runtime.disconnected_at,
@@ -279,6 +285,10 @@ const bootstrap = async (req, res) => {
               hunger: {
                 current: hungerCurrent,
                 max: hungerMax,
+              },
+              thirst: {
+                current: thirstCurrent,
+                max: thirstMax,
               },
             },
           },

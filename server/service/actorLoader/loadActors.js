@@ -4,6 +4,7 @@ const db = require("../../models");
 const { ensureRuntimeActorsForSpawns } = require("./runtimeActors");
 const { buildActorPayload } = require("./payload");
 const { attachContainersAndLoot } = require("./containers");
+const { completeDuePrimitiveSheltersForInstance } = require("../buildProgressService");
 
 async function loadActorsForInstance(instanceIdRaw, opts = {}) {
   const instanceId = Number(instanceIdRaw);
@@ -13,6 +14,8 @@ async function loadActorsForInstance(instanceIdRaw, opts = {}) {
 
   const includeContainers = opts.includeContainers !== false;
   const status = opts.status === undefined ? "ACTIVE" : opts.status;
+
+  await completeDuePrimitiveSheltersForInstance(instanceId);
 
   return db.sequelize.transaction(async (tx) => {
     await ensureRuntimeActorsForSpawns(instanceId, tx);

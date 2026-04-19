@@ -5,6 +5,8 @@ import {
   intentCameraZoom,
   intentMoveDirection,
   intentClickPrimary,
+  intentContextMenu,
+  intentPointerMove,
   intentUiToggleInventory,
   intentUiToggleResearch,
   intentUiToggleBuild,
@@ -83,6 +85,8 @@ export function bindInputs(domElement, bus) {
   }
 
   function onMouseMove(e) {
+    bus.emit(intentPointerMove(e.clientX, e.clientY));
+
     if (!orbiting) return;
     if (isUiBlockedTarget(e.target)) return;
 
@@ -239,6 +243,7 @@ export function bindInputs(domElement, bus) {
   // =========================
   function onContextMenu(e) {
     if (isUiBlockedTarget(e.target)) return;
+    bus.emit(intentContextMenu(e.clientX, e.clientY));
     e.preventDefault();
   }
 

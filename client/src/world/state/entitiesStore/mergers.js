@@ -13,6 +13,7 @@ export function mergeVitals(baseVitals, rawDelta, nextHpCompat) {
     hp: { current: 0, max: 0 },
     stamina: { current: 0, max: 0 },
     hunger: { current: 0, max: 0 },
+    thirst: { current: 0, max: 0 },
   };
 
   const deltaVitals = rawDelta?.vitals ?? null;
@@ -68,6 +69,22 @@ export function mergeVitals(baseVitals, rawDelta, nextHpCompat) {
     stats?.hunger_max ??
     current.hunger.max;
 
+  const thirstCurrent =
+    deltaVitals?.thirst?.current ??
+    rawDelta?.thirstCurrent ??
+    rawDelta?.thirst_current ??
+    stats?.thirstCurrent ??
+    stats?.thirst_current ??
+    current.thirst.current;
+
+  const thirstMax =
+    deltaVitals?.thirst?.max ??
+    rawDelta?.thirstMax ??
+    rawDelta?.thirst_max ??
+    stats?.thirstMax ??
+    stats?.thirst_max ??
+    current.thirst.max;
+
   return {
     hp: {
       current: toDisplayInt(hpCurrent, 0),
@@ -80,6 +97,10 @@ export function mergeVitals(baseVitals, rawDelta, nextHpCompat) {
     hunger: {
       current: toDisplayInt(hungerCurrent, 0),
       max: toDisplayInt(hungerMax, 0),
+    },
+    thirst: {
+      current: toDisplayInt(thirstCurrent, 0),
+      max: toDisplayInt(thirstMax, 0),
     },
   };
 }

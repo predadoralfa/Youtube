@@ -39,23 +39,33 @@ Estrutura atual:
  MD/
  |-- document.md
  |-- struct.md
+ |-- status-checklist-temporario.md
  |-- CIDs/
  |   |-- guia-registro-documentacao.md
  |   |-- guia-cid-container-actors.md
- |   |-- guia-registro-actors.md
- |   `-- guia-registro-itens.md
- |-- seeds/
- |   |-- guia-registro-actors.md
- |   |-- guia-registro-itens-com-container.md
- |   |-- guia-registro-itens.md
- |   `-- guia-registro-skills-craft.md
- `-- implementacoes/
-     |-- estudo-arquitetural-actors-spawn.md
-     |-- implementacao-ciclo-visual-dia-noite.md
-     |-- implementacao-sistema-de-fome.md
-     |-- mapa-procedural-asset-families.md
-     |-- mapa-procedural-schema.md
-     |-- modulo-mapas-procedurais.md
+  |   |-- guia-registro-actors.md
+  |   `-- guia-registro-itens.md
+  |-- seeds/
+  |   |-- guia-registro-actors.md
+  |   |-- guia-registro-builder.md
+  |   |-- guia-registro-itens-com-container.md
+  |   |-- guia-registro-itens.md
+  |   `-- guia-registro-skills-craft.md
+  `-- implementacoes/
+      |-- estudo-arquitetural-actors-spawn.md
+      |-- implementacao-ciclo-visual-dia-noite.md
+      |-- implementacao-sistema-de-fome.md
+      |-- plano-sistema-de-status.md
+      |-- status-contrato-tecnico.md
+      |-- status-imunidade.md
+      |-- status-doenca.md
+      |-- status-debuffs.md
+      |-- status-sono-xp.md
+      |-- status-economia-medica.md
+      |-- plano-tecnico-builder.md
+      |-- mapa-procedural-asset-families.md
+      |-- mapa-procedural-schema.md
+      |-- modulo-mapas-procedurais.md
      |-- plano-tecnico-mapa-procedural-instancia-3.md
      |-- modulo-skills-craft.md
      |-- modulo-research.md
@@ -86,6 +96,7 @@ Atalhos:
 - actors: [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
 - itens: [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
 - research: [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-research.md)
+- builder: [guia-registro-builder.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-builder.md)
 - skills e craft: [guia-registro-skills-craft.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-skills-craft.md)
 - itens com container: [guia-registro-itens-com-container.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens-com-container.md)
 - documentacao: [guia-registro-documentacao.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-documentacao.md)
@@ -98,9 +109,18 @@ Atalhos:
 - skills e craft: [modulo-skills-craft.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-skills-craft.md)
 - research: [modulo-research.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-research.md)
 - fome: [implementacao-sistema-de-fome.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-sistema-de-fome.md)
+- builder: [plano-tecnico-builder.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-builder.md)
 - ciclo visual: [implementacao-ciclo-visual-dia-noite.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-ciclo-visual-dia-noite.md)
 - regeneracao de recursos: [plano-regeneracao-recursos.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-regeneracao-recursos.md)
 - respawn por instancia: [plano-tecnico-respawn-inimigos-por-instancia.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-respawn-inimigos-por-instancia.md)
+- sistema de status: [plano-sistema-de-status.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-sistema-de-status.md)
+- contrato tecnico: [status-contrato-tecnico.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-contrato-tecnico.md)
+- checklist temporario: [status-checklist-temporario.md](/D:/JS-Projects/Youtube/MD/status-checklist-temporario.md)
+- imunidade: [status-imunidade.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-imunidade.md)
+- doenca: [status-doenca.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-doenca.md)
+- debuffs: [status-debuffs.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-debuffs.md)
+- sono e xp: [status-sono-xp.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-sono-xp.md)
+- economia medica: [status-economia-medica.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-economia-medica.md)
 
 ---
 

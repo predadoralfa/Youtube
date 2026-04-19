@@ -6,6 +6,8 @@ const { registerClickMoveHandler } = require("../handlers/clickMoveHandler");
 const { registerInventoryHandler } = require("../handlers/inventoryHandler");
 const { registerEquipmentHandler } = require("../handlers/equipmentHandler");
 const { registerResearchHandler } = require("../handlers/researchHandler");
+const { registerBuildHandler } = require("../handlers/buildHandler/register");
+const { registerSleepHandler } = require("../handlers/sleepHandler/register");
 
 // ✅ NOVO: aproximação/interação (space hold)
 const { registerInteractHandler } = require("../handlers/interactHandler");
@@ -31,6 +33,12 @@ function registerGameHandlers(io, socket) {
 
   // Research / estudos
   registerResearchHandler(io, socket);
+
+  // Construcoes autoritativas
+  registerBuildHandler(io, socket);
+
+  // Sleep autoritativo via shelter concluído
+  registerSleepHandler(io, socket);
 }
 
 module.exports = {

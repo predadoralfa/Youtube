@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { resolvePrimitiveShelterBuildRequirements } from "@/world/build/requirements";
+
 function clamp01(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
@@ -67,7 +69,68 @@ function resolveCraftJobs(inventorySnapshot, nowMs) {
     });
 }
 
-function JobRow({ label, title, subtitle, remainingText, progressRatio, emptyText }) {
+function resolveActiveBuild(snapshot, inventorySnapshot, equipmentSnapshot, nowMs) {
+  const actors = Array.isArray(snapshot?.actors) ? snapshot.actors : [];
+  const userId = String(snapshot?.runtime?.userId ?? snapshot?.runtime?.user_id ?? "");
+  const active = actors.find((actor) => {
+    const state = actor?.state ?? null;
+    const kind = String(state?.buildKind ?? actor?.actorType ?? actor?.actorDefCode ?? "").toUpperCase();
+    if (kind !== "PRIMITIVE_SHELTER") return false;
+    const ownerId = String(state?.ownerUserId ?? state?.owner_user_id ?? "");
+    if (userId && ownerId && ownerId !== userId) return false;
+    return ["PLANNED", "RUNNING", "PAUSED"].includes(String(state?.constructionState ?? "").toUpperCase());
+  });
+
+  if (!active) return null;
+
+  const state = active.state ?? {};
+  const constructionState = String(state.constructionState ?? "PLANNED").toUpperCase();
+  const durationMs = Math.max(0, Number(state.constructionDurationMs ?? 0));
+  const startedAtMs = Number(state.constructionStartedAtMs ?? 0);
+  const progressMs =
+    constructionState === "RUNNING" && startedAtMs > 0
+      ? Math.min(durationMs, Math.max(0, nowMs - startedAtMs))
+      : Math.max(0, Number(state.constructionProgressMs ?? 0));
+  const progressRatio = durationMs > 0 ? clamp01(progressMs / durationMs) : 0;
+  const buildState = resolvePrimitiveShelterBuildRequirements(state, {
+    inventory: inventorySnapshot,
+    equipment: equipmentSnapshot,
+  });
+
+  return {
+    actorId: String(active.id ?? ""),
+    title: String(state.displayName ?? state.structureName ?? active.displayName ?? "Primitive Shelter"),
+    subtitle:
+      constructionState === "RUNNING"
+        ? "Building"
+        : constructionState === "PAUSED"
+          ? "Paused"
+          : "Planning",
+    remainingText: formatDuration(Math.max(0, durationMs - progressMs)),
+    progressRatio,
+    progressText: `${Math.round(progressRatio * 100)}%`,
+    constructionState,
+    canCancel: ["PLANNED", "RUNNING", "PAUSED"].includes(constructionState),
+    canPause: constructionState === "RUNNING",
+    canResume: constructionState === "PAUSED",
+    buildState,
+  };
+}
+
+function resolveActiveSleep(snapshot) {
+  const sleepLock = snapshot?.runtime?.sleepLock ?? null;
+  if (!sleepLock?.active && !sleepLock?.pending) return null;
+
+  return {
+    title: "Primitive Shelter",
+    subtitle: sleepLock?.pending ? "Approaching shelter" : "Sleeping",
+    remainingText: sleepLock?.pending ? "ESC to cancel" : "ESC to wake",
+    progressRatio: 1,
+    progressText: sleepLock?.pending ? "Approaching" : "Sleeping",
+  };
+}
+
+function JobRow({ label, title, subtitle, remainingText, progressRatio, emptyText, extra = null }) {
   const hasJob = Boolean(title);
 
   return (
@@ -127,11 +190,21 @@ function JobRow({ label, title, subtitle, remainingText, progressRatio, emptyTex
           }}
         />
       </div>
+
+      {extra}
     </div>
   );
 }
 
-export function PlayerStatusPanel({ researchSnapshot, inventorySnapshot }) {
+export function PlayerStatusPanel({
+  snapshot,
+  researchSnapshot,
+  inventorySnapshot,
+  equipmentSnapshot,
+  onCancelBuild = null,
+  onPauseBuild = null,
+  onResumeBuild = null,
+}) {
   const [open, setOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -149,6 +222,11 @@ export function PlayerStatusPanel({ researchSnapshot, inventorySnapshot }) {
     [inventorySnapshot, nowMs]
   );
   const activeCraft = craftJobs[0] ?? null;
+  const activeBuild = useMemo(
+    () => resolveActiveBuild(snapshot, inventorySnapshot, equipmentSnapshot, nowMs),
+    [snapshot, inventorySnapshot, equipmentSnapshot, nowMs]
+  );
+  const activeSleep = useMemo(() => resolveActiveSleep(snapshot), [snapshot]);
 
   return (
     <div
@@ -252,6 +330,99 @@ export function PlayerStatusPanel({ researchSnapshot, inventorySnapshot }) {
                 remainingText={activeCraft?.remainingText}
                 progressRatio={activeCraft?.progressRatio ?? 0}
                 emptyText="No active hand craft"
+              />
+
+              <JobRow
+                label="Builder"
+                title={activeBuild?.title}
+                subtitle={activeBuild?.subtitle}
+                remainingText={activeBuild?.remainingText}
+                progressRatio={activeBuild?.progressRatio ?? 0}
+                emptyText="No active construction"
+                extra={
+                  activeBuild ? (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <div style={{ color: "rgba(226, 232, 240, 0.78)", fontSize: 11 }}>
+                        {activeBuild.progressText}
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {activeBuild.canPause ? (
+                          <button
+                            type="button"
+                            style={{
+                              flex: 1,
+                              borderRadius: 8,
+                              border: "1px solid rgba(59, 130, 246, 0.45)",
+                              background: "rgba(37, 99, 235, 0.22)",
+                              color: "#dbeafe",
+                              padding: "8px 10px",
+                              fontSize: 11,
+                              fontWeight: 800,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => onPauseBuild?.(activeBuild.actorId)}
+                          >
+                            Pause
+                          </button>
+                        ) : null}
+
+                        {activeBuild.canResume ? (
+                          <button
+                            type="button"
+                            style={{
+                              flex: 1,
+                              borderRadius: 8,
+                              border: "1px solid rgba(34, 197, 94, 0.45)",
+                              background: "rgba(22, 163, 74, 0.22)",
+                              color: "#dcfce7",
+                              padding: "8px 10px",
+                              fontSize: 11,
+                              fontWeight: 800,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => onResumeBuild?.(activeBuild.actorId)}
+                          >
+                            Resume
+                          </button>
+                        ) : null}
+
+                        {activeBuild.canCancel ? (
+                          <button
+                            type="button"
+                            style={{
+                              flex: 1,
+                              borderRadius: 8,
+                              border: "1px solid rgba(239, 68, 68, 0.45)",
+                              background: "rgba(127, 29, 29, 0.35)",
+                              color: "#fecaca",
+                              padding: "8px 10px",
+                              fontSize: 11,
+                              fontWeight: 800,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => onCancelBuild?.(activeBuild.actorId)}
+                          >
+                            Cancel
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null
+                }
+              />
+
+              <JobRow
+                label="Sleep"
+                title={activeSleep?.title}
+                subtitle={activeSleep?.subtitle}
+                remainingText={activeSleep?.remainingText}
+                progressRatio={activeSleep?.progressRatio ?? 0}
+                emptyText="No active sleep"
+                extra={activeSleep ? (
+                  <div style={{ color: "rgba(220, 252, 231, 0.8)", fontSize: 11 }}>
+                    {activeSleep.progressText}
+                  </div>
+                ) : null}
               />
             </div>
           </div>

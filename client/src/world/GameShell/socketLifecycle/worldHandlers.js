@@ -25,6 +25,26 @@ export function createWorldHandlers(state, requestInventoryFull, socket, store, 
     });
   };
 
+  const onWorldObjectDespawn = (payload) => {
+    const actorId = String(payload?.actorId ?? payload?.objectId ?? payload?.id ?? "");
+    if (!actorId) return;
+
+    if (store?.removeActor) {
+      store.removeActor(actorId);
+    }
+
+    state.setSnapshot((prev) => {
+      if (!prev) return prev;
+      const actors = Array.isArray(prev.actors) ? prev.actors : [];
+      if (!actors.some((entry) => String(entry.id) === actorId)) return prev;
+
+      return {
+        ...prev,
+        actors: actors.filter((entry) => String(entry.id) !== actorId),
+      };
+    });
+  };
+
   const onSocketReady = (payload) => {
     if (payload?.ok !== true) return;
 
@@ -56,6 +76,7 @@ export function createWorldHandlers(state, requestInventoryFull, socket, store, 
 
   return {
     onWorldObjectSpawn,
+    onWorldObjectDespawn,
     onSocketReady,
     onWorldBaseline,
   };

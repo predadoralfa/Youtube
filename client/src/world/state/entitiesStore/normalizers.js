@@ -49,6 +49,20 @@ export function normalizeVitals(raw) {
     stats?.hungerMax ??
     stats?.hunger_max;
 
+  const thirstCurrent =
+    vitals?.thirst?.current ??
+    raw?.thirstCurrent ??
+    raw?.thirst_current ??
+    stats?.thirstCurrent ??
+    stats?.thirst_current;
+
+  const thirstMax =
+    vitals?.thirst?.max ??
+    raw?.thirstMax ??
+    raw?.thirst_max ??
+    stats?.thirstMax ??
+    stats?.thirst_max;
+
   return {
     hp: {
       current: toDisplayInt(hpCurrent, 0),
@@ -61,6 +75,10 @@ export function normalizeVitals(raw) {
     hunger: {
       current: toDisplayInt(hungerCurrent, 0),
       max: toDisplayInt(hungerMax, 0),
+    },
+    thirst: {
+      current: toDisplayInt(thirstCurrent, 0),
+      max: toDisplayInt(thirstMax, 0),
     },
   };
 }

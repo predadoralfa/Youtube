@@ -23,6 +23,8 @@ const { withInventoryLock } = require("./state/inventory/store");
 
 const db = require("./models");
 const { initWorldClock } = require("./service/worldClockService");
+const { ensureUserStatsModelSchema } = require("./state/runtime/statsSchema");
+const { ensureItemDefModelSchema } = require("./state/runtime/itemSchema");
 
 const authRouter = require("./router/authRouter");
 const worldRouter = require("./router/worldRouter");
@@ -47,6 +49,9 @@ async function bootstrap() {
   try {
     await db.sequelize.authenticate();
     console.log("Conexao com o banco estabelecida!");
+
+    await ensureUserStatsModelSchema();
+    await ensureItemDefModelSchema();
 
     httpServer = createServer(app);
 

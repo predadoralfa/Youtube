@@ -1,5 +1,12 @@
 import { normalizeVitals } from "../../../helpers";
 
+function pickOptional(source, key, fallback) {
+  if (source && Object.prototype.hasOwnProperty.call(source, key)) {
+    return source[key];
+  }
+  return fallback;
+}
+
 export function patchSelfFromBaseline(prev, payload, self) {
   if (!prev || !prev.runtime || !self) return prev;
 
@@ -9,6 +16,8 @@ export function patchSelfFromBaseline(prev, payload, self) {
     runtime: {
       ...prev.runtime,
       yaw: self.yaw ?? prev.runtime.yaw,
+      buildLock: pickOptional(payload?.runtime, "buildLock", pickOptional(payload, "buildLock", prev.runtime.buildLock ?? null)),
+      sleepLock: pickOptional(payload?.runtime, "sleepLock", pickOptional(payload, "sleepLock", prev.runtime.sleepLock ?? null)),
       cameraPitch:
         payload?.runtime?.cameraPitch ??
         payload?.runtime?.camera_pitch ??
@@ -46,6 +55,8 @@ export function patchSelfFromEntityDelta(prev, self) {
     runtime: {
       ...prev.runtime,
       yaw: self.yaw ?? prev.runtime.yaw,
+      buildLock: pickOptional(self, "buildLock", prev.runtime.buildLock ?? null),
+      sleepLock: pickOptional(self, "sleepLock", prev.runtime.sleepLock ?? null),
       pos: {
         x: self.pos?.x ?? prev.runtime.pos?.x ?? 0,
         y: self.pos?.y ?? prev.runtime.pos?.y ?? 0,
@@ -76,6 +87,8 @@ export function patchSelfFromMoveState(prev, payload) {
     runtime: {
       ...prev.runtime,
       yaw: payload?.yaw ?? prev.runtime.yaw,
+      buildLock: pickOptional(payload, "buildLock", prev.runtime.buildLock ?? null),
+      sleepLock: pickOptional(payload, "sleepLock", prev.runtime.sleepLock ?? null),
       cameraPitch:
         payload?.cameraPitch ??
         payload?.camera_pitch ??

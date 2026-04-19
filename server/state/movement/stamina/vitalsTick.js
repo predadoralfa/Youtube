@@ -19,11 +19,73 @@ const {
   readRuntimeStaminaMax,
   readRuntimeHungerCurrent,
   readRuntimeHungerMax,
+  readRuntimeThirstCurrent,
+  readRuntimeThirstMax,
   syncRuntimeHp,
   syncRuntimeStamina,
   syncRuntimeHunger,
+  syncRuntimeThirst,
 } = require("./runtimeVitals");
 const { resolveHungerRegenMultiplier } = require("./hunger");
+const { resolveThirstRegenMultiplier } = require("./thirst");
+
+function resolveCombinedRegenMultiplier(hungerRegenMultiplier, thirstRegenMultiplier) {
+  const hungerPart = Math.max(0, toFiniteNumber(hungerRegenMultiplier, 0));
+  const thirstPart = Math.max(0, toFiniteNumber(thirstRegenMultiplier, 0));
+  return Math.min(2, hungerPart + thirstPart);
+}
+
+function formatNum(value, digits = 4) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(digits) : "n/a";
+}
+
+function formatRatio(current, max) {
+  const safeMax = Math.max(0, toFiniteNumber(max, 0));
+  if (safeMax <= 0) return "n/a";
+  return formatNum(toFiniteNumber(current, 0) / safeMax, 3);
+}
+
+function maybeLogVitalsRegen(rt, payload) {
+  if (!rt) return;
+
+  const signature = [
+    formatNum(payload.hungerRegenMultiplier, 3),
+    formatNum(payload.thirstRegenMultiplier, 3),
+    formatNum(payload.combinedRegenMultiplier, 3),
+  ].join("|");
+
+  if (rt.debugVitalsRegenLastSignature === signature) {
+    return;
+  }
+
+  rt.debugVitalsRegenLastSignature = signature;
+
+  const hungerPart = formatNum(payload.hungerRegenMultiplier, 3);
+  const thirstPart = formatNum(payload.thirstRegenMultiplier, 3);
+  const combinedPart = formatNum(payload.combinedRegenMultiplier, 3);
+  const hpBase = formatNum(HP_BASE_REGEN_PER_SEC, 3);
+  const staminaBase = formatNum(STAMINA_BASE_REGEN_PER_SEC, 3);
+  const dt = formatNum(payload.dt, 3);
+  const hpMultiplier = formatNum(payload.effectiveHpRegenMultiplier, 3);
+  const staminaMultiplier = formatNum(payload.effectiveStaminaRegenMultiplier, 3);
+  const hpEq = `${hpBase} * ${dt} * ${hpMultiplier} = ${formatNum(payload.hpRegen, 4)}`;
+  const staminaEq = `${staminaBase} * ${dt} * ${staminaMultiplier} = ${formatNum(payload.regen, 4)}`;
+
+  console.log(
+    [
+      "[VITALS_REGEN]",
+      `userId=${rt.userId}`,
+      `hunger=${formatNum(payload.hungerCurrent, 3)}/${formatNum(payload.hungerMax, 3)} ratio=${formatRatio(payload.hungerCurrent, payload.hungerMax)} mult=${hungerPart}`,
+      `thirst=${formatNum(payload.thirstCurrent, 3)}/${formatNum(payload.thirstMax, 3)} ratio=${formatRatio(payload.thirstCurrent, payload.thirstMax)} mult=${thirstPart}`,
+      `combined=${combinedPart}`,
+      `hp=${hpEq}`,
+      `stamina=${staminaEq}`,
+      `nextHp=${formatNum(payload.nextHpCurrent, 3)}`,
+      `nextStamina=${formatNum(payload.nextCurrent, 3)}`,
+    ].join(" | ")
+  );
+}
 
 function applyVitalsTick(
   rt,
@@ -52,6 +114,9 @@ function applyVitalsTick(
       hungerCurrent: 0,
       hungerMax: 0,
       hungerRegenMultiplier: 0,
+      thirstCurrent: 0,
+      thirstMax: 0,
+      thirstRegenMultiplier: 0,
       current: 0,
       max: 0,
     };
@@ -69,11 +134,17 @@ function applyVitalsTick(
   const max = Math.max(0, readRuntimeStaminaMax(rt));
   const hungerCurrent = readRuntimeHungerCurrent(rt);
   const hungerMax = Math.max(0, readRuntimeHungerMax(rt));
+  const thirstCurrent = readRuntimeThirstCurrent(rt);
+  const thirstMax = Math.max(0, readRuntimeThirstMax(rt));
   const hungerRegenMultiplier = resolveHungerRegenMultiplier(hungerCurrent, hungerMax);
+  const thirstRegenMultiplier = resolveThirstRegenMultiplier(thirstCurrent, thirstMax);
+  const thirstSupported = Boolean(rt?.thirstSupported);
   const effectiveStaminaRegenMultiplier =
-    toFiniteNumber(regenMultiplier, 1.0) * hungerRegenMultiplier;
+    toFiniteNumber(regenMultiplier, 1.0) *
+    resolveCombinedRegenMultiplier(hungerRegenMultiplier, thirstRegenMultiplier);
   const effectiveHpRegenMultiplier =
-    toFiniteNumber(hpRegenMultiplier, 1.0) * hungerRegenMultiplier;
+    toFiniteNumber(hpRegenMultiplier, 1.0) *
+    resolveCombinedRegenMultiplier(hungerRegenMultiplier, thirstRegenMultiplier);
 
   const hpRegen = HP_BASE_REGEN_PER_SEC * dt * effectiveHpRegenMultiplier;
   const drain = movedReal
@@ -89,10 +160,32 @@ function applyVitalsTick(
   );
   const nextHpCurrent = clamp(hpCurrent + hpRegen, 0, hpMax);
   const nextCurrent = clamp(current + regen - drain, 0, max);
+  const nextThirstCurrent = clamp(thirstCurrent, 0, thirstMax);
   const hpChanged = Math.abs(nextHpCurrent - hpCurrent) > 1e-9;
   const staminaChanged = Math.abs(nextCurrent - current) > 1e-9;
   const hungerChanged = Math.abs(nextHungerCurrent - hungerCurrent) > 1e-9;
-  const changed = hpChanged || staminaChanged || hungerChanged;
+  const thirstChanged = Math.abs(nextThirstCurrent - thirstCurrent) > 1e-9;
+  const changed = hpChanged || staminaChanged || hungerChanged || thirstChanged;
+
+  maybeLogVitalsRegen(rt, {
+    dt,
+    hungerCurrent,
+    hungerMax,
+    thirstCurrent,
+    thirstMax,
+    hungerRegenMultiplier,
+    thirstRegenMultiplier,
+    thirstSupported,
+    combinedRegenMultiplier: resolveCombinedRegenMultiplier(hungerRegenMultiplier, thirstRegenMultiplier),
+    effectiveHpRegenMultiplier,
+    effectiveStaminaRegenMultiplier,
+    hpRegen,
+    regen,
+    hpCurrent,
+    nextHpCurrent,
+    current,
+    nextCurrent,
+  });
 
   if (hpChanged || hpMax !== readRuntimeHpMax(rt)) {
     syncRuntimeHp(rt, nextHpCurrent, hpMax);
@@ -108,11 +201,18 @@ function applyVitalsTick(
     syncRuntimeHunger(rt, hungerCurrent, hungerMax);
   }
 
+  if (thirstChanged || thirstMax !== readRuntimeThirstMax(rt)) {
+    syncRuntimeThirst(rt, nextThirstCurrent, thirstMax);
+  } else if (readRuntimeThirstMax(rt) !== thirstMax) {
+    syncRuntimeThirst(rt, thirstCurrent, thirstMax);
+  }
+
   return {
     changed,
     hpChanged,
     staminaChanged,
     hungerChanged,
+    thirstChanged,
     dt,
     hpRegen,
     drain,
@@ -122,6 +222,10 @@ function applyVitalsTick(
     hungerCurrent: nextHungerCurrent,
     hungerMax,
     hungerRegenMultiplier,
+    thirstCurrent: nextThirstCurrent,
+    thirstMax,
+    thirstRegenMultiplier,
+    thirstSupported,
     current: nextCurrent,
     max,
   };

@@ -97,6 +97,10 @@ function buildBaseline(rt) {
         current: Number(rt.vitals.hunger?.current ?? rt.hungerCurrent ?? 0),
         max: Number(rt.vitals.hunger?.max ?? rt.hungerMax ?? 0),
       },
+      thirst: {
+        current: Number(rt.vitals.thirst?.current ?? rt.thirstCurrent ?? 0),
+        max: Number(rt.vitals.thirst?.max ?? rt.thirstMax ?? 0),
+      },
     } : undefined,
   };
 

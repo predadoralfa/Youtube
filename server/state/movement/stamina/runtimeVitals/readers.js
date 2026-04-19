@@ -79,6 +79,32 @@ function readRuntimeHungerMax(rt) {
   );
 }
 
+function readRuntimeThirstCurrent(rt) {
+  return toFiniteNumber(
+    rt?.thirstCurrent ??
+      rt?.thirst_current ??
+      rt?.vitals?.thirst?.current ??
+      rt?.combat?.thirstCurrent ??
+      rt?.combat?.thirst_current ??
+      rt?.stats?.thirstCurrent ??
+      rt?.stats?.thirst_current,
+    0
+  );
+}
+
+function readRuntimeThirstMax(rt) {
+  return toFiniteNumber(
+    rt?.thirstMax ??
+      rt?.thirst_max ??
+      rt?.vitals?.thirst?.max ??
+      rt?.combat?.thirstMax ??
+      rt?.combat?.thirst_max ??
+      rt?.stats?.thirstMax ??
+      rt?.stats?.thirst_max,
+    0
+  );
+}
+
 module.exports = {
   readRuntimeStaminaCurrent,
   readRuntimeStaminaMax,
@@ -86,4 +112,6 @@ module.exports = {
   readRuntimeHpMax,
   readRuntimeHungerCurrent,
   readRuntimeHungerMax,
+  readRuntimeThirstCurrent,
+  readRuntimeThirstMax,
 };

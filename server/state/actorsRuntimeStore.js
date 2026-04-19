@@ -78,6 +78,16 @@ function updateActorPos(actorId, pos) {
   return true;
 }
 
+function updateActorState(actorId, nextState) {
+  const id = toKey(actorId);
+  const actor = actorsById.get(id);
+  if (!actor) return false;
+
+  actor.state = nextState == null ? null : nextState;
+  actor.rev += 1;
+  return true;
+}
+
 function removeActor(actorId) {
   const id = toKey(actorId);
   const actor = actorsById.get(id);
@@ -126,6 +136,7 @@ function clearInstance(instanceId) {
 module.exports = {
   addActor,
   updateActorPos,
+  updateActorState,
   removeActor,
   getActor,
   getActorContainers,

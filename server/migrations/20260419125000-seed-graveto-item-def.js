@@ -19,6 +19,7 @@ module.exports = {
       const payload = {
         code: "GRAVETO",
         name: "Graveto",
+        asset_key: "Twig.glb",
         category: "MATERIAL",
         stack_max: 100,
         unit_weight: 0.25,

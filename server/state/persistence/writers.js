@@ -1,5 +1,6 @@
 // server/state/persistence/writers.js
 const db = require("../../models");
+const { getUserStatsSupport } = require("../runtime/statsSchema");
 
 const { getRuntime } = require("../runtimeStore");
 const {
@@ -70,6 +71,24 @@ function readRuntimeCombatField(rt, field, fallback = 0) {
           combat.hungerMax ??
           stats.hungerMax ??
           rt?.hungerMax ??
+          fallback,
+        fallback
+      );
+    case "thirstCurrent":
+      return toNum(
+        rt?.vitals?.thirst?.current ??
+          combat.thirstCurrent ??
+          stats.thirstCurrent ??
+          rt?.thirstCurrent ??
+          fallback,
+        fallback
+      );
+    case "thirstMax":
+      return toNum(
+        rt?.vitals?.thirst?.max ??
+          combat.thirstMax ??
+          stats.thirstMax ??
+          rt?.thirstMax ??
           fallback,
         fallback
       );
@@ -153,6 +172,7 @@ async function flushUserStats(userId, now, { force = false } = {}) {
   if (!force && !rt.dirtyStats) return false;
 
   try {
+    const support = await getUserStatsSupport();
     const staminaCurrentRaw = readRuntimeCombatField(rt, "staminaCurrent", 100);
     const staminaMax = readRuntimeCombatField(rt, "staminaMax", 100);
     const staminaBucket = resolveStaminaPersistBucket(staminaCurrentRaw, staminaMax);
@@ -174,6 +194,11 @@ async function flushUserStats(userId, now, { force = false } = {}) {
       attack_range: readRuntimeCombatField(rt, "attackRange", 1.2),
       move_speed: readRuntimeCombatField(rt, "moveSpeed", 5),
     };
+
+    if (support.supportsThirst) {
+      payload.thirst_current = readRuntimeCombatField(rt, "thirstCurrent", 100);
+      payload.thirst_max = readRuntimeCombatField(rt, "thirstMax", 100);
+    }
 
     await db.GaUserStats.update(payload, {
       where: { user_id: rt.userId },

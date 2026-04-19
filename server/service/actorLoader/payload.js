@@ -11,13 +11,19 @@ function buildActorPayload(actorRow) {
     spawn?.state_override_json ?? null,
     actor.state_json ?? null
   );
+  const displayName =
+    mergedState?.displayName ??
+    mergedState?.structureName ??
+    actorDef?.name ??
+    actorDef?.code ??
+    `Actor ${actor.id}`;
 
   return {
     id: Number(actor.id),
     actorType: actorDef?.code ?? null,
     actorDefCode: actorDef?.code ?? null,
     actorKind: actorDef?.actor_kind ?? null,
-    displayName: actorDef?.name ?? actorDef?.code ?? `Actor ${actor.id}`,
+    displayName,
     assetKey: actorDef?.asset_key ?? null,
     instanceId: Number(actor.instance_id),
     spawnId: actor.actor_spawn_id == null ? null : Number(actor.actor_spawn_id),

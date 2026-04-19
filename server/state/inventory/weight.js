@@ -21,6 +21,8 @@ function getContainerEffectiveMaxWeight(container) {
 
   const code = String(container?.def?.code ?? "").trim().toUpperCase();
   if (code === "BASKET") return 2.5;
+  if (code === "BASKET_T2") return 5;
+  if (code === "BASKET_T3") return 5;
 
   return 0;
 }
@@ -83,12 +85,16 @@ function getGrantedContainerFallbackWeight(itemDef, component) {
     .toUpperCase();
 
   if (containerCode === "BASKET") return 2.5;
+  if (containerCode === "BASKET_T2") return 5;
+  if (containerCode === "BASKET_T3") return 5;
   return 0;
 }
 
 function getEquippedGrantedContainerBonus(itemDef, component) {
   const code = String(itemDef?.code ?? "").trim().toUpperCase();
   if (code === "BASKET") return 2.5;
+  if (code === "BASKET_T2") return 5;
+  if (code === "BASKET_T3") return 5;
   return getGrantedContainerFallbackWeight(itemDef, component);
 }
 

@@ -7,6 +7,8 @@ const { INPUT_DIR_ACTIVE_MS } = require("../../config/worldConstants");
  */
 function isWASDActive(rt, nowMs = Date.now()) {
   if (!rt) return false;
+  if (rt.buildLock?.active) return false;
+  if (rt.sleepLock?.active) return false;
 
   const d = rt.inputDir;
   if (!d) return false;

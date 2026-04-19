@@ -17,6 +17,7 @@ export function useGameShellState() {
   const [researchMessage, setResearchMessage] = useState(null);
   const [lootNotifications, setLootNotifications] = useState([]);
   const [worldNotifications, setWorldNotifications] = useState([]);
+  const [buildPlacement, setBuildPlacement] = useState(null);
 
   const socketRef = useRef(null);
   const joinedRef = useRef(false);
@@ -53,6 +54,7 @@ export function useGameShellState() {
       setResearchMessage,
       setLootNotifications,
       setWorldNotifications,
+      setBuildPlacement,
       socketRef,
       joinedRef,
       pendingInvRequestRef,
@@ -74,6 +76,7 @@ export function useGameShellState() {
       researchMessage,
       lootNotifications,
       worldNotifications,
+      buildPlacement,
       selfVitals,
     };
   }
@@ -92,6 +95,7 @@ export function useGameShellState() {
   stateRef.current.researchMessage = researchMessage;
   stateRef.current.lootNotifications = lootNotifications;
   stateRef.current.worldNotifications = worldNotifications;
+  stateRef.current.buildPlacement = buildPlacement;
   stateRef.current.selfVitals = selfVitals;
 
   return stateRef.current;

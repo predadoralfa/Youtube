@@ -188,6 +188,7 @@ module.exports = {
       const craftingSkillDefId = await findIdByCode(queryInterface, transaction, "ga_skill_def", "SKILL_CRAFTING");
       const basketResearchDefId = await findIdByCode(queryInterface, transaction, "ga_research_def", "RESEARCH_BASKET");
       const basketT1ItemDefId = await findIdByCode(queryInterface, transaction, "ga_item_def", "BASKET");
+      const fiberItemDefId = await findIdByCode(queryInterface, transaction, "ga_item_def", "FIBER");
       if (!craftingSkillDefId) {
         throw new Error("Nao foi possivel localizar SKILL_CRAFTING.");
       }
@@ -196,6 +197,9 @@ module.exports = {
       }
       if (!basketT1ItemDefId) {
         throw new Error("Nao foi possivel localizar o item BASKET.");
+      }
+      if (!fiberItemDefId) {
+        throw new Error("Nao foi possivel localizar o item FIBER.");
       }
 
       const basketT2ItemDefId = await upsertByCode(queryInterface, transaction, "ga_item_def", "BASKET_T2", {
@@ -243,13 +247,13 @@ module.exports = {
         name: "Basket Tier 2",
         description: "Weave a reinforced basket that carries more weight.",
         skill_def_id: craftingSkillDefId,
-        required_skill_level: 1,
+        required_skill_level: 2,
         required_research_def_id: basketResearchDefId,
         required_research_level: 2,
         output_item_def_id: basketT2ItemDefId,
         output_qty: 1,
-        craft_time_ms: 30000,
-        stamina_cost_total: 8,
+        craft_time_ms: 1800000,
+        stamina_cost_total: 30,
         xp_reward: 50,
         is_active: true,
       });
@@ -259,9 +263,14 @@ module.exports = {
       }
 
       await upsertRecipeItem(queryInterface, transaction, craftDefId, basketT1ItemDefId, {
-        quantity: 8,
+        quantity: 1,
         role: "INPUT",
         sort_order: 1,
+      });
+      await upsertRecipeItem(queryInterface, transaction, craftDefId, fiberItemDefId, {
+        quantity: 30,
+        role: "INPUT",
+        sort_order: 2,
       });
 
       const basketLevels = [

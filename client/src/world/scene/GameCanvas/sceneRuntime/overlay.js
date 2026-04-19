@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { projectWorldToScreenPx } from "../helpers";
+import { resolvePrimitiveShelterBuildRequirements } from "@/world/build/requirements";
 
 export function updateOverlayState({
   camera,
@@ -8,6 +9,39 @@ export function updateOverlayState({
   entityPositions,
   state,
 }) {
+  const buildPlacement = state.buildPlacementRef?.current ?? null;
+  if (!buildPlacement?.visible) {
+    state.setBuildPlacementMarker((prev) => (prev?.visible ? null : prev));
+  } else {
+    const worldPos = buildPlacement.worldPos ?? null;
+    const x = Number(worldPos?.x ?? NaN);
+    const z = Number(worldPos?.z ?? NaN);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) {
+      state.setBuildPlacementMarker((prev) => (prev?.visible ? null : prev));
+    } else {
+      const screenPos = projectWorldToScreenPx(new THREE.Vector3(x, 0.06, z), camera, domElement);
+      if (!screenPos) {
+        state.setBuildPlacementMarker((prev) => (prev?.visible ? null : prev));
+      } else {
+        state.setBuildPlacementMarker({
+          visible: true,
+          x: screenPos.x,
+          y: screenPos.y,
+          width: 128,
+          height: 64,
+          label: buildPlacement.label ?? "Primitive Shelter",
+        });
+      }
+    }
+  }
+
+  if (buildPlacement?.visible) {
+    state.setTargetPlayerCard(null);
+    state.setTargetLootCard(null);
+    state.setTargetHpBar(null);
+    state.setTargetBuildCard(null);
+  }
+
   const selectedObject = state.selectedObjectRef.current;
   if (!selectedObject) {
     state.setMarker((prev) => (prev.visible ? { ...prev, visible: false } : prev));
@@ -107,6 +141,94 @@ export function updateOverlayState({
       ? state.actorsRef.current.find((actor) => String(actor?.id) === actorId) ?? null
       : null;
     const lootSummary = mesh?.userData?.lootSummary ?? snapshotActor?.lootSummary ?? null;
+    const actorType = String(
+      snapshotActor?.actorType ??
+      snapshotActor?.actorDefCode ??
+      mesh?.userData?.actorType ??
+      ""
+    ).trim().toUpperCase();
+    const actorState = snapshotActor?.state ?? mesh?.userData?.state ?? null;
+    const isBuildActor =
+      actorType === "PRIMITIVE_SHELTER" ||
+      String(actorState?.buildKind ?? "").trim().toUpperCase() === "PRIMITIVE_SHELTER" ||
+      String(actorState?.constructionKind ?? "").trim().toUpperCase() === "PRIMITIVE_SHELTER";
+
+    if (isBuildActor) {
+      const buildState = resolvePrimitiveShelterBuildRequirements(actorState, state.inventorySnapshotRef.current);
+      const worldPos = new THREE.Vector3();
+      mesh?.getWorldPosition?.(worldPos);
+      worldPos.y += 1.05;
+      const screenPos = projectWorldToScreenPx(worldPos, camera, domElement);
+
+      if (!screenPos) {
+        state.setTargetBuildCard(null);
+      } else {
+        const selfUserId = Number(state.runtimeRef.current?.userId ?? state.runtimeRef.current?.user_id ?? 0) || null;
+        const ownerUserId = Number(actorState?.ownerUserId ?? actorState?.owner_user_id ?? actorState?.ownerId ?? 0) || null;
+        const ownerName =
+          String(actorState?.ownerName ?? actorState?.owner_name ?? snapshotActor?.displayName ?? "Unknown").trim() || "Unknown";
+        const isOwner = selfUserId != null && ownerUserId != null && Number(selfUserId) === Number(ownerUserId);
+        const canCancel = isOwner && buildState.canCancel;
+        const canBuild = isOwner && buildState.canBuild;
+        const canSleep = isOwner && buildState.isCompleted;
+
+        state.setTargetBuildCard({
+          id: actorId,
+          x: screenPos.x,
+          y: screenPos.y,
+          displayName:
+            String(actorState?.displayName ?? actorState?.structureName ?? snapshotActor?.displayName ?? "Primitive Shelter").trim() ||
+            "Primitive Shelter",
+          ownerName,
+          stateLabel: buildState.constructionStateLabel,
+          canCancel,
+          canBuild,
+          canSleep,
+          buildState,
+          buildDurationLabel: buildState.progressLabel,
+          xpReward: buildState.xpReward,
+          onCancel: canCancel
+            ? () => {
+                state.clearBuildPlacement?.();
+                state.setTargetBuildCard(null);
+                const cancelBuild = state.cancelBuild ?? null;
+                if (typeof cancelBuild !== "function") return;
+
+                window.setTimeout(() => {
+                  cancelBuild(actorId);
+                }, 0);
+              }
+            : null,
+          onSleep: canSleep
+            ? () => {
+                const startSleep = state.startSleep ?? null;
+                state.clearTargetBuildCard?.();
+                if (typeof startSleep !== "function") return;
+                window.setTimeout(() => {
+                  startSleep(actorId);
+                }, 0);
+              }
+            : null,
+          onBuild: canBuild
+            ? () => {
+              const startBuild = state.startBuild ?? null;
+              state.selectedTargetRef.current = null;
+              state.setTargetBuildCard(null);
+              if (typeof startBuild !== "function") return;
+              window.setTimeout(() => {
+                startBuild(actorId);
+              }, 0);
+            }
+            : null,
+        });
+      }
+
+      state.setTargetPlayerCard(null);
+      state.setTargetLootCard(null);
+      return state.setTargetHpBar(null);
+    }
+
+    state.setTargetBuildCard(null);
 
     if (!mesh || !lootSummary || !Array.isArray(lootSummary.items) || lootSummary.items.length === 0) {
       state.setTargetLootCard(null);
@@ -135,10 +257,12 @@ export function updateOverlayState({
       });
     }
 
+    state.setTargetBuildCard(null);
     return state.setTargetHpBar(null);
   }
 
   state.setTargetHpBar(null);
   state.setTargetPlayerCard(null);
   state.setTargetLootCard(null);
+  state.setTargetBuildCard(null);
 }

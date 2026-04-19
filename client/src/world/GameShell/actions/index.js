@@ -2,12 +2,16 @@ import { useMemo } from "react";
 import { useGameShellRequestActions } from "./requests";
 import { useGameShellInventoryActions } from "./inventory";
 import { useGameShellTargetingActions } from "./targeting";
+import { useGameShellBuildActions } from "./build";
+import { useGameShellSleepActions } from "./sleep";
 import { useGameShellIntentAction } from "./intent";
 
 export function useGameShellActions(state) {
   const requestActions = useGameShellRequestActions(state);
   const inventoryActions = useGameShellInventoryActions(requestActions);
   const targetingActions = useGameShellTargetingActions(state);
+  const buildActions = useGameShellBuildActions(state);
+  const sleepActions = useGameShellSleepActions(state);
   const handleInputIntent = useGameShellIntentAction(state, {
     requestInventoryFull: requestActions.requestInventoryFull,
     requestResearchFull: requestActions.requestResearchFull,
@@ -17,6 +21,12 @@ export function useGameShellActions(state) {
     closeSkills: targetingActions.closeSkills,
     emitInteractStart: targetingActions.emitInteractStart,
     emitInteractStop: targetingActions.emitInteractStop,
+    clearBuildPlacement: buildActions.clearBuildPlacement,
+    emitBuildPlace: buildActions.emitBuildPlace,
+    emitBuildCancel: buildActions.emitBuildCancel,
+    emitBuildPause: buildActions.emitBuildPause,
+    emitBuildResume: buildActions.emitBuildResume,
+    emitSleepStop: sleepActions.emitSleepStop,
   });
 
   return useMemo(
@@ -24,6 +34,8 @@ export function useGameShellActions(state) {
       ...requestActions,
       ...inventoryActions,
       ...targetingActions,
+      ...buildActions,
+      ...sleepActions,
       handleInputIntent,
     }),
     [
@@ -50,6 +62,14 @@ export function useGameShellActions(state) {
       targetingActions.closeSkills,
       targetingActions.onTargetSelect,
       targetingActions.onTargetClear,
+      buildActions.clearBuildPlacement,
+      buildActions.emitBuildPlace,
+      buildActions.emitBuildCancel,
+      buildActions.emitBuildPause,
+      buildActions.emitBuildResume,
+      buildActions.beginBuildPlacement,
+      sleepActions.emitSleepStart,
+      sleepActions.emitSleepStop,
       handleInputIntent,
     ]
   );

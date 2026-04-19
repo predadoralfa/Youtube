@@ -5,6 +5,10 @@ export function syncActorMeshes({ actors, scene, state, clearSelection, sampleGr
   const nextActorIds = new Set();
 
   for (const actor of actors) {
+    if (String(actor?.status ?? "ACTIVE").toUpperCase() !== "ACTIVE") {
+      continue;
+    }
+
     const actorId = String(actor.id);
     nextActorIds.add(actorId);
 
@@ -28,7 +32,11 @@ export function syncActorMeshes({ actors, scene, state, clearSelection, sampleGr
     const { x, y, z, yaw } = readPosYawFromEntity(actor);
     const groundY = Number(typeof sampleGroundHeight === "function" ? sampleGroundHeight(x, z) : 0);
     const actorType = String(actor?.actorType ?? actor?.actor_type ?? "").trim().toUpperCase();
-    const isTreeActor = actorType === "TREE" || actorType === "TREE_APPLE" || actorType === "APPLE_TREE";
+    const isTreeActor =
+      actorType === "TREE" ||
+      actorType === "TREE_APPLE" ||
+      actorType === "APPLE_TREE" ||
+      actorType === "PRIMITIVE_SHELTER";
     const actorOffsetY = isTreeActor ? 0 : Number(y ?? 0);
     mesh.position.set(x, groundY + actorOffsetY, z);
     mesh.rotation.y = yaw ?? 0;

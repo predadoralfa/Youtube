@@ -165,6 +165,7 @@ function buildResearchRuntime(defs, userRows) {
             id: Number(def.itemDef.id),
             code: def.itemDef.code,
             name: def.itemDef.name,
+            assetKey: def.itemDef.assetKey ?? def.itemDef.asset_key ?? null,
             category: def.itemDef.category,
           }
         : null,

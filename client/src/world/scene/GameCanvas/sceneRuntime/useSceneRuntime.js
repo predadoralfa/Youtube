@@ -45,7 +45,7 @@ export function useSceneRuntime({ snapshot, worldStoreRef, onInputIntent, onTarg
       onTargetClear,
     });
 
-    const input = setupSceneInput(runtime.renderer, runtime.cameraApi, tools, onInputIntent);
+    const input = setupSceneInput(runtime.renderer, runtime.cameraApi, tools, onInputIntent, state);
     const stopTick = startSceneTick({
       runtime,
       tools,

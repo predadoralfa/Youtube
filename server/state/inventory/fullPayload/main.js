@@ -42,6 +42,7 @@ function buildItemDefPayload(def) {
     id: String(def.id),
     code: def.code,
     name: def.name,
+    assetKey: def.assetKey ?? def.asset_key ?? null,
     category: def.category ?? null,
     weight: def.weight ?? def.unit_weight ?? null,
     stackMax: def.stackMax ?? def.stack_max ?? 1,
@@ -88,8 +89,15 @@ function getCraftTimeReductionMs(craftingSkillLevel) {
   return Math.max(0, level - 1) * 30000;
 }
 
-function getCraftTimeForSkill(baseCraftTimeMs, craftingSkillLevel) {
+function shouldIgnoreCraftTimeReduction(craftDef) {
+  return String(craftDef?.code ?? "").toUpperCase() === "CRAFT_BASKET_T2";
+}
+
+function getCraftTimeForSkill(craftDef, baseCraftTimeMs, craftingSkillLevel) {
   const base = Math.max(0, readNumber(baseCraftTimeMs, 0));
+  if (shouldIgnoreCraftTimeReduction(craftDef)) {
+    return base;
+  }
   const reduced = base - getCraftTimeReductionMs(craftingSkillLevel);
   return Math.max(1000, reduced);
 }
@@ -97,7 +105,7 @@ function getCraftTimeForSkill(baseCraftTimeMs, craftingSkillLevel) {
 function buildCraftPayload(craftDef, craftingSkillLevel) {
   const recipeItems = Array.isArray(craftDef?.recipeItems) ? craftDef.recipeItems : [];
   const baseCraftTimeMs = readNumber(readModelValue(craftDef, "craftTimeMs", "craft_time_ms"), 0);
-  const effectiveCraftTimeMs = getCraftTimeForSkill(baseCraftTimeMs, craftingSkillLevel);
+  const effectiveCraftTimeMs = getCraftTimeForSkill(craftDef, baseCraftTimeMs, craftingSkillLevel);
 
   return {
     id: String(craftDef.id),

@@ -476,6 +476,18 @@
   width: 100% !important;
   height: 100% !important;
   display: block;
+  animation: invItemIconPop 180ms ease-out;
+}
+
+@keyframes invItemIconPop {
+  from {
+    opacity: 0.85;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .inv-item-icon-fallback {
@@ -910,6 +922,22 @@
   line-height: 1;
   padding: 4px 6px;
   white-space: nowrap;
+}
+
+.craft-meta span.is-ready {
+  border-color: rgba(74, 222, 128, 0.28);
+  background: rgba(74, 222, 128, 0.12);
+  color: rgba(214, 255, 228, 0.95);
+}
+
+.craft-meta span.is-missing {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.12);
+  color: rgba(255, 206, 206, 0.96);
+}
+
+.craft-meta span.craft-meta-note {
+  opacity: 0.85;
 }
 
 .craft-action {

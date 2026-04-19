@@ -1,7 +1,8 @@
 // server/state/runtime/combatLoader.js
 const db = require("../../models");
 const { getTimeFactor } = require("../../service/worldClockService");
-const { resolveHungerDrainPerSecond } = require("../movement/stamina");
+const { resolveHungerDrainPerSecond, resolveThirstDrainPerSecond } = require("../movement/stamina");
+const { getUserStatsSupport } = require("./statsSchema");
 
 function readStrictNumber(value, fieldName, userId) {
   const n = Number(value);
@@ -19,6 +20,7 @@ function readStrictNumber(value, fieldName, userId) {
  * e combate em trilho separado.
  */
 async function loadPlayerCombatStats(userId) {
+  const support = await getUserStatsSupport();
   const stats = await db.GaUserStats.findOne({
     where: { user_id: userId },
     attributes: [
@@ -29,6 +31,7 @@ async function loadPlayerCombatStats(userId) {
       "stamina_max",
       "hunger_current",
       "hunger_max",
+      ...(support.supportsThirst ? ["thirst_current", "thirst_max"] : []),
       "attack_power",
       "defense",
       "attack_speed",
@@ -47,6 +50,10 @@ async function loadPlayerCombatStats(userId) {
   const staminaCurrent = readStrictNumber(stats.stamina_current, "stamina_current", userId);
   const hungerMax = readStrictNumber(stats.hunger_max, "hunger_max", userId);
   const persistedHungerCurrent = readStrictNumber(stats.hunger_current, "hunger_current", userId);
+  const thirstMax = support.supportsThirst ? Number(stats.thirst_max ?? 100) || 100 : 100;
+  const persistedThirstCurrent = support.supportsThirst
+    ? Number(stats.thirst_current ?? thirstMax) || thirstMax
+    : thirstMax;
   const attackPower = readStrictNumber(stats.attack_power, "attack_power", userId);
   const defense = readStrictNumber(stats.defense, "defense", userId);
   const attackSpeed = readStrictNumber(stats.attack_speed, "attack_speed", userId);
@@ -57,6 +64,11 @@ async function loadPlayerCombatStats(userId) {
   const offlineHungerDrain = resolveHungerDrainPerSecond(hungerMax, timeFactor) * elapsedSeconds;
   const hungerCurrent = Math.max(0, Math.min(hungerMax, persistedHungerCurrent - offlineHungerDrain));
   const hungerWasAdjusted = Math.abs(hungerCurrent - persistedHungerCurrent) > 1e-9;
+  const offlineThirstDrain = support.supportsThirst
+    ? resolveThirstDrainPerSecond(thirstMax, timeFactor) * elapsedSeconds
+    : 0;
+  const thirstCurrent = Math.max(0, Math.min(thirstMax, persistedThirstCurrent - offlineThirstDrain));
+  const thirstWasAdjusted = support.supportsThirst && Math.abs(thirstCurrent - persistedThirstCurrent) > 1e-9;
 
   return {
     hpMax,
@@ -66,6 +78,10 @@ async function loadPlayerCombatStats(userId) {
     hungerMax,
     hungerCurrent,
     hungerWasAdjusted,
+    thirstSupported: support.supportsThirst,
+    thirstMax,
+    thirstCurrent,
+    thirstWasAdjusted,
     attackPower,
     defense,
     attackSpeed,

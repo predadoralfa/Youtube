@@ -18,6 +18,9 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
   const staminaMax = combatStats?.staminaMax;
   const hungerCurrent = combatStats?.hungerCurrent;
   const hungerMax = combatStats?.hungerMax;
+  const thirstCurrent = combatStats?.thirstCurrent;
+  const thirstMax = combatStats?.thirstMax;
+  const thirstSupported = Boolean(combatStats?.thirstSupported);
   const attackPower = combatStats?.attackPower;
   const defense = combatStats?.defense;
   const attackSpeed = combatStats?.attackSpeed;
@@ -30,6 +33,9 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
     staminaMax,
     hungerCurrent,
     hungerMax,
+    thirstCurrent,
+    thirstMax,
+    thirstSupported,
     attackPower,
     defense,
     attackSpeed,
@@ -47,6 +53,9 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
   runtime.staminaMax = staminaMax;
   runtime.hungerCurrent = hungerCurrent;
   runtime.hungerMax = hungerMax;
+  runtime.thirstCurrent = thirstCurrent;
+  runtime.thirstMax = thirstMax;
+  runtime.thirstSupported = thirstSupported;
   runtime.attackPower = attackPower;
   runtime.defense = defense;
   runtime.attackSpeed = attackSpeed;
@@ -60,6 +69,9 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
     staminaMax,
     hungerCurrent,
     hungerMax,
+    thirstCurrent,
+    thirstMax,
+    thirstSupported,
     attackPower,
     defense,
     attackSpeed,
@@ -79,6 +91,10 @@ function applyCombatStatsToRuntime(runtime, combatStats) {
     hunger: {
       current: hungerCurrent,
       max: hungerMax,
+    },
+    thirst: {
+      current: thirstCurrent,
+      max: thirstMax,
     },
   };
 

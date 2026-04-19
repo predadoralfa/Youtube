@@ -9,6 +9,9 @@ export function normalizeVitals(raw) {
   const hungerCurrent =
     raw?.vitals?.hunger?.current ?? raw?.hungerCurrent ?? raw?.hunger_current ?? 0;
   const hungerMax = raw?.vitals?.hunger?.max ?? raw?.hungerMax ?? raw?.hunger_max ?? 0;
+  const thirstCurrent =
+    raw?.vitals?.thirst?.current ?? raw?.thirstCurrent ?? raw?.thirst_current ?? 0;
+  const thirstMax = raw?.vitals?.thirst?.max ?? raw?.thirstMax ?? raw?.thirst_max ?? 0;
 
   return {
     hp: {
@@ -23,6 +26,10 @@ export function normalizeVitals(raw) {
       current: toDisplayInt(hungerCurrent, 0),
       max: toDisplayInt(hungerMax, 0),
     },
+    thirst: {
+      current: toDisplayInt(thirstCurrent, 0),
+      max: toDisplayInt(thirstMax, 0),
+    },
   };
 }
 
@@ -35,5 +42,6 @@ export function pickBestSelfVitals(snapshot, selfEntity) {
     hp: { current: 0, max: 0 },
     stamina: { current: 0, max: 0 },
     hunger: { current: 0, max: 0 },
+    thirst: { current: 0, max: 0 },
   };
 }

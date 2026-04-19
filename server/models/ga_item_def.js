@@ -20,6 +20,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
 
+      asset_key: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+
       category: {
         type: DataTypes.ENUM("CONSUMABLE", "FOOD", "EQUIP", "AMMO", "MATERIAL", "QUEST", "CONTAINER", "MISC"),
         allowNull: false,

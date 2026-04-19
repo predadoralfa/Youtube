@@ -19,6 +19,8 @@ const DEFAULT_HUNGER_ITEM_RECOVERY = 0;
 const HUNGER_TICK_INTERVAL_MS = 60 * 1000;
 // Uma barra cheia de fome dura 8 horas do mundo, para forçar 3 refeições por dia.
 const HUNGER_WORLD_HOURS_TO_EMPTY = 8;
+const THIRST_TICK_INTERVAL_MS = 60 * 1000;
+const THIRST_WORLD_HOURS_TO_EMPTY = 4;
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -45,6 +47,8 @@ module.exports = {
   DEFAULT_HUNGER_ITEM_RECOVERY,
   HUNGER_TICK_INTERVAL_MS,
   HUNGER_WORLD_HOURS_TO_EMPTY,
+  THIRST_TICK_INTERVAL_MS,
+  THIRST_WORLD_HOURS_TO_EMPTY,
   clamp,
   toFiniteNumber,
 };

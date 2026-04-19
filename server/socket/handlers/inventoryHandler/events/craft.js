@@ -43,6 +43,16 @@ function assertCraftUnlocked(craftDef, research) {
   }
 }
 
+function assertCraftSkillLevel(craftDef, invRt) {
+  const requiredSkillLevel = Math.max(1, toNumber(craftDef.required_skill_level ?? craftDef.requiredSkillLevel, 1));
+  const craftingSkillLevel = Math.max(1, toNumber(invRt?.skills?.SKILL_CRAFTING?.currentLevel, 1));
+  if (craftingSkillLevel < requiredSkillLevel) {
+    const err = new Error(`Crafting level ${requiredSkillLevel} required.`);
+    err.code = "CRAFT_SKILL_LOCKED";
+    throw err;
+  }
+}
+
 function findCraftDef(invRt, craftCode) {
   const code = String(craftCode ?? "").trim().toUpperCase();
   const craftDefs = Array.isArray(invRt?.craftDefs) ? invRt.craftDefs : [];
@@ -112,8 +122,15 @@ function getCraftTimeReductionMs(craftingSkillLevel) {
   return Math.max(0, level - 1) * 30000;
 }
 
-function getCraftTimeForSkill(baseCraftTimeMs, craftingSkillLevel) {
+function shouldIgnoreCraftTimeReduction(craftDef) {
+  return String(craftDef?.code ?? "").toUpperCase() === "CRAFT_BASKET_T2";
+}
+
+function getCraftTimeForSkill(craftDef, baseCraftTimeMs, craftingSkillLevel) {
   const base = Math.max(0, toNumber(baseCraftTimeMs, 0));
+  if (shouldIgnoreCraftTimeReduction(craftDef)) {
+    return base;
+  }
   const reduced = base - getCraftTimeReductionMs(craftingSkillLevel);
   return Math.max(1000, reduced);
 }
@@ -170,7 +187,10 @@ async function startCraftJob(invRt, craftDef, tx) {
 
   const craftingSkillLevel = Math.max(1, toNumber(invRt?.skills?.SKILL_CRAFTING?.currentLevel, 1));
   const baseCraftTimeMs = toNumber(craftDef.craft_time_ms ?? craftDef.craftTimeMs, 0);
-  const craftTimeMs = getCraftTimeForSkill(baseCraftTimeMs, craftingSkillLevel);
+  const craftTimeMs = getCraftTimeForSkill(craftDef, baseCraftTimeMs, craftingSkillLevel);
+  const staminaCostTotal = Math.max(0, toNumber(craftDef.stamina_cost_total ?? craftDef.staminaCostTotal, 0));
+  // A stamina entra como custo do job na largada; o cooldown do craft
+  // é o que segura a entrega do item até completar os 30 minutos.
 
   for (const group of ingredientGroups) {
     for (const match of group.slots) {
@@ -344,6 +364,7 @@ function registerCraftEvent(socket) {
         }
 
         assertCraftUnlocked(craftDef, research);
+        assertCraftSkillLevel(craftDef, invRt);
 
         await db.sequelize.transaction(async (tx) => {
           await startCraftJob(invRt, craftDef, tx);

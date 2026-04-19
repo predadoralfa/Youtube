@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRef } from "react";
 import { InventoryItemIcon } from "@/components/models/inventory/InventoryItemIcon";
 import { formatDuration } from "../helpers/study";
 import {
@@ -121,83 +121,6 @@ export function ResearchBoard({
   onMouseDown,
 }) {
   const nodeRefs = useRef(new Map());
-  const [connectors, setConnectors] = useState([]);
-
-  const treeEdges = useMemo(() => {
-    const edges = [];
-    const visit = (node) => {
-      const parentKey = getTreeNodeKey(node);
-      const children = Array.isArray(node?.treeChildren) ? node.treeChildren : [];
-      for (const child of children) {
-        const childKey = getTreeNodeKey(child);
-        edges.push({ from: parentKey, to: childKey });
-        visit(child);
-      }
-    };
-    for (const node of Array.isArray(nodes) ? nodes : []) {
-      visit(node);
-    }
-    return edges;
-  }, [nodes]);
-
-  useLayoutEffect(() => {
-    let frame = 0;
-    const measure = () => {
-      const laneEl = laneRef?.current;
-      if (!laneEl) {
-        setConnectors([]);
-        return;
-      }
-
-      const laneRect = laneEl.getBoundingClientRect();
-      const nextConnectors = [];
-
-      for (const edge of treeEdges) {
-        const fromEl = nodeRefs.current.get(edge.from);
-        const toEl = nodeRefs.current.get(edge.to);
-        if (!fromEl || !toEl) continue;
-
-        const fromRect = fromEl.getBoundingClientRect();
-        const toRect = toEl.getBoundingClientRect();
-
-        const scale = zoom || 1;
-        const startX = (fromRect.right - laneRect.left) / scale;
-        const startY = (fromRect.top + fromRect.height * 0.5 - laneRect.top) / scale;
-        const endX = (toRect.left - laneRect.left) / scale;
-        const endY = (toRect.top + toRect.height * 0.5 - laneRect.top) / scale;
-        const bend = Math.max(84, Math.abs(endX - startX) * 0.55);
-        const controlX1 = startX + bend;
-        const controlX2 = Math.max(startX + bend * 0.35, endX - bend * 0.35);
-        const d = `M ${startX.toFixed(2)} ${startY.toFixed(2)} C ${controlX1.toFixed(2)} ${startY.toFixed(2)} ${controlX2.toFixed(2)} ${endY.toFixed(2)} ${endX.toFixed(2)} ${endY.toFixed(2)}`;
-
-        nextConnectors.push({
-          d,
-          key: `${edge.from}->${edge.to}`,
-        });
-      }
-
-      setConnectors(nextConnectors);
-    };
-
-    frame = window.requestAnimationFrame(() => {
-      frame = window.requestAnimationFrame(measure);
-    });
-
-    const laneEl = laneRef?.current;
-    const resizeObserver = laneEl ? new ResizeObserver(() => measure()) : null;
-    if (resizeObserver && laneEl) {
-      resizeObserver.observe(laneEl);
-    }
-
-    return () => {
-      if (frame) {
-        window.cancelAnimationFrame(frame);
-      }
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      }
-    };
-  }, [laneRef, treeEdges, zoom, contentSize.width, contentSize.height]);
 
   const registerNodeRef = (key) => (el) => {
     if (el) {
@@ -228,38 +151,6 @@ export function ResearchBoard({
           className="research-lane research-lane--tree"
           style={{ transform: `scale(${zoom})`, transformOrigin: "top left" }}
         >
-          <svg
-            className="research-graph-lines"
-            width={contentSize.width}
-            height={contentSize.height}
-            viewBox={`0 0 ${contentSize.width} ${contentSize.height}`}
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <defs>
-              <filter id="researchRoadGlow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="2.3" result="blur" />
-                <feColorMatrix
-                  in="blur"
-                  type="matrix"
-                  values="
-                    1 0 0 0 0.3
-                    0 1 0 0 0.2
-                    0 0 1 0 0
-                    0 0 0 0.55 0"
-                />
-              </filter>
-            </defs>
-            <g className="research-graph-lines-group">
-              {connectors.map((connector) => (
-                <g key={connector.key} className="research-graph-line">
-                  <path d={connector.d} className="research-graph-line-glow" />
-                  <path d={connector.d} className="research-graph-line-main" />
-                  <path d={connector.d} className="research-graph-line-core" />
-                </g>
-              ))}
-            </g>
-          </svg>
           {nodes.map((node, index) => (
             <ResearchTreeNode
               key={node.code ?? node.researchDefId ?? index}

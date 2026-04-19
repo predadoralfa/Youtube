@@ -7,11 +7,14 @@ const {
   readRuntimeHpMax,
   readRuntimeHungerCurrent,
   readRuntimeHungerMax,
+  readRuntimeThirstCurrent,
+  readRuntimeThirstMax,
 } = require("./runtimeVitals/readers");
 const {
   syncRuntimeHp,
   syncRuntimeStamina,
   syncRuntimeHunger,
+  syncRuntimeThirst,
 } = require("./runtimeVitals/syncers");
 
 module.exports = {
@@ -21,7 +24,10 @@ module.exports = {
   readRuntimeHpMax,
   readRuntimeHungerCurrent,
   readRuntimeHungerMax,
+  readRuntimeThirstCurrent,
+  readRuntimeThirstMax,
   syncRuntimeHp,
   syncRuntimeStamina,
   syncRuntimeHunger,
+  syncRuntimeThirst,
 };

@@ -1,6 +1,75 @@
 "use strict";
 
 const db = require("../../../models");
+const { getRuntime } = require("../../runtime/store");
+const { markStatsDirty } = require("../../runtime/dirty");
+const {
+  readRuntimeStaminaCurrent,
+  readRuntimeStaminaMax,
+  syncRuntimeStamina,
+} = require("../../movement/stamina");
+
+function getModelValue(row, key) {
+  return row?.[key] ?? row?.get?.(key) ?? null;
+}
+
+function setModelValue(row, key, value) {
+  if (!row) return;
+  if (typeof row.setDataValue === "function") {
+    row.setDataValue(key, value);
+    row[key] = value;
+    return;
+  }
+  row[key] = value;
+}
+
+async function loadItemDefByCode(code) {
+  if (!code) return null;
+  return db.GaItemDef.findOne({
+    where: { code },
+    include: [
+      {
+        model: db.GaItemDefComponent,
+        as: "components",
+        required: false,
+      },
+    ],
+  });
+}
+
+async function normalizeBasketTier2CraftDef(craftDef) {
+  const code = String(getModelValue(craftDef, "code") ?? "").toUpperCase();
+  if (code !== "CRAFT_BASKET_T2") return craftDef;
+
+  setModelValue(craftDef, "required_skill_level", 2);
+  setModelValue(craftDef, "craft_time_ms", 1800000);
+  setModelValue(craftDef, "stamina_cost_total", 30);
+
+  const basketItemDef = await loadItemDefByCode("BASKET");
+  const fiberItemDef = await loadItemDefByCode("FIBER");
+  if (basketItemDef && fiberItemDef) {
+    setModelValue(craftDef, "recipeItems", [
+      {
+        id: "runtime:craft_basket_t2:basket",
+        item_def_id: Number(basketItemDef.id),
+        quantity: 1,
+        role: "INPUT",
+        sort_order: 1,
+        itemDef: basketItemDef,
+      },
+      {
+        id: "runtime:craft_basket_t2:fiber",
+        item_def_id: Number(fiberItemDef.id),
+        quantity: 30,
+        role: "INPUT",
+        sort_order: 2,
+        itemDef: fiberItemDef,
+      },
+    ]);
+  }
+
+  return craftDef;
+}
 
 async function loadOwnersForPlayer(userId) {
   const GaContainerOwner = db.GaContainerOwner;
@@ -82,7 +151,7 @@ async function loadItemDefComponents(itemDefIds) {
 async function loadActiveCraftDefs() {
   const GaCraftDef = db.GaCraftDef;
 
-  return GaCraftDef.findAll({
+  const craftDefs = await GaCraftDef.findAll({
     where: { is_active: true },
     include: [
       {
@@ -133,6 +202,12 @@ async function loadActiveCraftDefs() {
       [{ model: db.GaCraftRecipeItem, as: "recipeItems" }, "id", "ASC"],
     ],
   });
+
+  for (const craftDef of craftDefs) {
+    await normalizeBasketTier2CraftDef(craftDef);
+  }
+
+  return craftDefs;
 }
 
 async function loadActiveCraftJobs(userId) {
@@ -169,6 +244,11 @@ async function loadActiveCraftJobs(userId) {
       ["created_at", "ASC"],
       ["id", "ASC"],
     ],
+  }).then(async (jobs) => {
+    for (const job of jobs) {
+      await normalizeBasketTier2CraftDef(job?.craftDef ?? null);
+    }
+    return jobs;
   });
 }
 
@@ -189,16 +269,54 @@ async function completeDueCraftJobs(userId) {
   });
   const nowMs = Date.now();
   const now = new Date();
+  const runtime = getRuntime(userId);
 
   for (const job of jobs) {
+    await normalizeBasketTier2CraftDef(job?.craftDef ?? null);
+
     const startedAtMs = Number(job.started_at_ms ?? 0);
     const craftTimeMs = Number(job.craft_time_ms ?? job.craftDef?.craft_time_ms ?? job.craftDef?.craftTimeMs ?? 0);
     if (!Number.isFinite(startedAtMs) || !Number.isFinite(craftTimeMs) || craftTimeMs <= 0) continue;
-    if (nowMs - startedAtMs < craftTimeMs) continue;
+    const elapsedMs = Math.max(0, nowMs - startedAtMs);
+    const nextProgressMs = Math.min(craftTimeMs, elapsedMs);
+    const totalStaminaCost = Math.max(0, Number(job.craftDef?.stamina_cost_total ?? job.craftDef?.staminaCostTotal ?? 0));
+    const currentSpent = Math.max(0, Number(job.stamina_spent ?? 0));
+    const targetSpent = craftTimeMs > 0 ? Math.min(totalStaminaCost, (totalStaminaCost * nextProgressMs) / craftTimeMs) : totalStaminaCost;
+    const nextSpent = Math.max(currentSpent, targetSpent);
+    const staminaDebit = Math.max(0, Math.floor(nextSpent) - Math.floor(currentSpent));
+
+    if (staminaDebit > 0) {
+      if (runtime) {
+        const staminaBefore = readRuntimeStaminaCurrent(runtime);
+        const staminaMax = readRuntimeStaminaMax(runtime);
+        const staminaAfter = Math.max(0, staminaBefore - staminaDebit);
+        syncRuntimeStamina(runtime, staminaAfter, staminaMax);
+        markStatsDirty(userId);
+      } else {
+        const stats = await db.GaUserStats.findByPk(userId);
+        if (stats) {
+          const staminaBefore = Number(stats.stamina_current ?? 0);
+          const staminaAfter = Math.max(0, staminaBefore - staminaDebit);
+          await stats.update({ stamina_current: staminaAfter });
+        }
+      }
+    }
+
+    if (nextProgressMs < craftTimeMs) {
+      if (nextProgressMs !== Number(job.current_progress_ms ?? 0) || nextSpent !== currentSpent) {
+        await job.update({
+          current_progress_ms: Math.floor(nextProgressMs),
+          stamina_spent: nextSpent,
+          updated_at: now,
+        });
+      }
+      continue;
+    }
 
     await job.update({
       status: "COMPLETED",
       current_progress_ms: Math.floor(craftTimeMs),
+      stamina_spent: totalStaminaCost,
       completed_at_ms: startedAtMs + craftTimeMs,
       updated_at: now,
     });

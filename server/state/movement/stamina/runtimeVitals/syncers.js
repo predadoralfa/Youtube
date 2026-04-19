@@ -66,8 +66,30 @@ function syncRuntimeHunger(rt, current, max) {
   rt.stats.hungerMax = nextMax;
 }
 
+function syncRuntimeThirst(rt, current, max) {
+  const nextCurrent = toFiniteNumber(current, 0);
+  const nextMax = toFiniteNumber(max, 0);
+
+  rt.thirstCurrent = nextCurrent;
+  rt.thirstMax = nextMax;
+
+  if (!rt.vitals) rt.vitals = {};
+  if (!rt.vitals.thirst) rt.vitals.thirst = { current: nextCurrent, max: nextMax };
+  rt.vitals.thirst.current = nextCurrent;
+  rt.vitals.thirst.max = nextMax;
+
+  if (!rt.combat) rt.combat = {};
+  rt.combat.thirstCurrent = nextCurrent;
+  rt.combat.thirstMax = nextMax;
+
+  if (!rt.stats) rt.stats = {};
+  rt.stats.thirstCurrent = nextCurrent;
+  rt.stats.thirstMax = nextMax;
+}
+
 module.exports = {
   syncRuntimeHp,
   syncRuntimeStamina,
   syncRuntimeHunger,
+  syncRuntimeThirst,
 };

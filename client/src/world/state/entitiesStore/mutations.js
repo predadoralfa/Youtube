@@ -97,6 +97,7 @@ export function applyDelta(state, emitChange, delta) {
         hp: { current: 0, max: 0 },
         stamina: { current: 0, max: 0 },
         hunger: { current: 0, max: 0 },
+        thirst: { current: 0, max: 0 },
       },
       action: "idle",
       rev: -1,

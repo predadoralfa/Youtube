@@ -7,6 +7,7 @@ const { processAutomaticCombat } = require("./playerCombat");
 const { processPlayerMovementPhase } = require("./playerMovementPhase");
 const { processPlayerVitalsPhase } = require("./playerVitalsPhase");
 const { processEnemyPhase } = require("./enemyPhase");
+const { processBuildProgressPhase } = require("../../../service/buildProgressService");
 
 async function tickOnce(io, nowMsValue) {
   const t = nowMsValue;
@@ -33,6 +34,7 @@ async function tickOnce(io, nowMsValue) {
   );
 
   await processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor);
+  await processBuildProgressPhase(io, allRuntimes, t);
   await processEnemyPhase(io, allRuntimes, t, processAutomaticCombat);
 }
 

@@ -436,6 +436,10 @@ module.exports = {
           type: Sequelize.STRING(80),
           allowNull: false,
         },
+        asset_key: {
+          type: Sequelize.STRING(255),
+          allowNull: true,
+        },
         category: {
           type: Sequelize.ENUM("CONSUMABLE", "FOOD", "EQUIP", "AMMO", "MATERIAL", "QUEST", "CONTAINER", "MISC"),
           allowNull: false,
@@ -632,6 +636,16 @@ module.exports = {
           defaultValue: 100,
         },
         hunger_max: {
+          type: Sequelize.DOUBLE.UNSIGNED,
+          allowNull: false,
+          defaultValue: 100,
+        },
+        thirst_current: {
+          type: Sequelize.DOUBLE.UNSIGNED,
+          allowNull: false,
+          defaultValue: 100,
+        },
+        thirst_max: {
           type: Sequelize.DOUBLE.UNSIGNED,
           allowNull: false,
           defaultValue: 100,

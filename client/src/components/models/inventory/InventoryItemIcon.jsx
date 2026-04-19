@@ -6,6 +6,7 @@ const rockModelUrl = new URL("../../../assets/Rock.glb", import.meta.url).href;
 const appleModelUrl = new URL("../../../assets/Apple.glb", import.meta.url).href;
 const grassModelUrl = new URL("../../../assets/Grass.glb", import.meta.url).href;
 const logModelUrl = new URL("../../../assets/Log.glb", import.meta.url).href;
+const twigModelUrl = new URL("../../../assets/Twig.glb", import.meta.url).href;
 
 function normalizeText(value) {
   return String(value ?? "").trim().toUpperCase();
@@ -15,6 +16,16 @@ function resolveInventoryIconSpec(itemDef) {
   const code = normalizeText(itemDef?.code);
   const name = normalizeText(itemDef?.name);
   const category = normalizeText(itemDef?.category);
+  const assetKey = normalizeText(itemDef?.assetKey ?? itemDef?.asset_key);
+
+  if (assetKey.includes("TWIG")) {
+    return {
+      url: twigModelUrl,
+      scale: 1.15,
+      cameraPosition: [0, 0, 3.15],
+      rotation: [Math.PI / 2, 0, 0],
+    };
+  }
 
   if (code.includes("APPLE") || name.includes("APPLE")) {
     return {
@@ -55,15 +66,25 @@ function resolveInventoryIconSpec(itemDef) {
   }
 
   if (
-    code.includes("GRAVETO") ||
     code.includes("LOG") ||
-    name.includes("GRAVETO") ||
     name.includes("LOG")
   ) {
     return {
       url: logModelUrl,
       scale: 1.2,
       cameraPosition: [0, 0, 3.2],
+    };
+  }
+
+  if (
+    code.includes("GRAVETO") ||
+    name.includes("GRAVETO")
+  ) {
+    return {
+      url: twigModelUrl,
+      scale: 1.15,
+      cameraPosition: [0, 0, 3.15],
+      rotation: [Math.PI / 2, 0, 0],
     };
   }
 
@@ -100,16 +121,22 @@ function FallbackCube() {
 
 function InventoryModelPreview({ spec }) {
   const gltf = useGLTF(spec.url);
-  const scene = useMemo(() => gltf.scene.clone(true), [gltf]);
+  const scene = useMemo(() => {
+    const cloned = gltf.scene.clone(true);
+    if (Array.isArray(spec.rotation)) {
+      cloned.rotation.set(spec.rotation[0] ?? 0, spec.rotation[1] ?? 0, spec.rotation[2] ?? 0);
+    }
+    return cloned;
+  }, [gltf, spec.rotation]);
 
   return (
     <>
       <ambientLight intensity={2.2} />
       <directionalLight position={[3, 4, 5]} intensity={1.8} />
       <directionalLight position={[-2, 2, 3]} intensity={1.1} />
-      <Bounds fit clip observe margin={1.25}>
+      <Bounds fit clip margin={1.25}>
         <Center>
-          <primitive object={scene} scale={spec.scale ?? 1} rotation={spec.rotation ?? [0, 0.45, 0]} />
+          <primitive object={scene} scale={spec.scale ?? 1} />
         </Center>
       </Bounds>
     </>
@@ -155,3 +182,4 @@ useGLTF.preload(rockModelUrl);
 useGLTF.preload(appleModelUrl);
 useGLTF.preload(grassModelUrl);
 useGLTF.preload(logModelUrl);
+useGLTF.preload(twigModelUrl);

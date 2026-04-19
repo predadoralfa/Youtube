@@ -37,6 +37,18 @@ function resolveNoticeTone(text) {
   return "neutral";
 }
 
+function getItemDefByCode(snapshot, code) {
+  const target = String(code ?? "").toUpperCase();
+  const defs = Array.isArray(snapshot?.itemDefs)
+    ? snapshot.itemDefs
+    : Array.isArray(snapshot?.item_defs)
+      ? snapshot.item_defs
+      : [];
+  return (
+    defs.find((def) => String(def?.code ?? "").toUpperCase() === target) ?? null
+  );
+}
+
 export function useInventoryModalDerivedState({
   open,
   snapshot,
@@ -157,13 +169,43 @@ export function useInventoryModalDerivedState({
         ["PENDING", "RUNNING", "PAUSED", "COMPLETED"].includes(String(job?.status ?? "").toUpperCase())
       )
     : [];
+  const craftingSkillLevel = Number(snapshot?.craft?.skills?.crafting?.currentLevel ?? 1);
   const hasActiveCraftJob = activeCraftJobs.length > 0;
   const completedCraftJob = activeCraftJobs.find(
     (job) => String(job?.status ?? "").toUpperCase() === "COMPLETED"
   ) ?? null;
   const craftRecipes = Array.isArray(snapshot?.craft?.available)
     ? snapshot.craft.available.map((recipe) => {
-        const ingredients = Array.isArray(recipe?.recipeItems) ? recipe.recipeItems : [];
+        const recipeCode = String(recipe?.code ?? "").toUpperCase();
+        const originalIngredients = Array.isArray(recipe?.recipeItems) ? recipe.recipeItems : [];
+        const ingredients =
+          recipeCode === "CRAFT_BASKET_T2"
+            ? (() => {
+                const basketDef = getItemDefByCode(snapshot, "BASKET");
+                const fiberDef = getItemDefByCode(snapshot, "FIBER");
+                if (!basketDef || !fiberDef) return originalIngredients;
+                return [
+                  {
+                    ...originalIngredients[0],
+                    id: "ui:craft_basket_t2:basket",
+                    itemDefId: basketDef.id,
+                    quantity: 1,
+                    itemDef: basketDef,
+                    sortOrder: 1,
+                  },
+                  {
+                    ...originalIngredients[1],
+                    id: "ui:craft_basket_t2:fiber",
+                    itemDefId: fiberDef.id,
+                    quantity: 30,
+                    itemDef: fiberDef,
+                    sortOrder: 2,
+                  },
+                ];
+              })()
+            : originalIngredients;
+        const requiredSkillLevel = Number(recipe?.requiredSkillLevel ?? 1);
+        const hasRequiredSkill = craftingSkillLevel >= requiredSkillLevel;
         const readyJob =
           completedCraftJob &&
           String(completedCraftJob.craftDefId ?? "") === String(recipe.id ?? "")
@@ -183,20 +225,24 @@ export function useInventoryModalDerivedState({
           if (itemDefId == null || needed <= 0) return false;
           return Number(handItemCounts.get(String(itemDefId)) ?? 0) >= needed;
         });
-        const canCraft = hasIngredients && !hasActiveCraftJob;
+        const canCraft = hasIngredients && hasRequiredSkill && !hasActiveCraftJob;
 
         return {
           ...recipe,
           canCraft,
+          hasIngredients,
+          hasRequiredSkill,
           activeJob,
           readyJob,
           blockReason: hasActiveCraftJob
             ? completedCraftJob
               ? "Collect the finished craft first."
               : "A craft is already running."
-            : hasIngredients
-              ? null
-              : "Put the required items in one of your hands first.",
+            : !hasRequiredSkill
+              ? `Crafting level ${requiredSkillLevel} required.`
+              : hasIngredients
+                ? null
+                : "Put the required items in one of your hands first.",
           recipeItems: ingredients.map((ingredient) => {
             const itemDefId =
               ingredient?.itemDefId ??

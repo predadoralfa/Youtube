@@ -30,14 +30,11 @@ async function refreshRuntimeCombatStats(userId) {
 
   const combatStats = await loadPlayerCombatStats(userId);
   applyCombatStatsToRuntime(runtime, combatStats);
+  runtime.dirtyStats = Boolean(combatStats?.hungerWasAdjusted || combatStats?.thirstWasAdjusted);
   syncStaminaPersistMarkers(
     runtime,
     resolveStaminaPersistBucket(combatStats?.staminaCurrent, combatStats?.staminaMax)
   );
-
-  if (combatStats?.hungerWasAdjusted) {
-    runtime.dirtyStats = true;
-  }
   markStatsDirty(userId);
   return runtime;
 }

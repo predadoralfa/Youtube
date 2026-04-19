@@ -4,9 +4,11 @@ export const IntentType = {
   CAMERA_ZOOM: "CAMERA_ZOOM",
   CAMERA_ORBIT: "CAMERA_ORBIT",
   MOVE_DIRECTION: "MOVE_DIRECTION",
+  POINTER_MOVE: "POINTER_MOVE",
 
   // Mouse
   CLICK_PRIMARY: "CLICK_PRIMARY",
+  CONTEXT_MENU: "CONTEXT_MENU",
 
   // UI
   UI_TOGGLE_INVENTORY: "UI_TOGGLE_INVENTORY",
@@ -26,6 +28,10 @@ export const IntentType = {
   // Seleção
   TARGET_SELECT: "TARGET_SELECT",
   TARGET_CLEAR: "TARGET_CLEAR",
+
+  // Build autoritativo
+  BUILD_PLACE_CONFIRM: "BUILD_PLACE_CONFIRM",
+  BUILD_CANCEL: "BUILD_CANCEL",
 };
 
 export function intentCameraZoom(delta) {
@@ -57,6 +63,24 @@ export function intentMoveDirection(x, z) {
 export function intentClickPrimary(clientX, clientY) {
   return {
     type: IntentType.CLICK_PRIMARY,
+    clientX,
+    clientY,
+    ts: performance.now(),
+  };
+}
+
+export function intentContextMenu(clientX, clientY) {
+  return {
+    type: IntentType.CONTEXT_MENU,
+    clientX,
+    clientY,
+    ts: performance.now(),
+  };
+}
+
+export function intentPointerMove(clientX, clientY) {
+  return {
+    type: IntentType.POINTER_MOVE,
     clientX,
     clientY,
     ts: performance.now(),
@@ -146,6 +170,26 @@ export function intentTargetSelect(target) {
 export function intentTargetClear() {
   return {
     type: IntentType.TARGET_CLEAR,
+    ts: performance.now(),
+  };
+}
+
+export function intentBuildPlaceConfirm(worldPos) {
+  return {
+    type: IntentType.BUILD_PLACE_CONFIRM,
+    worldPos: worldPos
+      ? {
+          x: Number(worldPos.x ?? NaN),
+          z: Number(worldPos.z ?? NaN),
+        }
+      : null,
+    ts: performance.now(),
+  };
+}
+
+export function intentBuildCancel() {
+  return {
+    type: IntentType.BUILD_CANCEL,
     ts: performance.now(),
   };
 }

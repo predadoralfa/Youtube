@@ -35,6 +35,8 @@ export function syncPlayerMeshes({
         staminaMax: vitals.staminaMax,
         hungerCurrent: vitals.hungerCurrent,
         hungerMax: vitals.hungerMax,
+        thirstCurrent: vitals.thirstCurrent,
+        thirstMax: vitals.thirstMax,
       };
 
       state.setSelfHpBar((prev) => {
@@ -45,7 +47,9 @@ export function syncPlayerMeshes({
           prev.staminaCurrent === nextSelfHpBar.staminaCurrent &&
           prev.staminaMax === nextSelfHpBar.staminaMax &&
           prev.hungerCurrent === nextSelfHpBar.hungerCurrent &&
-          prev.hungerMax === nextSelfHpBar.hungerMax
+          prev.hungerMax === nextSelfHpBar.hungerMax &&
+          prev.thirstCurrent === nextSelfHpBar.thirstCurrent &&
+          prev.thirstMax === nextSelfHpBar.thirstMax
         ) {
           return prev;
         }

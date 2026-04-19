@@ -50,6 +50,9 @@ export function useGameShellIntentAction(state, handlers) {
       closeSkills,
       emitInteractStart,
       emitInteractStop,
+      clearBuildPlacement,
+      emitBuildPlace,
+      emitSleepStop,
     } = handlers;
 
   return useCallback(
@@ -113,6 +116,10 @@ export function useGameShellIntentAction(state, handlers) {
       }
 
       if (intent.type === IntentType.UI_CANCEL) {
+        if (state.snapshot?.runtime?.sleepLock?.active || state.snapshot?.runtime?.sleepLock?.pending) {
+          return emitSleepStop?.();
+        }
+        if (state.buildPlacement) return clearBuildPlacement();
         if (state.skillsOpen) return closeSkills();
         if (state.buildOpen) return closeBuild();
         if (state.researchOpen) return closeResearch();
@@ -133,6 +140,18 @@ export function useGameShellIntentAction(state, handlers) {
       if (intent.type === IntentType.TARGET_CLEAR) {
         state.selectedTargetRef.current = null;
         state.combatTargetRef.current = null;
+        return;
+      }
+
+      if (intent.type === IntentType.BUILD_PLACE_CONFIRM) {
+        const worldPos = intent?.worldPos ?? null;
+        if (!worldPos) return;
+        emitBuildPlace(worldPos);
+        return;
+      }
+
+      if (intent.type === IntentType.BUILD_CANCEL) {
+        clearBuildPlacement();
         return;
       }
 
@@ -179,6 +198,9 @@ export function useGameShellIntentAction(state, handlers) {
       closeSkills,
       emitInteractStart,
       emitInteractStop,
+      clearBuildPlacement,
+      emitBuildPlace,
+      emitSleepStop,
     ]
   );
 }

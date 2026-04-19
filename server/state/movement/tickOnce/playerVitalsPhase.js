@@ -4,7 +4,12 @@ const { bumpRev, toDelta } = require("../entity");
 const { markRuntimeDirty, markStatsDirty } = require("../../runtimeStore");
 const { getActiveSocket } = require("../../../socket/sessionIndex");
 const { computeChunkFromPos } = require("../../presenceIndex");
-const { applyStaminaTick, applyHungerTick, shouldQueueStaminaPersist } = require("../stamina");
+const {
+  applyStaminaTick,
+  applyHungerTick,
+  applyThirstTick,
+  shouldQueueStaminaPersist,
+} = require("../stamina");
 const { emitDeltaToInterest } = require("../emit");
 const { ensureInventoryLoaded } = require("../../inventory/loader");
 const { ensureEquipmentLoaded } = require("../../equipment/loader");
@@ -19,6 +24,9 @@ async function processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor) {
 
     const staminaResult = applyStaminaTick(rt, t, { movedReal: false });
     const hungerResult = applyHungerTick(rt, t, { timeFactor: worldTimeFactor });
+    const thirstResult = rt?.thirstSupported
+      ? applyThirstTick(rt, t, { timeFactor: worldTimeFactor })
+      : { changed: false };
     const autoFoodResult = await processAutoFoodTick(rt, t);
     const researchResult = await processResearchTick(rt, t, 50);
 
@@ -28,7 +36,13 @@ async function processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor) {
       rt?.staminaMax ?? rt?.stats?.staminaMax ?? rt?.combat?.staminaMax
     );
 
-    if (!staminaResult.changed && !hungerResult.changed && !autoFoodResult.changed && !researchResult.changed) {
+    if (
+      !staminaResult.changed &&
+      !hungerResult.changed &&
+      !thirstResult.changed &&
+      !autoFoodResult.changed &&
+      !researchResult.changed
+    ) {
       continue;
     }
 

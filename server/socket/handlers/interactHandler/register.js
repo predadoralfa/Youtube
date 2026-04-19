@@ -44,6 +44,8 @@ function registerInteractHandler(io, socket) {
         return;
       }
 
+      if (rt.buildLock?.active || rt.sleepLock?.active) return;
+
       if (isWASDActive(rt, nowMs)) return;
 
       const autoCollectTarget = payload?.target ? null : resolveNearbyCollectTarget(rt);

@@ -86,6 +86,7 @@ export function useGameShellSocket(state, requestInventoryFull) {
         socket.on("research:full", handlers.onResearchFull);
         socket.on("equipment:full", handlers.onEquipmentFull);
         socket.on("world:object_spawn", handlers.onWorldObjectSpawn);
+        socket.on("world:object_despawn", handlers.onWorldObjectDespawn);
         socket.on("actor:collected", handlers.onActorCollected);
         socket.on("actor:updated", handlers.onActorUpdated);
         socket.on("combat:enemy_attack", handlers.onEnemyAttack);
@@ -121,6 +122,7 @@ export function useGameShellSocket(state, requestInventoryFull) {
         socket.off("research:full", handlers.onResearchFull);
         socket.off("equipment:full", handlers.onEquipmentFull);
         socket.off("world:object_spawn", handlers.onWorldObjectSpawn);
+        socket.off("world:object_despawn", handlers.onWorldObjectDespawn);
         socket.off("actor:collected", handlers.onActorCollected);
         socket.off("actor:updated", handlers.onActorUpdated);
         socket.off("combat:enemy_attack", handlers.onEnemyAttack);

@@ -21,6 +21,8 @@ export function useSelfHud(state, worldStoreRef) {
         staminaMax: vitals.staminaMax,
         hungerCurrent: vitals.hungerCurrent,
         hungerMax: vitals.hungerMax,
+        thirstCurrent: vitals.thirstCurrent,
+        thirstMax: vitals.thirstMax,
       });
     });
   }, [state, worldStoreRef]);

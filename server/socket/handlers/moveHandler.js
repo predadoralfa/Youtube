@@ -31,6 +31,8 @@ function registerMoveHandler(socket) {
         return;
       }
 
+      if (runtime.buildLock?.active || runtime.sleepLock?.active) return;
+
       if (!allowMove(runtime, nowMs)) return;
 
       const parsed = parseMoveIntentPayload(payload);

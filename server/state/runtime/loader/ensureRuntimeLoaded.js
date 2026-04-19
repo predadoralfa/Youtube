@@ -47,6 +47,7 @@ async function ensureRuntimeLoaded(userId) {
   });
 
   applyCombatStatsToRuntime(runtime, combatStats);
+  runtime.dirtyStats = Boolean(combatStats?.hungerWasAdjusted || combatStats?.thirstWasAdjusted);
   syncStaminaPersistMarkers(
     runtime,
     resolveStaminaPersistBucket(combatStats?.staminaCurrent, combatStats?.staminaMax)

@@ -37,17 +37,8 @@ function TreeCard({ node }) {
 
         <button type="button" className="research-action" disabled={actionDisabled}>
           {actionLabel}
-        </button>
-      </article>
-
-      <div className="research-connector" aria-hidden="true">
-        <span className="research-line" />
-        <span className="research-dot" />
-        <span className="research-placeholder">
-          Next step
-          <small>future branch</small>
-        </span>
-      </div>
+          </button>
+        </article>
     </div>
   );
 }
@@ -60,9 +51,22 @@ export function TreeWindowModal({
   footerLeft,
   footerRight = "Close: Esc",
   nodes = [],
+  boardRef = null,
+  laneRef = null,
+  zoom = 1,
+  contentSize = { width: 1160, height: 0 },
+  onWheel = null,
+  onMouseDown = null,
+  panHint = null,
   onClose,
 }) {
   if (!open) return null;
+
+  const hasBoardControls =
+    boardRef != null &&
+    laneRef != null &&
+    typeof onWheel === "function" &&
+    typeof onMouseDown === "function";
 
   return (
     <div
@@ -86,15 +90,44 @@ export function TreeWindowModal({
             </button>
           </div>
 
-          <div className="research-board">
-            <div className="research-content" style={{ minHeight: "100%" }}>
-              <div className="research-lane research-lane--static">
-                {nodes.map((node, index) => (
-                  <TreeCard key={node?.id ?? `${title}-${index}`} node={node} />
-                ))}
+          {hasBoardControls ? (
+            <div
+              ref={boardRef}
+              className="research-board"
+              onContextMenu={(e) => e.preventDefault()}
+              onWheel={onWheel}
+              onMouseDown={onMouseDown}
+            >
+              {panHint ? <div className="research-pan-hint">{panHint}</div> : null}
+              <div
+                className="research-content"
+                style={{
+                  width: `${contentSize.width * zoom}px`,
+                  height: `${contentSize.height * zoom}px`,
+                }}
+              >
+                <div
+                  ref={laneRef}
+                  className="research-lane research-lane--tree"
+                  style={{ transform: `scale(${zoom})`, transformOrigin: "top left" }}
+                >
+                  {nodes.map((node, index) => (
+                    <TreeCard key={node?.id ?? `${title}-${index}`} node={node} />
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="research-board">
+              <div className="research-content" style={{ minHeight: "100%" }}>
+                <div className="research-lane research-lane--static">
+                  {nodes.map((node, index) => (
+                    <TreeCard key={node?.id ?? `${title}-${index}`} node={node} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="research-footer">
             <span>{footerLeft}</span>

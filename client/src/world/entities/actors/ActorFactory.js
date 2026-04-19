@@ -12,12 +12,14 @@ const rockModelUrl = new URL("../../../assets/Rock.glb", import.meta.url).href;
 const appleModelUrl = new URL("../../../assets/Apple.glb", import.meta.url).href;
 const grassModelUrl = new URL("../../../assets/Grass.glb", import.meta.url).href;
 const treeModelUrl = new URL("../../../assets/Apple tree.glb", import.meta.url).href;
+const twigModelUrl = new URL("../../../assets/Twig.glb", import.meta.url).href;
 
 const chestLoader = new GLTFLoader();
 const rockLoader = new GLTFLoader();
 const appleLoader = new GLTFLoader();
 const grassLoader = new GLTFLoader();
 const treeLoader = new GLTFLoader();
+const twigLoader = new GLTFLoader();
 let chestModelPromise = null;
 let chestModelTemplate = null;
 let rockModelPromise = null;
@@ -28,6 +30,8 @@ let grassModelPromise = null;
 let grassModelTemplate = null;
 let treeModelPromise = null;
 let treeModelTemplate = null;
+let twigModelPromise = null;
+let twigModelTemplate = null;
 
 function normalizeAssetKey(assetKey) {
   const raw = String(assetKey ?? "").trim().toUpperCase();
@@ -39,7 +43,14 @@ function normalizeAssetKey(assetKey) {
     case "TREE_APPLE":
     case "APPLE_TREE":
     case "TREE":
+    case "APPLE TREE.GLB":
+    case "APPLE_TREE.GLB":
+    case "TREE.GLB":
       return "TREE";
+    case "TWIG_PATCH":
+    case "TWIG":
+    case "TWIG.GLB":
+      return "TWIG_PATCH";
     case "FIBER_PATCH":
     case "GRASS_PATCH":
       return "GRASS";
@@ -80,11 +91,17 @@ function normalizeActorType(actorType) {
     case "APPLE_TREE":
     case "TREE":
       return "TREE";
+    case "TWIG_PATCH":
+    case "TWIG":
+      return "TWIG_PATCH";
     case "FIBER_PATCH":
     case "GRASS_PATCH":
       return "GRASS";
     case "NPC":
       return "NPC";
+    case "PRIMITIVE_SHELTER":
+    case "SHELTER":
+      return "PRIMITIVE_SHELTER";
     default:
       return raw || "DEFAULT";
   }
@@ -306,6 +323,24 @@ async function loadTreeModelTemplate() {
   }
 
   return treeModelPromise;
+}
+
+async function loadTwigModelTemplate() {
+  if (twigModelTemplate) return twigModelTemplate;
+
+  if (!twigModelPromise) {
+    twigModelPromise = twigLoader.loadAsync(twigModelUrl)
+      .then((gltf) => {
+        twigModelTemplate = gltf.scene;
+        return twigModelTemplate;
+      })
+      .catch((error) => {
+        twigModelPromise = null;
+        throw error;
+      });
+  }
+
+  return twigModelPromise;
 }
 
 function resolveDroppedItemVisual(actor) {
@@ -594,6 +629,102 @@ export function createGrassMesh(actor) {
   return group;
 }
 
+export function createTwigPatchMesh(actor) {
+  const group = new THREE.Group();
+  applyActorUserData(group, actor, true);
+
+  loadTwigModelTemplate()
+    .then((template) => {
+      const model = template.clone(true);
+      model.scale.setScalar(7.5);
+      model.position.set(0, 0, 0);
+      model.rotation.set(Math.PI / 2, 0.15, Math.PI / 2);
+
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      alignModelToGround(model);
+      model.position.y -= 0.02;
+      applyActorUserData(model, actor, true);
+      group.add(model);
+    })
+    .catch((error) => {
+      console.error("[ACTOR_FACTORY] Failed to load twig actor model:", error);
+
+      const fallbackGeo = new THREE.BoxGeometry(0.7, 0.08, 0.18);
+      const fallbackMat = new THREE.MeshStandardMaterial({ color: 0x8a5a2b, roughness: 0.95 });
+      const fallback = new THREE.Mesh(fallbackGeo, fallbackMat);
+      fallback.castShadow = true;
+      fallback.receiveShadow = true;
+      fallback.position.y = 0.04;
+      group.add(fallback);
+    });
+
+  return group;
+}
+
+/**
+ * Cria um mesh para PRIMITIVE_SHELTER (projeto de construção)
+ */
+export function createPrimitiveShelterMesh(actor) {
+  const group = new THREE.Group();
+  applyActorUserData(group, actor, true);
+
+  const outlinePoints = [
+    new THREE.Vector3(-1.3, 0.03, -0.75),
+    new THREE.Vector3(1.3, 0.03, -0.75),
+    new THREE.Vector3(1.3, 0.03, 0.75),
+    new THREE.Vector3(-1.3, 0.03, 0.75),
+    new THREE.Vector3(-1.3, 0.03, -0.75),
+  ];
+  const outlineGeometry = new THREE.BufferGeometry().setFromPoints(outlinePoints);
+  const outline = new THREE.Line(
+    outlineGeometry,
+    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 })
+  );
+  group.add(outline);
+
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 1.4),
+    new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.08,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = 0.01;
+  group.add(floor);
+
+  const postMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.72,
+    metalness: 0.05,
+  });
+  const leftPost = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.36, 6), postMat);
+  leftPost.position.set(-0.95, 0.18, -0.28);
+  group.add(leftPost);
+
+  const rightPost = leftPost.clone();
+  rightPost.position.set(0.95, 0.18, -0.28);
+  group.add(rightPost);
+
+  const ridge = new THREE.Mesh(
+    new THREE.BoxGeometry(2.1, 0.05, 0.12),
+    new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.6, metalness: 0.08 })
+  );
+  ridge.position.set(0, 0.36, -0.28);
+  group.add(ridge);
+
+  return group;
+}
+
 /**
  * Cria um mesh para NPC (humanoide)
  */
@@ -666,8 +797,12 @@ export function createActorMesh(actor) {
       return createDroppedItemMesh(actor);
     case "TREE":
       return createTreeMesh(actor);
+    case "TWIG_PATCH":
+      return createTwigPatchMesh(actor);
     case "GRASS":
       return createGrassMesh(actor);
+    case "PRIMITIVE_SHELTER":
+      return createPrimitiveShelterMesh(actor);
     case "NPC":
       return createNPCMesh(actor);
     default:

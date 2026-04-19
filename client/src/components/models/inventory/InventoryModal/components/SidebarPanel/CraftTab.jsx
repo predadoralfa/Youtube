@@ -45,8 +45,12 @@ export function CraftTab({ craftRecipes, onCraftRecipe, onClaimCraftJob, setLoca
         const readyJob = recipe.readyJob ?? (activeIsDue ? activeJob : null);
         const isReady = Boolean(readyJob);
         const canCraft = Boolean(recipe.canCraft);
+        const hasRequiredSkill = Boolean(recipe.hasRequiredSkill);
         const blockReason = recipe.blockReason || "Put the required items in HAND_L or HAND_R first";
         const ingredients = recipe.recipeItems ?? [];
+        const baseCraftTimeMs = Number(recipe.craftTimeBaseMs ?? recipe.craftTimeMs ?? 0);
+        const effectiveCraftTimeMs = Number(recipe.craftTimeMs ?? baseCraftTimeMs ?? 0);
+        const requiredSkillLevel = Number(recipe.requiredSkillLevel ?? 1);
 
         return (
           <article className="craft-card" key={recipe.id ?? recipe.code}>
@@ -58,13 +62,30 @@ export function CraftTab({ craftRecipes, onCraftRecipe, onClaimCraftJob, setLoca
                   {ingredients.map((ingredient) => {
                     const ingredientDef = ingredient.itemDef ?? null;
                     const ingredientName = ingredientDef?.name || ingredientDef?.code || "Ingredient";
+                    const ingredientStateClass = ingredient.isReady ? "is-ready" : "is-missing";
                     return (
-                      <span key={ingredient.id ?? ingredient.itemDefId ?? ingredientName}>
+                      <span
+                        key={ingredient.id ?? ingredient.itemDefId ?? ingredientName}
+                        className={ingredientStateClass}
+                        title={
+                          ingredient.isReady
+                            ? `${ingredientName} available in hand`
+                            : `${ingredientName} missing from hands`
+                        }
+                      >
                         {ingredientName} {Number(ingredient.quantity ?? 0)}x
                       </span>
                     );
                   })}
-                  <span>{formatCraftTime(recipe.craftTimeMs)}</span>
+                  <span className={hasRequiredSkill ? "is-ready" : "is-missing"}>
+                    Lvl {requiredSkillLevel}
+                  </span>
+                  <span>{formatCraftTime(effectiveCraftTimeMs)}</span>
+                  {baseCraftTimeMs > 0 && baseCraftTimeMs !== effectiveCraftTimeMs ? (
+                    <span className="craft-meta-note">
+                      Base: {formatCraftTime(baseCraftTimeMs)}
+                    </span>
+                  ) : null}
                   <span>{Number(recipe.staminaCostTotal ?? 0)} stamina</span>
                 </div>
               </div>
