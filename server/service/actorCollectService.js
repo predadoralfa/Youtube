@@ -11,6 +11,7 @@ const { ensureStarterInventory } = require("./inventoryProvisioning");
 const { consumeGatheringStamina } = require("./gatheringStaminaService");
 const { awardSkillXp, loadUserSkillSummary } = require("./skillProgressionService");
 const { DEFAULT_COLLECT_COOLDOWN_MS } = require("../config/interactionConstants");
+const { resolveFeverDebuffTempoMultiplier } = require("../state/movement/status");
 const {
   ensureResearchLoaded,
   hasCapability,
@@ -46,6 +47,10 @@ function resolveCollectUnlockCode(actorDefCode, actorState) {
     return "actor.collect:TWIG_PATCH";
   }
 
+  if (actorDefCode === "HERBS_PATCH" && resourceType === "HERBS_PATCH") {
+    return "actor.collect:HERBS_PATCH";
+  }
+
   return null;
 }
 
@@ -62,6 +67,7 @@ function resolveCollectItemCode(actorDefCode) {
   if (actorDefCode === "ROCK_NODE_SMALL") return "SMALL_STONE";
   if (actorDefCode === "FIBER_PATCH") return "FIBER";
   if (actorDefCode === "TWIG_PATCH") return "GRAVETO";
+  if (actorDefCode === "HERBS_PATCH") return "HERBS";
   return null;
 }
 
@@ -90,8 +96,12 @@ async function resolveActorCollectCooldownMs(userId, actor, fallbackMs = DEFAULT
     targetMinCooldownMs,
     Math.round(baseCooldownMs - reductionPerLevelMs * effectiveLevel)
   );
+  const feverTempoMultiplier = resolveFeverDebuffTempoMultiplier(
+    rt?.status?.fever?.current ?? rt?.diseaseLevel ?? rt?.stats?.diseaseLevel ?? 100,
+    rt?.status?.fever?.severity ?? rt?.diseaseSeverity ?? rt?.stats?.diseaseSeverity ?? 0
+  );
 
-  return reducedCooldownMs;
+  return Math.max(targetMinCooldownMs, Math.round(reducedCooldownMs * feverTempoMultiplier));
 }
 
 function hasResearchLevelReached(research, researchCode, minimumLevel) {

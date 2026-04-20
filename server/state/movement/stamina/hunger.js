@@ -20,7 +20,7 @@ function resolveHungerRegenMultiplier(hungerCurrent, hungerMax) {
   if (ratio <= 0) return 0;
   if (ratio <= 0.05) return 0.05;
   if (ratio < 0.15) return 0.5;
-  if (ratio < 0.35) return 0.8;
+  if (ratio < 0.3) return 0.8;
   return 1;
 }
 

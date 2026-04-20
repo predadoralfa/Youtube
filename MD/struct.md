@@ -77,19 +77,18 @@ Organizacao atual:
 
 - `document.md`: documento mestre
 - `struct.md`: resumo estrutural
-- `status-checklist-temporario.md`: controle temporario da implementacao
-- `MD/CIDs`: guias de cadastro e identificadores estaveis
+- `MD/seeds`: guias de cadastro e identificadores estaveis
 - `MD/implementacoes`: estudos arquiteturais e planos tecnicos
 
 Documentos principais:
 
 - [document.md](/D:/JS-Projects/Youtube/MD/document.md)
-- [guia-registro-documentacao.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-documentacao.md)
-- [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
-- [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
+- [guia-registro-documentacao.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-documentacao.md)
+- [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-actors.md)
+- [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens.md)
 - [guia-registro-itens-com-container.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens-com-container.md)
-- [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-research.md)
-- [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
+- [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-research.md)
+- [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/seeds/guia-cid-container-actors.md)
 - [guia-registro-skills-craft.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-skills-craft.md)
 - [estudo-arquitetural-actors-spawn.md](/D:/JS-Projects/Youtube/MD/implementacoes/estudo-arquitetural-actors-spawn.md)
 - [modulo-skills-craft.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-skills-craft.md)
@@ -370,9 +369,9 @@ Regra:
 ## Documentos de Aprofundamento
 
 - documento mestre: [document.md](/D:/JS-Projects/Youtube/MD/document.md)
-- actors: [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
-- itens: [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
-- CID de container: [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
+- actors: [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-actors.md)
+- itens: [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens.md)
+- CID de container: [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/seeds/guia-cid-container-actors.md)
 - actors e spawns: [estudo-arquitetural-actors-spawn.md](/D:/JS-Projects/Youtube/MD/implementacoes/estudo-arquitetural-actors-spawn.md)
 - fome: [implementacao-sistema-de-fome.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-sistema-de-fome.md)
 - research: [modulo-research.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-research.md)

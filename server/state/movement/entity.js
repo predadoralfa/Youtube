@@ -86,6 +86,87 @@ function readThirstMax(rt) {
   );
 }
 
+function readImmunityCurrent(rt) {
+  return toNum(
+    rt?.immunityCurrent ??
+      rt?.immunity_current ??
+      rt?.status?.immunity?.current ??
+      rt?.stats?.immunityCurrent ??
+      rt?.stats?.immunity_current,
+    100
+  );
+}
+
+function readImmunityMax(rt) {
+  return toNum(
+    rt?.immunityMax ??
+      rt?.immunity_max ??
+      rt?.status?.immunity?.max ??
+      rt?.stats?.immunityMax ??
+      rt?.stats?.immunity_max,
+    100
+  );
+}
+
+function readDiseaseLevel(rt) {
+  return toNum(
+    rt?.diseaseLevel ??
+      rt?.disease_level ??
+      rt?.status?.disease?.level ??
+      rt?.stats?.diseaseLevel ??
+      rt?.stats?.disease_level,
+    0
+  );
+}
+
+function readDiseaseSeverity(rt) {
+  return toNum(
+    rt?.diseaseSeverity ??
+      rt?.disease_severity ??
+      rt?.status?.disease?.severity ??
+      rt?.stats?.diseaseSeverity ??
+      rt?.stats?.disease_severity,
+    0
+  );
+}
+
+function readSleepCurrent(rt) {
+  return toNum(
+    rt?.sleepCurrent ??
+      rt?.sleep_current ??
+      rt?.status?.sleep?.current ??
+      rt?.stats?.sleepCurrent ??
+      rt?.stats?.sleep_current,
+    100
+  );
+}
+
+function readSleepMax(rt) {
+  return toNum(
+    rt?.sleepMax ??
+      rt?.sleep_max ??
+      rt?.status?.sleep?.max ??
+      rt?.stats?.sleepMax ??
+      rt?.stats?.sleep_max,
+      100
+  );
+}
+
+function readFeverDebuffs(rt) {
+  const feverCurrent = readDiseaseLevel(rt);
+  const feverSeverity = readDiseaseSeverity(rt);
+  const severity = feverCurrent >= 100 ? 0 : Math.max(0, Math.min(1, feverSeverity || 1 - feverCurrent / 100));
+  const tier = feverCurrent >= 100 ? 0 : Math.max(1, Math.min(10, Math.ceil(severity * 10)));
+  const tempoMultiplier =
+    tier <= 0 ? 1 : tier <= 5 ? 1 + tier * 0.1 : 1 + 5 * 0.1 + (tier - 5) * 0.15;
+  return {
+    active: tier > 0,
+    tier,
+    tempoMultiplier,
+    staminaRegenMultiplier: tier > 0 ? 1 / tempoMultiplier : 1,
+  };
+}
+
 function bumpRev(rt) {
   const cur = Number(rt.rev ?? 0);
   rt.rev = Number.isFinite(cur) ? cur + 1 : 1;
@@ -100,6 +181,13 @@ function toEntity(rt) {
   const hungerMax = readHungerMax(rt);
   const thirstCurrent = readThirstCurrent(rt);
   const thirstMax = readThirstMax(rt);
+  const immunityCurrent = readImmunityCurrent(rt);
+  const immunityMax = readImmunityMax(rt);
+  const diseaseLevel = readDiseaseLevel(rt);
+  const diseaseSeverity = readDiseaseSeverity(rt);
+  const sleepCurrent = readSleepCurrent(rt);
+  const sleepMax = readSleepMax(rt);
+  const debuffs = readFeverDebuffs(rt);
 
   return {
     entityId: String(rt.userId),
@@ -131,6 +219,21 @@ function toEntity(rt) {
         max: thirstMax,
       },
     },
+    status: {
+      immunity: {
+        current: immunityCurrent,
+        max: immunityMax,
+      },
+      fever: {
+        current: diseaseLevel,
+        severity: diseaseSeverity,
+      },
+      debuffs,
+      sleep: {
+        current: sleepCurrent,
+        max: sleepMax,
+      },
+    },
   };
 }
 
@@ -143,6 +246,13 @@ function toDelta(rt) {
   const hungerMax = readHungerMax(rt);
   const thirstCurrent = readThirstCurrent(rt);
   const thirstMax = readThirstMax(rt);
+  const immunityCurrent = readImmunityCurrent(rt);
+  const immunityMax = readImmunityMax(rt);
+  const diseaseLevel = readDiseaseLevel(rt);
+  const diseaseSeverity = readDiseaseSeverity(rt);
+  const sleepCurrent = readSleepCurrent(rt);
+  const sleepMax = readSleepMax(rt);
+  const debuffs = readFeverDebuffs(rt);
 
   return {
     entityId: String(rt.userId),
@@ -171,6 +281,21 @@ function toDelta(rt) {
       thirst: {
         current: thirstCurrent,
         max: thirstMax,
+      },
+    },
+    status: {
+      immunity: {
+        current: immunityCurrent,
+        max: immunityMax,
+      },
+      fever: {
+        current: diseaseLevel,
+        severity: diseaseSeverity,
+      },
+      debuffs,
+      sleep: {
+        current: sleepCurrent,
+        max: sleepMax,
       },
     },
   };

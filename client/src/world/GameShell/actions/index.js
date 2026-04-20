@@ -48,6 +48,8 @@ export function useGameShellActions(state) {
       inventoryActions.onPickupInventoryItem,
       inventoryActions.onPlaceHeldItem,
       inventoryActions.onSplitInventoryItem,
+      inventoryActions.onConsumeInventoryItem,
+      inventoryActions.onMedicateInventoryItem,
       inventoryActions.onMoveInventoryItem,
       inventoryActions.onCancelHeldState,
       inventoryActions.onSetAutoFoodMacro,

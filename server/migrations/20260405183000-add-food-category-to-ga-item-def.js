@@ -7,7 +7,7 @@ module.exports = {
       await queryInterface.sequelize.query(
         `
         ALTER TABLE ga_item_def
-        MODIFY COLUMN category ENUM('CONSUMABLE', 'FOOD', 'EQUIP', 'AMMO', 'MATERIAL', 'QUEST', 'CONTAINER', 'MISC')
+        MODIFY COLUMN category ENUM('CONSUMABLE', 'FOOD', 'EQUIP', 'AMMO', 'MATERIAL', 'QUEST', 'CONTAINER', 'MISC', 'MEDICINE')
         NOT NULL DEFAULT 'MISC'
         `,
         { transaction: t }

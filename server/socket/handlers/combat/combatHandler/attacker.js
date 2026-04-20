@@ -3,6 +3,7 @@
 const { getRuntime } = require("../../../../state/runtimeStore");
 const { loadPlayerCombatStats } = require("../../../../service/combatSystem");
 const { COMBAT_BASE_COOLDOWN_MS } = require("../../../../config/combatConstants");
+const { resolveFeverDebuffTempoMultiplier } = require("../../../../state/movement/status");
 
 async function loadAttackerOrThrow(userId) {
   const attackerRuntime = getRuntime(userId);
@@ -34,7 +35,11 @@ async function loadAttackerOrThrow(userId) {
 
 function validateCooldown(attackerRuntime, attackerStats, nowMs) {
   const lastAttackMs = attackerRuntime._lastAttackAtMs ?? 0;
-  const cooldownMs = COMBAT_BASE_COOLDOWN_MS / (attackerStats.attackSpeed || 1);
+  const feverTempoMultiplier = resolveFeverDebuffTempoMultiplier(
+    attackerRuntime?.status?.fever?.current ?? attackerRuntime?.diseaseLevel ?? 100,
+    attackerRuntime?.status?.fever?.severity ?? attackerRuntime?.diseaseSeverity ?? 0
+  );
+  const cooldownMs = (COMBAT_BASE_COOLDOWN_MS / (attackerStats.attackSpeed || 1)) * feverTempoMultiplier;
   const timeSinceLastAttack = nowMs - lastAttackMs;
 
   if (timeSinceLastAttack < cooldownMs) {

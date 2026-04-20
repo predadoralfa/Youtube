@@ -11,6 +11,7 @@ export function createMenuHandlers({
   onSplitInventoryItem,
   onDropItemToWorld,
   onConsumeInventoryItem,
+  onMedicateInventoryItem,
 }) {
   const resolveItemDef = (slotCtx) => slotCtx?.itemDef ?? slotCtx?.item ?? null;
 
@@ -107,6 +108,14 @@ export function createMenuHandlers({
     setLocalNotice(ok ? null : "Eat is not available right now");
   };
 
+  const handleContextMedicate = () => {
+    const slot = contextMenu?.slot;
+    setContextMenu(null);
+    setSplitDraft(null);
+    const ok = slot?.itemInstanceId ? onMedicateInventoryItem?.({ itemInstanceId: slot.itemInstanceId }) : false;
+    setLocalNotice(ok ? null : "Medicate is not available right now");
+  };
+
   const handleContextRemove = () => {
     const slot = contextMenu?.slot;
     setContextMenu(null);
@@ -126,6 +135,7 @@ export function createMenuHandlers({
     submitSplit,
     handleContextDrop,
     handleContextEat,
+    handleContextMedicate,
     handleContextRemove,
   };
 }

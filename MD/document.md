@@ -39,18 +39,15 @@ Estrutura atual:
  MD/
  |-- document.md
  |-- struct.md
- |-- status-checklist-temporario.md
- |-- CIDs/
+ |-- seeds/
  |   |-- guia-registro-documentacao.md
  |   |-- guia-cid-container-actors.md
-  |   |-- guia-registro-actors.md
-  |   `-- guia-registro-itens.md
-  |-- seeds/
-  |   |-- guia-registro-actors.md
-  |   |-- guia-registro-builder.md
-  |   |-- guia-registro-itens-com-container.md
-  |   |-- guia-registro-itens.md
-  |   `-- guia-registro-skills-craft.md
+ |   |-- guia-registro-actors.md
+ |   |-- guia-registro-builder.md
+ |   |-- guia-registro-itens-com-container.md
+ |   |-- guia-registro-itens.md
+ |   |-- guia-registro-research.md
+ |   `-- guia-registro-skills-craft.md
   `-- implementacoes/
       |-- estudo-arquitetural-actors-spawn.md
       |-- implementacao-ciclo-visual-dia-noite.md
@@ -77,7 +74,7 @@ Papel de cada area:
 
 - `document.md`: documento mestre e ponto de entrada
 - `struct.md`: consolidado estrutural resumido
-- `MD/CIDs`: guias operacionais de cadastro e identificadores estaveis
+- `MD/seeds`: guias operacionais de cadastro e identificadores estaveis
 - `MD/implementacoes`: estudos arquiteturais, modulos e planos tecnicos
 
 ---
@@ -88,19 +85,19 @@ Para entender o projeto rapidamente:
 
 1. ler `document.md`
 2. ler `struct.md`
-3. ler os guias em `MD/CIDs`
+3. ler os guias em `MD/seeds`
 4. ler os planos em `MD/implementacoes` conforme o sistema em foco
 
 Atalhos:
 
-- actors: [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
-- itens: [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
-- research: [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-research.md)
+- actors: [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-actors.md)
+- itens: [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens.md)
+- research: [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-research.md)
 - builder: [guia-registro-builder.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-builder.md)
 - skills e craft: [guia-registro-skills-craft.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-skills-craft.md)
 - itens com container: [guia-registro-itens-com-container.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens-com-container.md)
-- documentacao: [guia-registro-documentacao.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-documentacao.md)
-- container CID: [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
+- documentacao: [guia-registro-documentacao.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-documentacao.md)
+- container CID: [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/seeds/guia-cid-container-actors.md)
 - mapas procedurais: [modulo-mapas-procedurais.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-mapas-procedurais.md)
 - schema de mapas: [mapa-procedural-schema.md](/D:/JS-Projects/Youtube/MD/implementacoes/mapa-procedural-schema.md)
 - catalogo de assets: [mapa-procedural-asset-families.md](/D:/JS-Projects/Youtube/MD/implementacoes/mapa-procedural-asset-families.md)
@@ -115,7 +112,6 @@ Atalhos:
 - respawn por instancia: [plano-tecnico-respawn-inimigos-por-instancia.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-respawn-inimigos-por-instancia.md)
 - sistema de status: [plano-sistema-de-status.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-sistema-de-status.md)
 - contrato tecnico: [status-contrato-tecnico.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-contrato-tecnico.md)
-- checklist temporario: [status-checklist-temporario.md](/D:/JS-Projects/Youtube/MD/status-checklist-temporario.md)
 - imunidade: [status-imunidade.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-imunidade.md)
 - doenca: [status-doenca.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-doenca.md)
 - debuffs: [status-debuffs.md](/D:/JS-Projects/Youtube/MD/implementacoes/status-debuffs.md)
@@ -286,7 +282,7 @@ Observacoes importantes:
 
 Documentos de apoio:
 
-- [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-actors.md)
+- [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-actors.md)
 - [estudo-arquitetural-actors-spawn.md](/D:/JS-Projects/Youtube/MD/implementacoes/estudo-arquitetural-actors-spawn.md)
 
 ---
@@ -319,7 +315,7 @@ No contexto de actors:
 
 Documento principal:
 
-- [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-cid-container-actors.md)
+- [guia-cid-container-actors.md](/D:/JS-Projects/Youtube/MD/seeds/guia-cid-container-actors.md)
 
 ---
 
@@ -346,7 +342,7 @@ Uso pratico:
 
 Documento principal:
 
-- [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-itens.md)
+- [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens.md)
 - [guia-registro-itens-com-container.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens-com-container.md)
 
 ---
@@ -588,7 +584,7 @@ Quando a mudanca for local de um sistema especifico, atualizar tambem o document
 
 Hoje a pasta `MD` cobre principalmente:
 
-- cadastro de actors, itens e CIDs
+- cadastro de actors, itens e seeds
 - arquitetura nova de actors
 - modulo de research
 - sistema de fome

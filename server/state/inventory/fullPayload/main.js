@@ -2,6 +2,7 @@
 
 const { buildEquipmentFull } = require("../../equipment/fullPayload");
 const { getRuntime } = require("../../runtime/store");
+const { hasCapability } = require("../../../service/researchService");
 const { computeCarryWeight } = require("../weight");
 
 function uniq(arr) {
@@ -29,6 +30,32 @@ function hasRestoreHungerEffect(def) {
   });
 }
 
+function hasMedicalEffect(def) {
+  const components = Array.isArray(def?.components) ? def.components : [];
+  return components.some((component) => {
+    const type = String(component?.componentType ?? component?.component_type ?? "").toUpperCase();
+    if (type !== "EDIBLE" && type !== "CONSUMABLE") return false;
+    const data = component?.dataJson ?? component?.data_json ?? null;
+    const effects = Array.isArray(data?.effects) ? data.effects : [];
+      return effects.some((effect) => {
+        const effectType = String(effect?.type ?? "").toUpperCase();
+        return (
+          effectType === "RESTORE_HP" ||
+          effectType === "RESTORE_HP_PCT" ||
+          effectType === "RESTORE_STAMINA" ||
+          effectType === "RESTORE_IMMUNITY" ||
+          effectType === "REDUCE_FEVER"
+        );
+      });
+  });
+}
+
+function isMedicalUseUnlocked(def, research) {
+  const code = String(def?.code ?? "").trim().toUpperCase();
+  if (!code) return false;
+  return hasCapability(research, `item.medicate:${code}`);
+}
+
 function isFoodDef(def) {
   const category = String(def?.category ?? "").toUpperCase();
   if (category !== "FOOD" && category !== "CONSUMABLE") {
@@ -37,7 +64,7 @@ function isFoodDef(def) {
   return hasRestoreHungerEffect(def) || category === "FOOD";
 }
 
-function buildItemDefPayload(def) {
+function buildItemDefPayload(def, research = null) {
   return {
     id: String(def.id),
     code: def.code,
@@ -47,6 +74,7 @@ function buildItemDefPayload(def) {
     weight: def.weight ?? def.unit_weight ?? null,
     stackMax: def.stackMax ?? def.stack_max ?? 1,
     canEat: isFoodDef(def),
+    canMedicate: hasMedicalEffect(def) && isMedicalUseUnlocked(def, research),
     components: Array.isArray(def.components)
       ? stableSortBy(def.components, (c) => String(c.id)).map((c) => ({
           id: String(c.id),
@@ -102,7 +130,7 @@ function getCraftTimeForSkill(craftDef, baseCraftTimeMs, craftingSkillLevel) {
   return Math.max(1000, reduced);
 }
 
-function buildCraftPayload(craftDef, craftingSkillLevel) {
+function buildCraftPayload(craftDef, craftingSkillLevel, research = null) {
   const recipeItems = Array.isArray(craftDef?.recipeItems) ? craftDef.recipeItems : [];
   const baseCraftTimeMs = readNumber(readModelValue(craftDef, "craftTimeMs", "craft_time_ms"), 0);
   const effectiveCraftTimeMs = getCraftTimeForSkill(craftDef, baseCraftTimeMs, craftingSkillLevel);
@@ -146,7 +174,7 @@ function buildCraftPayload(craftDef, craftingSkillLevel) {
           name: craftDef.requiredResearchDef.name,
         }
       : null,
-    outputItemDef: craftDef.outputItemDef ? buildItemDefPayload(craftDef.outputItemDef) : null,
+    outputItemDef: craftDef.outputItemDef ? buildItemDefPayload(craftDef.outputItemDef, research) : null,
     recipeItems: stableSortBy(recipeItems, (item) =>
       `${readNumber(readModelValue(item, "sortOrder", "sort_order"), 0)}:${item.id}`
     ).map((item) => ({
@@ -155,12 +183,12 @@ function buildCraftPayload(craftDef, craftingSkillLevel) {
       quantity: readNumber(item.quantity, 1),
       role: item.role ?? "INPUT",
       sortOrder: readNumber(readModelValue(item, "sortOrder", "sort_order"), 0),
-      itemDef: item.itemDef ? buildItemDefPayload(item.itemDef) : null,
+      itemDef: item.itemDef ? buildItemDefPayload(item.itemDef, research) : null,
     })),
   };
 }
 
-function buildCraftJobPayload(job) {
+function buildCraftJobPayload(job, research = null) {
   const craftDef = job?.craftDef ?? null;
   const craftTimeMs = readNumber(
     readModelValue(job, "craftTimeMs", "craft_time_ms"),
@@ -176,7 +204,7 @@ function buildCraftJobPayload(job) {
     progressMs: readNumber(readModelValue(job, "currentProgressMs", "current_progress_ms"), 0),
     craftTimeMs,
     outputQty: craftDef == null ? 1 : readNumber(readModelValue(craftDef, "outputQty", "output_qty"), 1),
-    outputItemDef: craftDef?.outputItemDef ? buildItemDefPayload(craftDef.outputItemDef) : null,
+    outputItemDef: craftDef?.outputItemDef ? buildItemDefPayload(craftDef.outputItemDef, research) : null,
     startedAtMs:
       readModelValue(job, "startedAtMs", "started_at_ms") == null
         ? null
@@ -201,9 +229,9 @@ function buildCraftSection(invRt, research) {
 
   return {
     available: stableSortBy(available, (craftDef) => String(craftDef.code ?? craftDef.id)).map(
-      (craftDef) => buildCraftPayload(craftDef, craftingSkillLevel)
+      (craftDef) => buildCraftPayload(craftDef, craftingSkillLevel, research)
     ),
-    activeJobs: stableSortBy(activeJobs, (job) => String(job.id)).map(buildCraftJobPayload),
+    activeJobs: stableSortBy(activeJobs, (job) => String(job.id)).map((job) => buildCraftJobPayload(job, research)),
     skills: {
       crafting: invRt?.skills?.SKILL_CRAFTING ?? {
         skillCode: "SKILL_CRAFTING",
@@ -371,8 +399,10 @@ function buildInventoryFull(invRt, equipmentRt = null) {
     )
     .filter(Boolean);
 
+  const research = getRuntime(invRt?.userId)?.research ?? invRt?.research ?? null;
+
   const itemDefsPayload = stableSortBy(itemDefs, (d) => String(d.id)).map((d) => ({
-    ...buildItemDefPayload(d),
+    ...buildItemDefPayload(d, research),
   }));
 
   const heldStatePayload = heldState
@@ -397,7 +427,6 @@ function buildInventoryFull(invRt, equipmentRt = null) {
     : null;
 
   const equipment = equipmentRt && equipmentRt.userId ? buildEquipmentFull(equipmentRt, invRt) : null;
-  const research = getRuntime(invRt?.userId)?.research ?? invRt?.research ?? null;
   const equipmentSlotsForLog = Object.entries(equipmentRt?.equipmentBySlotCode ?? {}).map(
     ([slotCode, equipped]) => ({
       slotCode,

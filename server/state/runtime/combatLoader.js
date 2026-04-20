@@ -2,6 +2,7 @@
 const db = require("../../models");
 const { getTimeFactor } = require("../../service/worldClockService");
 const { resolveHungerDrainPerSecond, resolveThirstDrainPerSecond } = require("../movement/stamina");
+const { resolveSleepDrainPerSecond } = require("../movement/status");
 const { getUserStatsSupport } = require("./statsSchema");
 
 function readStrictNumber(value, fieldName, userId) {
@@ -32,6 +33,16 @@ async function loadPlayerCombatStats(userId) {
       "hunger_current",
       "hunger_max",
       ...(support.supportsThirst ? ["thirst_current", "thirst_max"] : []),
+      ...(support.supportsStatus
+        ? [
+            "immunity_current",
+            "immunity_max",
+            "disease_level",
+            "disease_severity",
+            "sleep_current",
+            "sleep_max",
+          ]
+        : []),
       "attack_power",
       "defense",
       "attack_speed",
@@ -54,6 +65,16 @@ async function loadPlayerCombatStats(userId) {
   const persistedThirstCurrent = support.supportsThirst
     ? Number(stats.thirst_current ?? thirstMax) || thirstMax
     : thirstMax;
+  const immunityMax = support.supportsStatus ? Number(stats.immunity_max ?? 100) || 100 : 100;
+  const persistedImmunityCurrent = support.supportsStatus
+    ? Number(stats.immunity_current ?? immunityMax) || immunityMax
+    : immunityMax;
+  const diseaseLevel = support.supportsStatus ? Number(stats.disease_level ?? 100) || 100 : 100;
+  const diseaseSeverity = support.supportsStatus ? Number(stats.disease_severity ?? 0) || 0 : 0;
+  const sleepMax = support.supportsStatus ? 100 : 100;
+  const persistedSleepCurrent = support.supportsStatus
+    ? Number(stats.sleep_current ?? sleepMax) || sleepMax
+    : sleepMax;
   const attackPower = readStrictNumber(stats.attack_power, "attack_power", userId);
   const defense = readStrictNumber(stats.defense, "defense", userId);
   const attackSpeed = readStrictNumber(stats.attack_speed, "attack_speed", userId);
@@ -69,6 +90,14 @@ async function loadPlayerCombatStats(userId) {
     : 0;
   const thirstCurrent = Math.max(0, Math.min(thirstMax, persistedThirstCurrent - offlineThirstDrain));
   const thirstWasAdjusted = support.supportsThirst && Math.abs(thirstCurrent - persistedThirstCurrent) > 1e-9;
+  const immunityCurrent = Math.max(100, Math.min(immunityMax, persistedImmunityCurrent));
+  const immunityWasAdjusted = support.supportsStatus && Math.abs(immunityCurrent - persistedImmunityCurrent) > 1e-9;
+  const sleepDrainPerSecond = support.supportsStatus
+    ? resolveSleepDrainPerSecond(sleepMax, timeFactor)
+    : 0;
+  const nextSleepCurrent = Math.max(0, Math.min(sleepMax, persistedSleepCurrent - sleepDrainPerSecond * elapsedSeconds));
+  const sleepWasAdjusted =
+    support.supportsStatus && Math.abs(nextSleepCurrent - persistedSleepCurrent) > 1e-9;
 
   return {
     hpMax,
@@ -82,6 +111,15 @@ async function loadPlayerCombatStats(userId) {
     thirstMax,
     thirstCurrent,
     thirstWasAdjusted,
+    immunityCurrent,
+    immunityMax,
+    immunityWasAdjusted,
+    diseaseLevel,
+    diseaseSeverity,
+    sleepCurrent: nextSleepCurrent,
+    sleepMax,
+    sleepWasAdjusted,
+    statsUpdatedAtMs,
     attackPower,
     defense,
     attackSpeed,

@@ -18,7 +18,7 @@ A regra principal e simples:
 - `fome`: base de sobrevivencia e regeneracao
 - `sono`: multiplicador de XP por atividade
 - `imunidade`: resistencia, perda e recuperacao
-- `doenca`: progressao por nivel e severidade
+- `fever`: progressao por barra unica e severidade
 - `debuffs`: penalidades progressivas
 - `economia_medica`: relevancia do medico e cura especializada
 
@@ -66,18 +66,17 @@ Saida esperada:
 
 - imunidade funcional em runtime e persistencia
 
-### Fase 4 - Doenca
+### Fase 4 - Fever
 
 Objetivo:
 
-- implementar nivel 1-10
-- distinguir febre e inflamacao
+- implementar barra unica de `fever`
 - aplicar progresso/regresso por tick
-- ligar severidade e imunidade ao ciclo da doenca
+- ligar severidade e imunidade ao ciclo da febre
 
 Saida esperada:
 
-- doenca evoluindo de forma autoritativa
+- fever evoluindo de forma autoritativa
 
 ### Fase 5 - Debuffs
 
@@ -131,8 +130,8 @@ Saida esperada:
 ## Dependencias Principais
 
 - imunidade depende de clima, fome e HP
-- doenca depende de imunidade e tick autoritativo
-- debuffs dependem do nivel da doenca
+- fever depende de imunidade e tick autoritativo
+- debuffs dependem do nivel da fever
 - sono depende do sistema de XP por atividade
 - economia depende da existencia de doenca e recuperacao
 
@@ -150,7 +149,6 @@ Saida esperada:
 
 ## Documentos Relacionados
 
-- [Checklist temporario](./status-checklist-temporario.md)
 - [Contrato tecnico](./status-contrato-tecnico.md)
 - [Imunidade](./status-imunidade.md)
 - [Doenca](./status-doenca.md)

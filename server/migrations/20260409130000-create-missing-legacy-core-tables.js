@@ -441,7 +441,7 @@ module.exports = {
           allowNull: true,
         },
         category: {
-          type: Sequelize.ENUM("CONSUMABLE", "FOOD", "EQUIP", "AMMO", "MATERIAL", "QUEST", "CONTAINER", "MISC"),
+          type: Sequelize.ENUM("CONSUMABLE", "FOOD", "EQUIP", "AMMO", "MATERIAL", "QUEST", "CONTAINER", "MISC", "MEDICINE"),
           allowNull: false,
           defaultValue: "MISC",
         },

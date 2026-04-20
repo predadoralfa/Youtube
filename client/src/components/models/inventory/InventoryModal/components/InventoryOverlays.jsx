@@ -12,11 +12,13 @@ export function InventoryOverlays({
   submitSplit,
   openSplitModal,
   handleContextEat,
+  handleContextMedicate,
   handleContextDrop,
   handleContextRemove,
 }) {
   const slot = contextMenu?.slot ?? null;
   const slotItem = slot?.itemDef ?? slot?.item ?? null;
+  const canMedicateSlot = Boolean(slot?.canMedicate || slotItem?.canMedicate);
   const canEatSlot = Boolean(
     slot?.canEat ||
       slotItem?.canEat ||
@@ -61,6 +63,11 @@ export function InventoryOverlays({
               e.stopPropagation?.();
             }}
           >
+            {canMedicateSlot ? (
+              <button type="button" className="inv-context-menu-item inv-context-menu-item--accent" onClick={handleContextMedicate}>
+                Medicate
+              </button>
+            ) : null}
             {canEatSlot ? (
               <button type="button" className="inv-context-menu-item inv-context-menu-item--accent" onClick={handleContextEat}>
                 Eat

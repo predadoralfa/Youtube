@@ -20,7 +20,7 @@ Este contrato define:
 
 - toda decisao de status e autoritativa no backend
 - o cliente apenas renderiza o estado confirmado
-- nenhum calculo de imunidade, doenca ou debuff deve depender do front
+- nenhum calculo de imunidade, fever ou debuff deve depender do front
 
 ### 2. `ga_user_stats` continua sendo o contrato persistente principal
 
@@ -84,16 +84,15 @@ Status persistente nao deve ser armazenado como verdade primaria em `ga_user_run
 
 - `immunity_current`
 - `immunity_max`
-- `disease_level`
-- `disease_severity`
+- `disease_level` e `disease_severity` funcionam como armazenamento interno temporario da fever
 - `sleep_current`
 - `sleep_max`
 
 ### Regra dos campos
 
 - `immunity_current` e `immunity_max` representam a resistencia atual do jogador
-- `disease_level` representa o nivel unico de 1 a 10
-- `disease_severity` representa a intensidade do evento em faixa `0` a `1`
+- `disease_level` representa a barra atual da fever em faixa `0` a `100`
+- `disease_severity` representa a intensidade da fever em faixa `0` a `1`
 - `sleep_current` e `sleep_max` representam o estado de sono como percentual de bonus/penalidade
 
 ### Tipos esperados
@@ -102,7 +101,7 @@ Status persistente nao deve ser armazenado como verdade primaria em `ga_user_run
 - limites logicos continuam sendo validados no servidor
 - `immunity_max` deve permanecer no intervalo `100..500`
 - `sleep_current` e `sleep_max` devem permanecer no intervalo `0..100`
-- `disease_level` deve permanecer no intervalo `0..10`
+- `disease_level` deve permanecer no intervalo `0..100`
 
 ---
 
@@ -118,9 +117,18 @@ runtime.status = {
     current,
     max
   },
-  disease: {
-    level,
+  fever: {
+    current,
     severity
+  },
+  debuffs: {
+    active,
+    tier,
+    tempoMultiplier,
+    staminaRegenMultiplier
+  },
+  medical: {
+    cooldowns
   },
   sleep: {
     current,
@@ -130,6 +138,26 @@ runtime.status = {
 ```
 
 O runtime tambem pode expor espelhos simples para facilitar uso interno, mas a fonte primária continua sendo `runtime.status`.
+
+Regras de dominio fechadas:
+
+- `sleep` controla bonus e penalidade de XP, nao resistencia a fever
+- `immunity` controla resistencia e recuperacao da fever
+- fome abaixo de `10%` reduz imunidade
+- HP abaixo de `90%` reduz imunidade
+- sede abaixo de `10%` reduz imunidade
+- fome ou sede em `0%` aceleram fortemente a perda de imunidade
+- a unica doenca ativa nesta fase e `fever`, hardcoded no servidor
+- o front-end deve receber o nome em ingles: `fever`
+- `debuffs` e um espelho derivado da febre para multiplicadores de tempo
+- a fever e resolvida por varreduras periodicas do servidor
+- a varredura atual acontece a cada `30` minutos de jogo
+- o tratamento medico base de `HERBS` cura `5%` de HP e entra em cooldown de `1` hora de jogo
+- `sleep` aplica multiplicador de XP entre `-10%` e `+20%`, com bonus acima de `30%`
+- qualquer ganho de XP deve passar pelo mesmo caminho central de ajuste por sono
+- a barra de sono vai de `0` a `100`
+- fora da cama, a barra recua ao longo de `24h` de jogo
+- dormindo, a barra recupera ate `100` em `3h` de jogo
 
 ---
 
@@ -143,17 +171,16 @@ O tick de status precisa consumir:
 - estado atual do jogador
 - hp atual
 - fome atual
+- sleep atual
 - clima ou severidade de clima
-- nivel atual da doenca
-- estado de sono
+- barra atual da fever
 
 ### Saida
 
 O tick pode:
 
 - alterar imunidade
-- alterar nivel ou severidade da doenca
-- alterar sono
+- alterar nivel ou severidade da fever
 - marcar `dirtyStats`
 
 ### Regras de escrita
@@ -179,6 +206,7 @@ O tick pode:
 - adaptador de clima por instancia ou local
 - leitura de status do usuario dentro do carregamento de runtime
 - possivel loader especifico de status, se a implementacao preferir separar do combate
+- leitura e escrita de fever hardcoded enquanto nao houver outras doencas
 
 ### Ponto de escrita
 
@@ -208,7 +236,7 @@ O tick pode:
 
 - balanceamento final
 - formulas finais de clima
-- UI nova de status
+- polimento final da UI de status
 - efeitos visuais de doenca
 - sistema economico do medico
 
@@ -219,8 +247,7 @@ O tick pode:
 Ao terminar este contrato, a implementacao seguinte pode seguir sem ambiguidade:
 
 - imunidade fica no caminho de `ga_user_stats`
-- doenca usa o mesmo runtime/persistencia padrao
+- fever usa o mesmo runtime/persistencia padrao
 - sleep entra como modificador de XP e estado persistente
 - o servidor continua como unica fonte de verdade
 - o checklist pode avançar para a implementacao do nucleo de imunidade
-

@@ -93,6 +93,78 @@ export function readEntityVitals(entity) {
   };
 }
 
+export function readEntityStatus(entity) {
+  const status = entity?.status ?? null;
+
+  const immunityCurrent =
+    status?.immunity?.current ??
+    entity?.immunityCurrent ??
+    entity?.immunity_current ??
+    100;
+  const immunityMax =
+    status?.immunity?.max ??
+    entity?.immunityMax ??
+    entity?.immunity_max ??
+    100;
+
+  const feverCurrent =
+    status?.fever?.current ??
+    status?.disease?.current ??
+    entity?.feverCurrent ??
+    entity?.diseaseLevel ??
+    entity?.disease_level ??
+    100;
+  const feverMax = 100;
+  const feverSeverity =
+    status?.fever?.severity ??
+    status?.disease?.severity ??
+    entity?.feverSeverity ??
+    entity?.diseaseSeverity ??
+    entity?.disease_severity ??
+    Math.max(0, Math.min(1, 1 - Number(feverCurrent) / feverMax));
+
+  const sleepCurrent =
+    status?.sleep?.current ??
+    entity?.sleepCurrent ??
+    entity?.sleep_current ??
+    100;
+  const sleepMax =
+    status?.sleep?.max ??
+    entity?.sleepMax ??
+    entity?.sleep_max ??
+    100;
+
+  const debuffs = status?.debuffs ?? null;
+  const resolvedFeverTier =
+    debuffs?.tier ??
+    (Number(feverCurrent) >= feverMax
+      ? 0
+      : Math.max(1, Math.min(10, Math.ceil(Math.max(0, Math.min(1, Number(feverSeverity))) * 10))));
+  const tempoMultiplier =
+    debuffs?.tempoMultiplier ??
+    (resolvedFeverTier <= 0
+      ? 1
+      : resolvedFeverTier <= 5
+        ? 1 + resolvedFeverTier * 0.1
+        : 1 + 5 * 0.1 + (resolvedFeverTier - 5) * 0.15);
+
+  return {
+    immunityCurrent: toDisplayInt(immunityCurrent, 100),
+    immunityMax: toDisplayInt(immunityMax, 100),
+    feverCurrent: toDisplayInt(feverCurrent, 100),
+    feverMax,
+    feverSeverity: Math.max(0, Math.min(1, Number(feverSeverity))),
+    feverTier: resolvedFeverTier,
+    feverTempoMultiplier: Number.isFinite(Number(tempoMultiplier)) ? Number(tempoMultiplier) : 1,
+    feverStaminaRegenMultiplier:
+      debuffs?.staminaRegenMultiplier ??
+      (resolvedFeverTier > 0 ? 1 / (Number.isFinite(Number(tempoMultiplier)) ? Number(tempoMultiplier) : 1) : 1),
+    sleepCurrent: toDisplayInt(sleepCurrent, 100),
+    sleepMax: toDisplayInt(sleepMax, 100),
+    debuffs,
+  };
+}
+
 export function isEnemyEntity(entity) {
   if (!entity) return false;
   if (entity.kind === "ENEMY") return true;

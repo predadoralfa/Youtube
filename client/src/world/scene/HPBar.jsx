@@ -47,7 +47,23 @@ function VitalRow({
   const percent = safeMax > 0 ? clamp01(safeCurrent / safeMax) : 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {label ? (
+        <div
+          style={{
+            color: "rgba(226, 232, 240, 0.88)",
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            lineHeight: 1,
+            paddingLeft: 2,
+          }}
+        >
+          {label}
+        </div>
+      ) : null}
+
       <div
         style={{
           position: "relative",
@@ -115,14 +131,20 @@ export function HPBar({
   hungerMax = null,
   thirstCurrent = null,
   thirstMax = null,
+  immunityCurrent = null,
+  immunityMax = null,
+  feverCurrent = null,
+  feverMax = null,
+  sleepCurrent = null,
+  sleepMax = null,
 
   // aparência
   width = 60,
-  hpHeight = 8,
-  staminaHeight = 6,
-  hungerHeight = 6,
-  thirstHeight = 6,
-  gap = 4,
+  hpHeight = 14,
+  staminaHeight = 10,
+  hungerHeight = 10,
+  thirstHeight = 10,
+  gap = 6,
 
   // modo
   mode = "world", // "world" | "hud"
@@ -130,13 +152,22 @@ export function HPBar({
   showStaminaText = false,
   showHungerText = false,
   showThirstText = false,
+  showImmunityText = false,
+  showFeverText = false,
+  showSleepText = false,
   showStamina = false,
   showHunger = false,
   showThirst = false,
+  showImmunity = false,
+  showFever = false,
+  showSleep = false,
   hpTextFontSize = "11px",
   staminaTextFontSize = "10px",
   hungerTextFontSize = "10px",
   thirstTextFontSize = "10px",
+  immunityTextFontSize = "10px",
+  feverTextFontSize = "10px",
+  sleepTextFontSize = "10px",
 
   // cores
   hpColorHigh = "#ef4444",
@@ -144,6 +175,9 @@ export function HPBar({
   staminaColor = "#facc15",
   hungerColor = "#38bdf8",
   thirstColor = "#22d3ee",
+  immunityColor = "#60a5fa",
+  feverColor = "#fb7185",
+  sleepColor = "#34d399",
   trackColor = "#1a1a1a",
   borderColor = "#444",
   textColor = "#ffffff",
@@ -173,6 +207,21 @@ export function HPBar({
     thirstCurrent != null &&
     thirstMax != null &&
     Number(thirstMax) > 0;
+  const hasImmunity =
+    showImmunity &&
+    immunityCurrent != null &&
+    immunityMax != null &&
+    Number(immunityMax) > 0;
+  const hasFever =
+    showFever &&
+    feverCurrent != null &&
+    feverMax != null &&
+    Number(feverMax) > 0;
+  const hasSleep =
+    showSleep &&
+    sleepCurrent != null &&
+    sleepMax != null &&
+    Number(sleepMax) > 0;
 
   const wrapperStyle =
     mode === "hud"
@@ -208,7 +257,7 @@ export function HPBar({
         showText={showHpText}
         textColor={textColor}
         fontSize={hpTextFontSize}
-        label=""
+        label="HP"
       />
 
       {hasStamina ? (
@@ -223,7 +272,7 @@ export function HPBar({
           showText={showStaminaText}
           textColor={textColor}
           fontSize={staminaTextFontSize}
-          label=""
+          label="Stamina"
         />
       ) : null}
 
@@ -239,7 +288,7 @@ export function HPBar({
           showText={showHungerText}
           textColor={textColor}
           fontSize={hungerTextFontSize}
-          label=""
+          label="Hunger"
         />
       ) : null}
 
@@ -255,7 +304,55 @@ export function HPBar({
           showText={showThirstText}
           textColor={textColor}
           fontSize={thirstTextFontSize}
-          label=""
+          label="Thirst"
+        />
+      ) : null}
+
+      {hasImmunity ? (
+        <VitalRow
+          width={`${width}px`}
+          height={thirstHeight + 2}
+          current={immunityCurrent}
+          max={immunityMax}
+          fillColor={immunityColor}
+          backgroundColor={trackColor}
+          borderColor={borderColor}
+          showText={showImmunityText}
+          textColor={textColor}
+          fontSize={immunityTextFontSize}
+          label="IMMUNITY"
+        />
+      ) : null}
+
+      {hasFever ? (
+        <VitalRow
+          width={`${width}px`}
+          height={thirstHeight + 2}
+          current={feverCurrent}
+          max={feverMax}
+          fillColor={feverColor}
+          backgroundColor={trackColor}
+          borderColor={borderColor}
+          showText={showFeverText}
+          textColor={textColor}
+          fontSize={feverTextFontSize}
+          label="FEVER"
+        />
+      ) : null}
+
+      {hasSleep ? (
+        <VitalRow
+          width={`${width}px`}
+          height={thirstHeight + 2}
+          current={sleepCurrent}
+          max={sleepMax}
+          fillColor={sleepColor}
+          backgroundColor={trackColor}
+          borderColor={borderColor}
+          showText={showSleepText}
+          textColor={textColor}
+          fontSize={sleepTextFontSize}
+          label="SLEEP"
         />
       ) : null}
     </div>

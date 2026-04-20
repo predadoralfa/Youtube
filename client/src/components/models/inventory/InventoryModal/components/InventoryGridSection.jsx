@@ -76,6 +76,7 @@ export function InventoryGridSection({
                           isFoodItem(inventoryIndex, instanceId)
                       )
                     : false;
+                const canMedicate = Boolean(itemDef?.canMedicate);
                 const hoverLabel = instanceId != null ? itemName || formatContainerTitle(container, role) : null;
 
                 const isHeldSource =
@@ -136,7 +137,7 @@ export function InventoryGridSection({
                     onMouseDown={(event) => {
                       if (
                         openContextMenuFromMouseDown(
-                          { containerId, slotIndex, itemInstanceId: instanceId, qty, itemName, itemDef, canEat },
+                          { containerId, slotIndex, itemInstanceId: instanceId, qty, itemName, itemDef, canEat, canMedicate },
                           event
                         )
                       ) {
@@ -150,7 +151,7 @@ export function InventoryGridSection({
                         return;
                       }
                         openContextMenu(
-                          { containerId, slotIndex, itemInstanceId: instanceId, qty, itemName, itemDef, canEat },
+                          { containerId, slotIndex, itemInstanceId: instanceId, qty, itemName, itemDef, canEat, canMedicate },
                           event
                         );
                       }}

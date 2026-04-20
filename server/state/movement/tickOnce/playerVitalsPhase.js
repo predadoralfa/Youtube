@@ -10,6 +10,13 @@ const {
   applyThirstTick,
   shouldQueueStaminaPersist,
 } = require("../stamina");
+const {
+  applyImmunityTick,
+  applyFeverTick,
+  applySleepTick,
+  resolveClimateStressFactor,
+  resolveFeverDebuffProfile,
+} = require("../status");
 const { emitDeltaToInterest } = require("../emit");
 const { ensureInventoryLoaded } = require("../../inventory/loader");
 const { ensureEquipmentLoaded } = require("../../equipment/loader");
@@ -22,11 +29,40 @@ async function processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor) {
     if (!rt) continue;
     if (rt.connectionState === "DISCONNECTED_PENDING" || rt.connectionState === "OFFLINE") continue;
 
-    const staminaResult = applyStaminaTick(rt, t, { movedReal: false });
     const hungerResult = applyHungerTick(rt, t, { timeFactor: worldTimeFactor });
     const thirstResult = rt?.thirstSupported
       ? applyThirstTick(rt, t, { timeFactor: worldTimeFactor })
       : { changed: false };
+    const immunityResult = applyImmunityTick(rt, t, {
+      timeFactor: worldTimeFactor,
+      climateStressFactor: resolveClimateStressFactor(rt.instanceId),
+      hungerRatio: (rt?.hungerCurrent ?? rt?.stats?.hungerCurrent ?? 100) /
+        Math.max(1, rt?.hungerMax ?? rt?.stats?.hungerMax ?? 100),
+      thirstRatio: rt?.thirstSupported
+        ? (rt?.thirstCurrent ?? rt?.stats?.thirstCurrent ?? 100) /
+          Math.max(1, rt?.thirstMax ?? rt?.stats?.thirstMax ?? 100)
+        : 1,
+      hpRatio: (rt?.hpCurrent ?? rt?.stats?.hpCurrent ?? 100) /
+        Math.max(1, rt?.hpMax ?? rt?.stats?.hpMax ?? 100),
+    });
+    const feverDebuff = resolveFeverDebuffProfile(
+      rt?.status?.fever?.current ?? rt?.diseaseLevel ?? rt?.stats?.diseaseLevel ?? 100,
+      rt?.status?.fever?.severity ?? rt?.diseaseSeverity ?? rt?.stats?.diseaseSeverity ?? 0
+    );
+    const feverResult = applyFeverTick(rt, t, {
+      timeFactor: worldTimeFactor,
+      immunityCurrent: immunityResult.immunityCurrent,
+      immunityMax: immunityResult.immunityMax,
+    });
+    const sleepResult = applySleepTick(rt, t, {
+      timeFactor: worldTimeFactor,
+      sleeping: rt?.sleepLock?.active === true,
+    });
+    const staminaResult = applyStaminaTick(rt, t, {
+      movedReal: false,
+      regenMultiplier: feverDebuff.staminaRegenMultiplier,
+      hpRegenMultiplier: feverDebuff.staminaRegenMultiplier,
+    });
     const autoFoodResult = await processAutoFoodTick(rt, t);
     const researchResult = await processResearchTick(rt, t, 50);
 
@@ -40,8 +76,11 @@ async function processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor) {
       !staminaResult.changed &&
       !hungerResult.changed &&
       !thirstResult.changed &&
-      !autoFoodResult.changed &&
-      !researchResult.changed
+        !immunityResult.changed &&
+        !feverResult.changed &&
+        !sleepResult.changed &&
+        !autoFoodResult.changed &&
+        !researchResult.changed
     ) {
       continue;
     }
@@ -62,6 +101,7 @@ async function processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor) {
         rev: rt.rev ?? 0,
         chunk: rt.chunk ?? computeChunkFromPos(rt.pos),
         vitals: delta.vitals,
+        status: delta.status,
       });
 
       if (autoFoodResult.inventoryChanged) {
@@ -80,6 +120,18 @@ async function processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor) {
     }
 
     if (staminaState.changed) {
+      markStatsDirty(rt.userId, t);
+    }
+
+    if (immunityResult.changed) {
+      markStatsDirty(rt.userId, t);
+    }
+
+    if (feverResult.changed) {
+      markStatsDirty(rt.userId, t);
+    }
+
+    if (sleepResult.changed) {
       markStatsDirty(rt.userId, t);
     }
   }

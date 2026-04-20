@@ -1,6 +1,8 @@
 "use strict";
 
 const db = require("../models");
+const { getRuntime } = require("../state/runtimeStore");
+const { resolveSleepXpMultiplierBasisPoints } = require("../state/movement/status");
 
 function toNumber(value, fallback = 0) {
   const n = Number(value);
@@ -101,6 +103,30 @@ function buildRequiredXpByLevel(skillDef) {
   );
 }
 
+// Central path for XP modifiers. Any XP award should pass through here so sleep
+// is applied consistently across the server.
+function resolveXpModifiers(userId, xpAmount) {
+  const runtime = getRuntime(userId);
+  const sleepCurrent =
+    runtime?.status?.sleep?.current ??
+    runtime?.sleepCurrent ??
+    runtime?.stats?.sleepCurrent ??
+    100;
+  const sleepMax =
+    runtime?.status?.sleep?.max ??
+    runtime?.sleepMax ??
+    runtime?.stats?.sleepMax ??
+    100;
+  const multiplierBps = resolveSleepXpMultiplierBasisPoints(sleepCurrent, sleepMax);
+  const baseXp = toBigInt(xpAmount, 0n);
+  if (baseXp <= 0n) return { xp: 0n, multiplierBps };
+  const adjustedXp = (baseXp * BigInt(multiplierBps) + 5000n) / 10000n;
+  return {
+    xp: adjustedXp,
+    multiplierBps,
+  };
+}
+
 async function ensureUserSkill(userId, skillDefId, tx) {
   const [row] = await db.GaUserSkill.findOrCreate({
     where: {
@@ -123,7 +149,8 @@ async function ensureUserSkill(userId, skillDefId, tx) {
 }
 
 async function awardSkillXp(userId, skillCode, xpAmount, tx) {
-  const xp = toBigInt(xpAmount, 0n);
+  const sleepAdjusted = resolveXpModifiers(userId, xpAmount);
+  const xp = sleepAdjusted.xp;
   if (xp <= 0n) return null;
 
   const skillDef = await loadSkillDef(skillCode, tx);
@@ -168,6 +195,7 @@ async function awardSkillXp(userId, skillCode, xpAmount, tx) {
     skillCode,
     skillName: skillDef.name,
     xpGained: xp.toString(),
+    sleepMultiplierBps: sleepAdjusted.multiplierBps,
     levelBefore,
     level: currentLevel,
     leveledUp: currentLevel > levelBefore,
@@ -179,6 +207,7 @@ async function awardSkillXp(userId, skillCode, xpAmount, tx) {
 
 module.exports = {
   awardSkillXp,
+  resolveXpModifiers,
   loadUserSkillSummary,
   loadUserSkillSummaryByCode,
   loadUserSkillSummaries,

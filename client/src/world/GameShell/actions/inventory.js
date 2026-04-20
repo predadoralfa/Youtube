@@ -37,6 +37,14 @@ export function useGameShellInventoryActions({ emitInventoryAction, emitEquipmen
     [emitInventoryAction]
   );
 
+  const onMedicateInventoryItem = useCallback(
+    ({ itemInstanceId }) =>
+      emitInventoryAction("inv:medicate", {
+        itemInstanceId: String(itemInstanceId),
+      }),
+    [emitInventoryAction]
+  );
+
   const onMoveInventoryItem = useCallback(
     ({ fromRole, fromSlotIndex, toRole, toSlotIndex, qty }) =>
       emitInventoryAction("inv:move", {
@@ -116,6 +124,7 @@ export function useGameShellInventoryActions({ emitInventoryAction, emitEquipmen
     onPlaceHeldItem,
     onSplitInventoryItem,
     onConsumeInventoryItem,
+    onMedicateInventoryItem,
     onMoveInventoryItem,
     onCancelHeldState,
     onSetAutoFoodMacro,

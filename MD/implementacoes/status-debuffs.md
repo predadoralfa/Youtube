@@ -22,6 +22,20 @@ O efeito principal e multiplicador de tempo:
 CooldownFinal = Base * (1 + k * Level)
 ```
 
+Em runtime, o contrato derivado exposto para o cliente e para os sistemas de gameplay usa:
+
+```cpp
+tempoMultiplier = 1 .. 2.25
+staminaRegenMultiplier = 1 / tempoMultiplier
+```
+
+### Fever ativa
+
+- `tier 1-5` -> +10% por nivel
+- `tier 6-10` -> +15% por nivel
+- quanto maior a severidade, maior o tempo de coleta, craft e combate
+- regeneracao de estamina recebe o inverso do multiplicador de tempo
+
 ---
 
 ## Valores
@@ -50,4 +64,3 @@ CooldownFinal = Base * (1 + k * Level)
 - evitar punicao extrema
 - manter impacto crescente
 - priorizar leitura clara do estado do jogador
-

@@ -237,4 +237,3 @@ Entao, em geral, nao precisa criar if novo no codigo para uma research comum.
 3. ligar aos prerequisitos
 4. seedar os unlocks e custos
 5. deixar o front apenas renderizar o payload
-

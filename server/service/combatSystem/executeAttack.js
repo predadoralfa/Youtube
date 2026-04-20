@@ -5,6 +5,7 @@ const { getRuntime, markStatsDirty } = require("../../state/runtimeStore");
 const { markEnemyDead } = require("../enemyRespawnService");
 const { COMBAT_BASE_COOLDOWN_MS } = require("../../config/combatConstants");
 const { consumeAttackerStamina } = require("./stamina");
+const { resolveFeverDebuffTempoMultiplier } = require("../../state/movement/status");
 
 async function executeAttack(params) {
   const {
@@ -35,7 +36,11 @@ async function executeAttack(params) {
     };
   }
 
-  const cooldownMs = COMBAT_BASE_COOLDOWN_MS / attackerAttackSpeed;
+  const feverTempoMultiplier = resolveFeverDebuffTempoMultiplier(
+    runtimeFeverCurrent(attackerId),
+    runtimeFeverSeverity(attackerId)
+  );
+  const cooldownMs = (COMBAT_BASE_COOLDOWN_MS / attackerAttackSpeed) * feverTempoMultiplier;
   const timeSinceLastAttack = nowMs - lastAttackAtMs;
 
   if (timeSinceLastAttack < cooldownMs) {
@@ -190,6 +195,26 @@ async function executeAttack(params) {
     staminaAfter: staminaConsumption.staminaAfter,
     staminaMax: staminaConsumption.staminaMax,
   };
+}
+
+function runtimeFeverCurrent(attackerId) {
+  const runtime = getRuntime(attackerId);
+  return Number(
+    runtime?.status?.fever?.current ??
+      runtime?.diseaseLevel ??
+      runtime?.stats?.diseaseLevel ??
+      100
+  );
+}
+
+function runtimeFeverSeverity(attackerId) {
+  const runtime = getRuntime(attackerId);
+  return Number(
+    runtime?.status?.fever?.severity ??
+      runtime?.diseaseSeverity ??
+      runtime?.stats?.diseaseSeverity ??
+      0
+  );
 }
 
 module.exports = {

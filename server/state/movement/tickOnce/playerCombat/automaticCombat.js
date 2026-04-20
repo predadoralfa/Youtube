@@ -4,6 +4,7 @@ const { COMBAT_BASE_COOLDOWN_MS } = require("../../../../config/combatConstants"
 const { getEnemy } = require("../../../enemies/enemiesRuntimeStore");
 const { loadPlayerCombatStats } = require("../../../runtime/combatLoader");
 const { executeServerSideAttack } = require("./executeServerSideAttack");
+const { resolveFeverDebuffTempoMultiplier } = require("../../status");
 
 async function processAutomaticCombat(io, rt, nowMs) {
   if (!rt.combat || rt.combat.state !== "ENGAGED") {
@@ -46,7 +47,11 @@ async function processAutomaticCombat(io, rt, nowMs) {
 
     const attackSpeed = Number(stats?.attackSpeed ?? rt.combat?.attackSpeed ?? 1) || 1;
     const lastAttackMs = Number(rt.combat?.lastAttackAtMs ?? 0);
-    const cooldownMs = COMBAT_BASE_COOLDOWN_MS / attackSpeed;
+    const feverTempoMultiplier = resolveFeverDebuffTempoMultiplier(
+      rt?.status?.fever?.current ?? rt?.diseaseLevel ?? rt?.stats?.diseaseLevel ?? 100,
+      rt?.status?.fever?.severity ?? rt?.diseaseSeverity ?? rt?.stats?.diseaseSeverity ?? 0
+    );
+    const cooldownMs = (COMBAT_BASE_COOLDOWN_MS / attackSpeed) * feverTempoMultiplier;
     const elapsedMs = Number(nowMs ?? Date.now()) - lastAttackMs;
     if (elapsedMs < cooldownMs) {
       return;

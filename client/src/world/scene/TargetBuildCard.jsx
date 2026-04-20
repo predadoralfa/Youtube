@@ -89,11 +89,11 @@ export function TargetBuildCard({
           gap: 4,
         }}
       >
-        <span>Owner: {safeOwnerName}</span>
+        {!isCompleted ? <span>Owner: {safeOwnerName}</span> : null}
         <span>Status: {safeStateLabel}</span>
       </div>
 
-      {safeRequirements.length > 0 ? (
+      {!isCompleted && safeRequirements.length > 0 ? (
         <div className="research-requirements">
           <div className="research-requirements-title">Requirements</div>
           {safeRequirements.map((requirement) => {
@@ -118,12 +118,14 @@ export function TargetBuildCard({
         </div>
       ) : null}
 
+      {!isCompleted ? (
         <div className="research-meta">
-        <span>{safeProgressLabel}</span>
-        <span>XP +{safeXpReward}</span>
-      </div>
+          <span>{safeProgressLabel}</span>
+          <span>XP +{safeXpReward}</span>
+        </div>
+      ) : null}
 
-      {buildState?.isRunning ? (
+      {!isCompleted && buildState?.isRunning ? (
         <div className="research-progress">
           <div className="research-progress-track" aria-hidden="true">
             <span style={{ width: `${Math.round(safeProgressRatio * 100)}%` }} />

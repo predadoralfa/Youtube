@@ -6,6 +6,7 @@ const { registerSplitEvent } = require("./events/split");
 const { registerDropEvent } = require("./events/drop");
 const { registerAutoFoodEvent } = require("./events/autoFood");
 const { registerConsumeEvent } = require("./events/consume");
+const { registerMedicalEvent } = require("./events/medical");
 const { registerCraftEvent } = require("./events/craft");
 
 function registerInventoryHandler(io, socket) {
@@ -15,6 +16,7 @@ function registerInventoryHandler(io, socket) {
   registerDropEvent(socket);
   registerAutoFoodEvent(socket);
   registerConsumeEvent(socket);
+  registerMedicalEvent(socket);
   registerCraftEvent(socket);
 }
 

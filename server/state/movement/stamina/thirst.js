@@ -20,7 +20,7 @@ function resolveThirstRegenMultiplier(thirstCurrent, thirstMax) {
   if (ratio <= 0) return 0;
   if (ratio <= 0.05) return 0.05;
   if (ratio < 0.15) return 0.5;
-  if (ratio < 0.35) return 0.8;
+  if (ratio < 0.3) return 0.8;
   return 1;
 }
 
@@ -87,13 +87,11 @@ function applyThirstTick(
 
   const thirstCurrent = readRuntimeThirstCurrent(rt);
   const thirstMax = Math.max(0, readRuntimeThirstMax(rt));
-  const nextThirstCurrent = clamp(thirstCurrent, 0, thirstMax);
+  const drainPerSecond = resolveThirstDrainPerSecond(thirstMax, timeFactor, worldHoursToEmpty);
+  const drain = drainPerSecond * dt;
+  const nextThirstCurrent = clamp(thirstCurrent - drain, 0, thirstMax);
   const thirstChanged = Math.abs(nextThirstCurrent - thirstCurrent) > 1e-9;
 
-  // A sede ainda nao deve ser consumida por tick enquanto nao existir
-  // uma fonte de agua no mundo. Quando rio/lago/cantil entrarem no jogo,
-  // este ponto deve voltar a aplicar desgaste/consumo real da barra.
-  // Mantemos o estado apenas para participar do calculo de regeneracao.
   if (thirstChanged || readRuntimeThirstMax(rt) !== thirstMax) {
     syncRuntimeThirst(rt, nextThirstCurrent, thirstMax);
   }
@@ -102,7 +100,7 @@ function applyThirstTick(
     changed: thirstChanged,
     thirstChanged,
     dt,
-    drain: 0,
+    drain,
     thirstCurrent: nextThirstCurrent,
     thirstMax,
   };

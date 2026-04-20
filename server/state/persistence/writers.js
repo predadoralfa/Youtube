@@ -92,6 +92,60 @@ function readRuntimeCombatField(rt, field, fallback = 0) {
           fallback,
         fallback
       );
+    case "immunityCurrent":
+      return toNum(
+        rt?.status?.immunity?.current ??
+          combat.immunityCurrent ??
+          stats.immunityCurrent ??
+          rt?.immunityCurrent ??
+          fallback,
+        fallback
+      );
+    case "immunityMax":
+      return toNum(
+        rt?.status?.immunity?.max ??
+          combat.immunityMax ??
+          stats.immunityMax ??
+          rt?.immunityMax ??
+          fallback,
+        fallback
+      );
+    case "diseaseLevel":
+      return toNum(
+        rt?.status?.disease?.level ??
+          combat.diseaseLevel ??
+          stats.diseaseLevel ??
+          rt?.diseaseLevel ??
+          fallback,
+        fallback
+      );
+    case "diseaseSeverity":
+      return toNum(
+        rt?.status?.disease?.severity ??
+          combat.diseaseSeverity ??
+          stats.diseaseSeverity ??
+          rt?.diseaseSeverity ??
+          fallback,
+        fallback
+      );
+    case "sleepCurrent":
+      return toNum(
+        rt?.status?.sleep?.current ??
+          combat.sleepCurrent ??
+          stats.sleepCurrent ??
+          rt?.sleepCurrent ??
+          fallback,
+        fallback
+      );
+    case "sleepMax":
+      return toNum(
+        rt?.status?.sleep?.max ??
+          combat.sleepMax ??
+          stats.sleepMax ??
+          rt?.sleepMax ??
+          fallback,
+        fallback
+      );
     case "attackPower":
       return toNum(
         combat.attackPower ?? stats.attackPower ?? rt?.attackPower ?? fallback,
@@ -198,6 +252,15 @@ async function flushUserStats(userId, now, { force = false } = {}) {
     if (support.supportsThirst) {
       payload.thirst_current = readRuntimeCombatField(rt, "thirstCurrent", 100);
       payload.thirst_max = readRuntimeCombatField(rt, "thirstMax", 100);
+    }
+
+    if (support.supportsStatus) {
+      payload.immunity_current = readRuntimeCombatField(rt, "immunityCurrent", 100);
+      payload.immunity_max = readRuntimeCombatField(rt, "immunityMax", 100);
+      payload.disease_level = readRuntimeCombatField(rt, "diseaseLevel", 0);
+      payload.disease_severity = readRuntimeCombatField(rt, "diseaseSeverity", 0);
+      payload.sleep_current = readRuntimeCombatField(rt, "sleepCurrent", 100);
+      payload.sleep_max = readRuntimeCombatField(rt, "sleepMax", 100);
     }
 
     await db.GaUserStats.update(payload, {

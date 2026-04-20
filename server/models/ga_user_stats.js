@@ -63,6 +63,42 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 100
       },
 
+      immunity_current: {
+        type: DataTypes.DOUBLE.UNSIGNED,
+        allowNull: false,
+        defaultValue: 100
+      },
+
+      immunity_max: {
+        type: DataTypes.DOUBLE.UNSIGNED,
+        allowNull: false,
+        defaultValue: 100
+      },
+
+      disease_level: {
+        type: DataTypes.DOUBLE.UNSIGNED,
+        allowNull: false,
+        defaultValue: 100
+      },
+
+      disease_severity: {
+        type: DataTypes.DOUBLE.UNSIGNED,
+        allowNull: false,
+        defaultValue: 0
+      },
+
+      sleep_current: {
+        type: DataTypes.DOUBLE.UNSIGNED,
+        allowNull: false,
+        defaultValue: 100
+      },
+
+      sleep_max: {
+        type: DataTypes.DOUBLE.UNSIGNED,
+        allowNull: false,
+        defaultValue: 100
+      },
+
       attack_power: {
         type: DataTypes.INTEGER.UNSIGNED,
         allowNull: false,

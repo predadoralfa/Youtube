@@ -92,24 +92,29 @@ export function GameCanvasView({
               visible={true}
               mode="hud"
               width={220}
-              hpHeight={18}
-              staminaHeight={12}
-              hungerHeight={12}
+              hpHeight={22}
+              staminaHeight={16}
+              hungerHeight={16}
+              thirstHeight={16}
               hpCurrent={state.selfHpBar.hpCurrent}
               hpMax={state.selfHpBar.hpMax}
               staminaCurrent={state.selfHpBar.staminaCurrent}
               staminaMax={state.selfHpBar.staminaMax}
-              hungerCurrent={state.selfHpBar.hungerCurrent}
-              hungerMax={state.selfHpBar.hungerMax}
-              thirstCurrent={state.selfHpBar.thirstCurrent}
-              thirstMax={state.selfHpBar.thirstMax}
               showHpText={true}
               showStamina={true}
               showStaminaText={true}
-              showHunger={true}
-              showHungerText={true}
-              showThirst={true}
-              showThirstText={true}
+              showHunger={false}
+              showThirst={false}
+              showImmunity={false}
+              showFever={false}
+              showSleep={false}
+              hpTextFontSize="11px"
+              staminaTextFontSize="10px"
+              hungerTextFontSize="10px"
+              thirstTextFontSize="10px"
+              immunityTextFontSize="10px"
+              feverTextFontSize="10px"
+              sleepTextFontSize="10px"
             />
           </div>
         ) : null}

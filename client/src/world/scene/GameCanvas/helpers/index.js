@@ -8,6 +8,7 @@ export {
   readCameraStateFromRuntime,
   readPosYawFromEntity,
   readEntityVitals,
+  readEntityStatus,
   isEnemyEntity,
 } from "./readers";
 export { applySelfColor, pickTargetFromHitObject, projectWorldToScreenPx } from "./projection";

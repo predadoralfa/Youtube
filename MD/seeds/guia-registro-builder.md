@@ -19,7 +19,7 @@ Este guia conversa diretamente com:
 
 - [guia-registro-skills-craft.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-skills-craft.md)
 - [modulo-skills-craft.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-skills-craft.md)
-- [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/CIDs/guia-registro-research.md)
+- [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-research.md)
 - [modulo-research.md](/D:/JS-Projects/Youtube/MD/implementacoes/modulo-research.md)
 
 Motivo:

@@ -43,6 +43,7 @@ export function createInventoryModalController(state, props) {
     onSplitInventoryItem: props.onSplitInventoryItem,
     onDropItemToWorld: props.onDropItemToWorld,
     onConsumeInventoryItem: props.onConsumeInventoryItem,
+    onMedicateInventoryItem: props.onMedicateInventoryItem,
   });
 
   const macroHandlers = createMacroHandlers({

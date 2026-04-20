@@ -8,7 +8,7 @@ A ideia e simples:
 
 - `document.md` e o ponto de entrada
 - `struct.md` e o resumo estrutural rapido
-- `MD/CIDs` guarda guias operacionais de cadastro e contratos estaveis
+- `MD/seeds` guarda guias operacionais de cadastro e contratos estaveis
 - `MD/implementacoes` guarda estudos arquiteturais e planos tecnicos
 - quando o tema for mapas procedurais, o trio oficial fica em `MD/implementacoes`: modulo mestre, schema e catalogo de assets
 
@@ -30,7 +30,7 @@ E o resumo rapido.
 
 Use quando quiser uma visao curta da arquitetura sem entrar em detalhe.
 
-### 3. `MD/CIDs`
+### 3. `MD/seeds`
 
 Guarda guias de cadastro e definicoes estaveis.
 
@@ -95,7 +95,7 @@ Se o documento for de implementacao, inclua:
 
 Quando um tema novo surgir:
 
-- se for contrato de dados, criar ou atualizar um guia em `MD/CIDs`
+- se for contrato de dados, criar ou atualizar um guia em `MD/seeds`
 - se for refatoracao ou plano, criar ou atualizar em `MD/implementacoes`
 - se for uma visao geral importante, atualizar `document.md`
 - se for um resumo rapido, atualizar `struct.md`
@@ -104,7 +104,7 @@ Quando um tema novo surgir:
 
 Se a pergunta for "onde eu coloco um novo MD?", a resposta e:
 
-- cadastro e contrato estavel -> `MD/CIDs`
+- cadastro e contrato estavel -> `MD/seeds`
 - arquitetura e plano tecnico -> `MD/implementacoes`
 - panorama geral -> `document.md`
 - resumo curto -> `struct.md`

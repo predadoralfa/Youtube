@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { readEntityVitals } from "../helpers";
+import { readEntityStatus, readEntityVitals } from "../helpers";
 
 export function useSelfHud(state, worldStoreRef) {
   useEffect(() => {
@@ -14,6 +14,7 @@ export function useSelfHud(state, worldStoreRef) {
       if (!self) return state.setSelfHpBar(null);
 
       const vitals = readEntityVitals(self);
+      const status = readEntityStatus(self);
       state.setSelfHpBar({
         hpCurrent: vitals.hpCurrent,
         hpMax: vitals.hpMax,
@@ -23,6 +24,16 @@ export function useSelfHud(state, worldStoreRef) {
         hungerMax: vitals.hungerMax,
         thirstCurrent: vitals.thirstCurrent,
         thirstMax: vitals.thirstMax,
+        immunityCurrent: status.immunityCurrent,
+        immunityMax: status.immunityMax,
+        feverCurrent: status.feverCurrent,
+        feverMax: status.feverMax,
+        feverSeverity: status.feverSeverity,
+        feverTier: status.feverTier,
+        feverTempoMultiplier: status.feverTempoMultiplier,
+        feverStaminaRegenMultiplier: status.feverStaminaRegenMultiplier,
+        sleepCurrent: status.sleepCurrent,
+        sleepMax: status.sleepMax,
       });
     });
   }, [state, worldStoreRef]);

@@ -136,8 +136,14 @@ function applyVitalsTick(
   const hungerMax = Math.max(0, readRuntimeHungerMax(rt));
   const thirstCurrent = readRuntimeThirstCurrent(rt);
   const thirstMax = Math.max(0, readRuntimeThirstMax(rt));
-  const hungerRegenMultiplier = resolveHungerRegenMultiplier(hungerCurrent, hungerMax);
-  const thirstRegenMultiplier = resolveThirstRegenMultiplier(thirstCurrent, thirstMax);
+  const nextHungerCurrent = clamp(
+    hungerCurrent + toFiniteNumber(hungerItemRecovery, 0),
+    0,
+    hungerMax
+  );
+  const nextThirstCurrent = clamp(thirstCurrent, 0, thirstMax);
+  const hungerRegenMultiplier = resolveHungerRegenMultiplier(nextHungerCurrent, hungerMax);
+  const thirstRegenMultiplier = resolveThirstRegenMultiplier(nextThirstCurrent, thirstMax);
   const thirstSupported = Boolean(rt?.thirstSupported);
   const effectiveStaminaRegenMultiplier =
     toFiniteNumber(regenMultiplier, 1.0) *
@@ -153,14 +159,8 @@ function applyVitalsTick(
       toFiniteNumber(terrainDrainMultiplier, 1.0)
     : 0;
   const regen = STAMINA_BASE_REGEN_PER_SEC * dt * effectiveStaminaRegenMultiplier;
-  const nextHungerCurrent = clamp(
-    hungerCurrent + toFiniteNumber(hungerItemRecovery, 0),
-    0,
-    hungerMax
-  );
   const nextHpCurrent = clamp(hpCurrent + hpRegen, 0, hpMax);
   const nextCurrent = clamp(current + regen - drain, 0, max);
-  const nextThirstCurrent = clamp(thirstCurrent, 0, thirstMax);
   const hpChanged = Math.abs(nextHpCurrent - hpCurrent) > 1e-9;
   const staminaChanged = Math.abs(nextCurrent - current) > 1e-9;
   const hungerChanged = Math.abs(nextHungerCurrent - hungerCurrent) > 1e-9;

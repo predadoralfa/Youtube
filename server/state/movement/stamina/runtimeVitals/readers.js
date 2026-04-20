@@ -105,6 +105,75 @@ function readRuntimeThirstMax(rt) {
   );
 }
 
+function readRuntimeImmunityCurrent(rt) {
+  return toFiniteNumber(
+    rt?.immunityCurrent ??
+      rt?.immunity_current ??
+      rt?.status?.immunity?.current ??
+      rt?.stats?.immunityCurrent ??
+      rt?.stats?.immunity_current,
+    100
+  );
+}
+
+function readRuntimeImmunityMax(rt) {
+  return toFiniteNumber(
+    rt?.immunityMax ??
+      rt?.immunity_max ??
+      rt?.status?.immunity?.max ??
+      rt?.stats?.immunityMax ??
+      rt?.stats?.immunity_max,
+    100
+  );
+}
+
+function readRuntimeDiseaseLevel(rt) {
+  return toFiniteNumber(
+    rt?.diseaseLevel ??
+      rt?.disease_level ??
+      rt?.status?.disease?.current ??
+      rt?.status?.disease?.level ??
+      rt?.status?.fever?.current ??
+      rt?.stats?.diseaseLevel ??
+      rt?.stats?.disease_level,
+    100
+  );
+}
+
+function readRuntimeDiseaseSeverity(rt) {
+  return toFiniteNumber(
+    rt?.diseaseSeverity ??
+      rt?.disease_severity ??
+      rt?.status?.disease?.severity ??
+      rt?.status?.fever?.severity ??
+      rt?.stats?.diseaseSeverity ??
+      rt?.stats?.disease_severity,
+    0
+  );
+}
+
+function readRuntimeSleepCurrent(rt) {
+  return toFiniteNumber(
+    rt?.sleepCurrent ??
+      rt?.sleep_current ??
+      rt?.status?.sleep?.current ??
+      rt?.stats?.sleepCurrent ??
+      rt?.stats?.sleep_current,
+    100
+  );
+}
+
+function readRuntimeSleepMax(rt) {
+  return toFiniteNumber(
+    rt?.sleepMax ??
+      rt?.sleep_max ??
+      rt?.status?.sleep?.max ??
+      rt?.stats?.sleepMax ??
+      rt?.stats?.sleep_max,
+    100
+  );
+}
+
 module.exports = {
   readRuntimeStaminaCurrent,
   readRuntimeStaminaMax,
@@ -114,4 +183,10 @@ module.exports = {
   readRuntimeHungerMax,
   readRuntimeThirstCurrent,
   readRuntimeThirstMax,
+  readRuntimeImmunityCurrent,
+  readRuntimeImmunityMax,
+  readRuntimeDiseaseLevel,
+  readRuntimeDiseaseSeverity,
+  readRuntimeSleepCurrent,
+  readRuntimeSleepMax,
 };

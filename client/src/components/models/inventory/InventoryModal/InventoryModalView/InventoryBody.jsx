@@ -35,6 +35,7 @@ export function InventoryBody(props) {
         submitSplit={props.submitSplit}
         openSplitModal={props.openSplitModal}
         handleContextEat={props.handleContextEat}
+        handleContextMedicate={props.handleContextMedicate}
         handleContextDrop={props.handleContextDrop}
         handleContextRemove={props.handleContextRemove}
       />

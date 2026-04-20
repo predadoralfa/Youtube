@@ -14,6 +14,8 @@ const { ensureResearchLoaded } = require("../../../../service/researchService");
 const { awardSkillXp } = require("../../../../service/skillProgressionService");
 const { emitFullAndAck, resolveUserOrAck } = require("../context");
 const { safeAck } = require("../shared");
+const { getRuntime } = require("../../../../state/runtimeStore");
+const { resolveFeverDebuffTempoMultiplier } = require("../../../../state/movement/status");
 
 function toNumber(value, fallback = 0) {
   const n = Number(value);
@@ -187,7 +189,15 @@ async function startCraftJob(invRt, craftDef, tx) {
 
   const craftingSkillLevel = Math.max(1, toNumber(invRt?.skills?.SKILL_CRAFTING?.currentLevel, 1));
   const baseCraftTimeMs = toNumber(craftDef.craft_time_ms ?? craftDef.craftTimeMs, 0);
-  const craftTimeMs = getCraftTimeForSkill(craftDef, baseCraftTimeMs, craftingSkillLevel);
+  const rt = getRuntime(invRt.userId);
+  const feverTempoMultiplier = resolveFeverDebuffTempoMultiplier(
+    rt?.status?.fever?.current ?? rt?.diseaseLevel ?? rt?.stats?.diseaseLevel ?? 100,
+    rt?.status?.fever?.severity ?? rt?.diseaseSeverity ?? rt?.stats?.diseaseSeverity ?? 0
+  );
+  const craftTimeMs = Math.max(
+    1000,
+    Math.round(getCraftTimeForSkill(craftDef, baseCraftTimeMs, craftingSkillLevel) * feverTempoMultiplier)
+  );
   const staminaCostTotal = Math.max(0, toNumber(craftDef.stamina_cost_total ?? craftDef.staminaCostTotal, 0));
   // A stamina entra como custo do job na largada; o cooldown do craft
   // é o que segura a entrega do item até completar os 30 minutos.

@@ -2,6 +2,7 @@ import { createPlayerMesh } from "../../../entities/character/player";
 import {
   applySelfColor,
   isEnemyEntity,
+  readEntityStatus,
   readEntityVitals,
   readPosYawFromEntity,
 } from "../helpers";
@@ -28,6 +29,7 @@ export function syncPlayerMeshes({
     const selfEntity = entities.find((entity) => String(entity?.entityId ?? "") === selfKey) ?? null;
     if (selfEntity) {
       const vitals = readEntityVitals(selfEntity);
+      const status = readEntityStatus(selfEntity);
       const nextSelfHpBar = {
         hpCurrent: vitals.hpCurrent,
         hpMax: vitals.hpMax,
@@ -37,6 +39,16 @@ export function syncPlayerMeshes({
         hungerMax: vitals.hungerMax,
         thirstCurrent: vitals.thirstCurrent,
         thirstMax: vitals.thirstMax,
+        immunityCurrent: status.immunityCurrent,
+        immunityMax: status.immunityMax,
+        feverCurrent: status.feverCurrent,
+        feverMax: status.feverMax,
+        feverSeverity: status.feverSeverity,
+        feverTier: status.feverTier,
+        feverTempoMultiplier: status.feverTempoMultiplier,
+        feverStaminaRegenMultiplier: status.feverStaminaRegenMultiplier,
+        sleepCurrent: status.sleepCurrent,
+        sleepMax: status.sleepMax,
       };
 
       state.setSelfHpBar((prev) => {
@@ -49,7 +61,17 @@ export function syncPlayerMeshes({
           prev.hungerCurrent === nextSelfHpBar.hungerCurrent &&
           prev.hungerMax === nextSelfHpBar.hungerMax &&
           prev.thirstCurrent === nextSelfHpBar.thirstCurrent &&
-          prev.thirstMax === nextSelfHpBar.thirstMax
+          prev.thirstMax === nextSelfHpBar.thirstMax &&
+          prev.immunityCurrent === nextSelfHpBar.immunityCurrent &&
+          prev.immunityMax === nextSelfHpBar.immunityMax &&
+          prev.feverCurrent === nextSelfHpBar.feverCurrent &&
+          prev.feverMax === nextSelfHpBar.feverMax &&
+          prev.feverSeverity === nextSelfHpBar.feverSeverity &&
+          prev.feverTier === nextSelfHpBar.feverTier &&
+          prev.feverTempoMultiplier === nextSelfHpBar.feverTempoMultiplier &&
+          prev.feverStaminaRegenMultiplier === nextSelfHpBar.feverStaminaRegenMultiplier &&
+          prev.sleepCurrent === nextSelfHpBar.sleepCurrent &&
+          prev.sleepMax === nextSelfHpBar.sleepMax
         ) {
           return prev;
         }

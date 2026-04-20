@@ -7,10 +7,24 @@ Ter um item no inventario nao significa automaticamente saber usa-lo.
 
 Exemplos iniciais:
 
-- `APPLE` nivel 1 libera comer maca e configurar maca no macro de auto food.
-- `APPLE` nivel 2 abre a ramificacao de `BASKET`.
+- `APPLE` nivel 1 libera coletar macas.
+- `APPLE` nivel 2 reduz o peso das macas.
+- `APPLE` nivel 3 libera comer maca.
 - `BASKET` nivel 1 libera o craft da cesta.
-- `STONE` nivel 1 libera o craft da arma `WEAPON-STONE-SLING`.
+- `BASKET` nivel 2 reduz o peso da cesta.
+- `BASKET` nivel 3 libera o craft da cesta reforcada `CRAFT_BASKET_T2`.
+- `STONE` nivel 1 libera coletar pedra.
+- `STONE` nivel 2 reduz o peso da pedra.
+- `STONE` nivel 3 libera o craft da funda `WEAPON-STONE-SLING`.
+- `TWIG` nivel 1 libera coletar graveto.
+- `TWIG` nivel 2 reduz o peso do graveto.
+- `TWIG` nivel 3 libera a construcao do abrigo primitivo.
+- `FIBER` nivel 1 libera coletar fibra.
+- `FIBER` nivel 2 reduz o peso da fibra.
+- `FIBER` nivel 3 libera o craft da cesta.
+- `HERBS` nivel 1 libera coletar ervas de `HERBS_PATCH`.
+- `HERBS` nivel 2 reduz o peso carregado de cada erva.
+- `HERBS` nivel 3 libera o uso medicinal de ervas.
 
 Regra central:
 
@@ -45,9 +59,9 @@ O MVP deste modulo cobre:
 
 Fica preparado, mas nao implementado ainda:
 
-- craft real da funda
-- consumo manual fora do macro
 - bloqueios de equipment por research
+- fila, cancelamento ou bonus de velocidade
+- novos estudos medicos alem de `HERBS`
 
 ## Tabelas
 
@@ -131,6 +145,44 @@ Formula base usada no seed inicial:
 Mesmo assim, o banco salva o `study_time_ms` final por nivel.
 Isso permite excecoes futuras sem depender da formula.
 
+## Padrao de Nivel
+
+Para pesquisas de itens, o nivel segue a regra base abaixo:
+
+- nivel 1: item de interesse e liberacao de coleta
+- nivel 2: bonus passivo, como peso menor ou tempo menor
+- nivel 3: nova habilidade, craft, uso ou ramificacao
+- nivel 4: refinamento da capacidade aberta no nivel 3
+- nivel 5: maestria final da arvore do item
+
+Esse padrao e o contrato recomendado para novos itens.
+Itens antigos podem ter excecoes, mas o ideal e convergir para essa leitura.
+
+## Regra de Aparicao de Tecnologia
+
+Quando uma tecnologia nova ainda nao existe para o jogador, o fluxo preferido e criar a tecnologia filha com os requisitos dela.
+
+Ou seja:
+
+- a pesquisa pai define a base do item
+- a pesquisa filha nasce ja com os pre-requisitos de aparicao
+- o desbloqueio real acontece quando a pesquisa filha fica disponivel e concluida
+
+Isso evita obrigar a pesquisa pai a prever tudo que vai existir depois.
+Em vez de colocar no item antigo uma lista de futuros desbloqueios, a gente cria o card novo ja amarrado ao que precisa ser concluido antes.
+
+Exemplos práticos:
+
+- `RESEARCH_STONE` no nivel 3 libera a tecnologia `WEAPON-STONE-SLING`
+- `RESEARCH_BASKET` no nivel 3 libera a tecnologia `CRAFT_BASKET_T2`
+- quando surgir uma tecnologia nova, ela deve ser cadastrada com os requisitos de aparicao corretos, em vez de ser antecipada em toda a arvore pai
+
+Regra mental:
+
+- pesquisa pai organiza o item
+- pesquisa filha organiza a nova tecnologia
+- o contrato fica mais escalavel porque cada card novo explica o que precisa existir antes dele aparecer
+
 ## Regras de Negocio
 
 ### Progresso online-only
@@ -166,6 +218,24 @@ Primeiro bloqueio efetivo do MVP:
 
 - `inv:auto_food:set` exige unlock `macro.auto_food:FOOD-APPLE`
 - `processAutoFoodTick` exige unlock `item.consume:FOOD-APPLE`
+
+## Estado de Padronizacao
+
+A arvore legada de researches de itens foi reorganizada para seguir o mesmo contrato:
+
+- nivel 1 sempre ancora coleta ou acesso inicial
+- nivel 2 sempre fica para bonus passivo, normalmente peso
+- nivel 3 sempre fica para a liberacao principal da tecnologia
+- niveis 4 e 5 ficam para refinamento e maestria quando o item ainda usa arvore maior
+
+Itens ja alinhados:
+
+- `APPLE`
+- `BASKET`
+- `STONE`
+- `TWIG`
+- `FIBER`
+- `HERBS`
 
 ### Frontend
 
@@ -215,3 +285,4 @@ Formato sugerido para `research:full`:
 2. Aplicar research em craft.
 3. Aplicar research em equipment, se fizer sentido de design.
 4. Adicionar fila, cancelamento ou bonus de velocidade, se necessario.
+5. Abrir research de insumos medicos, expandindo o modelo iniciado por `HERBS`.

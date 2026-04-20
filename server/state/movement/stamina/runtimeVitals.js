@@ -9,12 +9,21 @@ const {
   readRuntimeHungerMax,
   readRuntimeThirstCurrent,
   readRuntimeThirstMax,
+  readRuntimeImmunityCurrent,
+  readRuntimeImmunityMax,
+  readRuntimeDiseaseLevel,
+  readRuntimeDiseaseSeverity,
+  readRuntimeSleepCurrent,
+  readRuntimeSleepMax,
 } = require("./runtimeVitals/readers");
 const {
   syncRuntimeHp,
   syncRuntimeStamina,
   syncRuntimeHunger,
   syncRuntimeThirst,
+  syncRuntimeImmunity,
+  syncRuntimeDisease,
+  syncRuntimeSleep,
 } = require("./runtimeVitals/syncers");
 
 module.exports = {
@@ -26,8 +35,17 @@ module.exports = {
   readRuntimeHungerMax,
   readRuntimeThirstCurrent,
   readRuntimeThirstMax,
+  readRuntimeImmunityCurrent,
+  readRuntimeImmunityMax,
+  readRuntimeDiseaseLevel,
+  readRuntimeDiseaseSeverity,
+  readRuntimeSleepCurrent,
+  readRuntimeSleepMax,
   syncRuntimeHp,
   syncRuntimeStamina,
   syncRuntimeHunger,
   syncRuntimeThirst,
+  syncRuntimeImmunity,
+  syncRuntimeDisease,
+  syncRuntimeSleep,
 };

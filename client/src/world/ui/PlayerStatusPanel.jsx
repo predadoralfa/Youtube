@@ -130,6 +130,151 @@ function resolveActiveSleep(snapshot) {
   };
 }
 
+function resolveSleepXpMultiplierBasisPoints(sleepCurrent, sleepMax = 100) {
+  const max = Math.max(1, Number(sleepMax ?? 100));
+  const current = Math.min(max, Math.max(0, Number(sleepCurrent ?? 100)));
+  const sleepPercent = Math.min(100, Math.max(0, (current / max) * 100));
+
+  if (sleepPercent >= 30) {
+    const bonusRatio = (sleepPercent - 30) / 70;
+    return Math.round(10000 + bonusRatio * 2000);
+  }
+
+  const penaltyRatio = (30 - sleepPercent) / 30;
+  return Math.round(10000 - penaltyRatio * 1000);
+}
+
+function resolveStatusSnapshot(snapshot) {
+  const status = snapshot?.runtime?.status ?? snapshot?.status ?? null;
+  const immunityCurrent = Number(status?.immunity?.current ?? snapshot?.runtime?.immunityCurrent ?? 100);
+  const immunityMax = Math.max(1, Number(status?.immunity?.max ?? snapshot?.runtime?.immunityMax ?? 100));
+  const hungerCurrent = Number(
+    status?.hunger?.current ??
+      snapshot?.runtime?.hungerCurrent ??
+      snapshot?.runtime?.vitals?.hunger?.current ??
+      snapshot?.vitals?.hunger?.current ??
+      100
+  );
+  const hungerMax = Math.max(
+    1,
+    Number(
+      status?.hunger?.max ??
+        snapshot?.runtime?.hungerMax ??
+        snapshot?.runtime?.vitals?.hunger?.max ??
+        snapshot?.vitals?.hunger?.max ??
+        100
+    )
+  );
+  const thirstCurrent = Number(
+    status?.thirst?.current ??
+      snapshot?.runtime?.thirstCurrent ??
+      snapshot?.runtime?.vitals?.thirst?.current ??
+      snapshot?.vitals?.thirst?.current ??
+      100
+  );
+  const thirstMax = Math.max(
+    1,
+    Number(
+      status?.thirst?.max ??
+        snapshot?.runtime?.thirstMax ??
+        snapshot?.runtime?.vitals?.thirst?.max ??
+        snapshot?.vitals?.thirst?.max ??
+        100
+    )
+  );
+  const feverCurrent = Number(status?.fever?.current ?? snapshot?.runtime?.feverCurrent ?? 100);
+  const feverDisplayCurrent = Math.max(0, Math.min(100, 100 - feverCurrent));
+  const feverSeverity = Math.min(
+    1,
+    Math.max(
+      0,
+      Number(status?.fever?.severity ?? snapshot?.runtime?.feverSeverity ?? Math.max(0, 1 - feverCurrent / 100))
+    )
+  );
+  const feverTier = Number(status?.debuffs?.tier ?? snapshot?.runtime?.feverTier ?? (feverCurrent >= 100 ? 0 : Math.max(1, Math.min(10, Math.ceil(feverSeverity * 10)))));
+  const sleepCurrent = Number(status?.sleep?.current ?? snapshot?.runtime?.sleepCurrent ?? 100);
+  const sleepMax = Math.max(1, Number(status?.sleep?.max ?? snapshot?.runtime?.sleepMax ?? 100));
+  const sleepMultiplierBps = resolveSleepXpMultiplierBasisPoints(sleepCurrent, sleepMax);
+  const sleepMultiplier = sleepMultiplierBps / 10000;
+
+  return {
+    hasStatus: Boolean(status),
+    hungerCurrent,
+    hungerMax,
+    hungerPercent: Math.round((hungerCurrent / hungerMax) * 100),
+    thirstCurrent,
+    thirstMax,
+    thirstPercent: Math.round((thirstCurrent / thirstMax) * 100),
+    immunityCurrent,
+    immunityMax,
+    immunityPercent: Math.round((immunityCurrent / immunityMax) * 100),
+    feverCurrent,
+    feverDisplayCurrent,
+    feverDisplayPercent: Math.round((feverDisplayCurrent / 100) * 100),
+    feverSeverity,
+    feverTier,
+    feverPercent: Math.round((feverCurrent / 100) * 100),
+    sleepCurrent,
+    sleepMax,
+    sleepMultiplier,
+    sleepMultiplierBps,
+  };
+}
+
+function MiniVitalRow({ label, current, max, color, trackColor = "rgba(15, 23, 42, 0.92)" }) {
+  const safeCurrent = Math.max(0, Number(current ?? 0));
+  const safeMax = Math.max(1, Number(max ?? 1));
+  const ratio = clamp01(safeCurrent / safeMax);
+
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          alignItems: "baseline",
+        }}
+      >
+        <span
+          style={{
+            color: "rgba(191, 219, 254, 0.86)",
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "0.11em",
+            textTransform: "uppercase",
+          }}
+        >
+          {label}
+        </span>
+        <span style={{ color: "rgba(248, 250, 252, 0.82)", fontSize: 11 }}>
+          {Math.round(ratio * 100)}%
+        </span>
+      </div>
+
+      <div
+        style={{
+          height: 12,
+          overflow: "hidden",
+          border: "1px solid rgba(59, 130, 246, 0.24)",
+          borderRadius: 10,
+          background: trackColor,
+        }}
+      >
+        <div
+          style={{
+            width: `${Math.round(ratio * 100)}%`,
+            height: "100%",
+            borderRadius: 10,
+            background: color,
+            transition: "width 240ms ease",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function JobRow({ label, title, subtitle, remainingText, progressRatio, emptyText, extra = null }) {
   const hasJob = Boolean(title);
 
@@ -171,10 +316,10 @@ function JobRow({ label, title, subtitle, remainingText, progressRatio, emptyTex
 
       <div
         style={{
-          height: 8,
+          height: 10,
           overflow: "hidden",
           border: "1px solid rgba(56, 189, 248, 0.24)",
-          borderRadius: 8,
+          borderRadius: 9,
           background: "rgba(5, 10, 18, 0.72)",
         }}
       >
@@ -182,7 +327,7 @@ function JobRow({ label, title, subtitle, remainingText, progressRatio, emptyTex
           style={{
             width: `${Math.round(clamp01(progressRatio) * 100)}%`,
             height: "100%",
-            borderRadius: 8,
+            borderRadius: 9,
             background: hasJob
               ? "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(34,197,94,0.9))"
               : "rgba(148, 163, 184, 0.22)",
@@ -227,6 +372,8 @@ export function PlayerStatusPanel({
     [snapshot, inventorySnapshot, equipmentSnapshot, nowMs]
   );
   const activeSleep = useMemo(() => resolveActiveSleep(snapshot), [snapshot]);
+  const statusSummary = useMemo(() => resolveStatusSnapshot(snapshot), [snapshot]);
+  const activeJobs = [activeResearch, activeCraft, activeBuild, activeSleep].filter(Boolean);
 
   return (
     <div
@@ -303,128 +450,214 @@ export function PlayerStatusPanel({
             </style>
             <div
               style={{
-                fontSize: 12,
-                letterSpacing: "0.14em",
-                textTransform: "uppercase",
-                color: "rgba(191, 219, 254, 0.85)",
-                marginBottom: 12,
+                display: "grid",
+                gap: 12,
+                marginBottom: 18,
+                padding: 12,
+                borderRadius: 14,
+                border: "1px solid rgba(59, 130, 246, 0.18)",
+                background: "linear-gradient(180deg, rgba(8, 15, 26, 0.94), rgba(5, 10, 18, 0.9))",
               }}
             >
-              Tasks / Jobs
-            </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "rgba(191, 219, 254, 0.85)",
+                }}
+              >
+                Status
+              </div>
 
-            <div style={{ display: "grid", gap: 14 }}>
-              <JobRow
-                label="Research"
-                title={activeResearch?.title}
-                subtitle={activeResearch?.subtitle}
-                remainingText={activeResearch?.remainingText}
-                progressRatio={activeResearch?.progressRatio ?? 0}
-                emptyText="No active research"
-              />
+              <div style={{ display: "grid", gap: 10 }}>
+                <MiniVitalRow
+                  label="Hunger"
+                  current={statusSummary.hungerCurrent}
+                  max={statusSummary.hungerMax}
+                  color="linear-gradient(90deg, rgba(56,189,248,0.95), rgba(14,165,233,0.9))"
+                />
 
-              <JobRow
-                label="Craft"
-                title={activeCraft?.title}
-                subtitle={activeCraft?.subtitle}
-                remainingText={activeCraft?.remainingText}
-                progressRatio={activeCraft?.progressRatio ?? 0}
-                emptyText="No active hand craft"
-              />
+                <MiniVitalRow
+                  label="Thirst"
+                  current={statusSummary.thirstCurrent}
+                  max={statusSummary.thirstMax}
+                  color="linear-gradient(90deg, rgba(34,211,238,0.95), rgba(6,182,212,0.9))"
+                />
+              </div>
 
-              <JobRow
-                label="Builder"
-                title={activeBuild?.title}
-                subtitle={activeBuild?.subtitle}
-                remainingText={activeBuild?.remainingText}
-                progressRatio={activeBuild?.progressRatio ?? 0}
-                emptyText="No active construction"
-                extra={
-                  activeBuild ? (
-                    <div style={{ display: "grid", gap: 8 }}>
-                      <div style={{ color: "rgba(226, 232, 240, 0.78)", fontSize: 11 }}>
-                        {activeBuild.progressText}
-                      </div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        {activeBuild.canPause ? (
-                          <button
-                            type="button"
-                            style={{
-                              flex: 1,
-                              borderRadius: 8,
-                              border: "1px solid rgba(59, 130, 246, 0.45)",
-                              background: "rgba(37, 99, 235, 0.22)",
-                              color: "#dbeafe",
-                              padding: "8px 10px",
-                              fontSize: 11,
-                              fontWeight: 800,
-                              cursor: "pointer",
-                            }}
-                            onClick={() => onPauseBuild?.(activeBuild.actorId)}
-                          >
-                            Pause
-                          </button>
-                        ) : null}
+              <div style={{ display: "grid", gap: 12 }}>
+                <JobRow
+                  label="Immunity"
+                  title={`${statusSummary.immunityCurrent} / ${statusSummary.immunityMax}`}
+                  subtitle="Resistance to fever"
+                  remainingText={`${statusSummary.immunityPercent}%`}
+                  progressRatio={statusSummary.immunityPercent / 100}
+                  emptyText="No immunity data"
+                />
 
-                        {activeBuild.canResume ? (
-                          <button
-                            type="button"
-                            style={{
-                              flex: 1,
-                              borderRadius: 8,
-                              border: "1px solid rgba(34, 197, 94, 0.45)",
-                              background: "rgba(22, 163, 74, 0.22)",
-                              color: "#dcfce7",
-                              padding: "8px 10px",
-                              fontSize: 11,
-                              fontWeight: 800,
-                              cursor: "pointer",
-                            }}
-                            onClick={() => onResumeBuild?.(activeBuild.actorId)}
-                          >
-                            Resume
-                          </button>
-                        ) : null}
-
-                        {activeBuild.canCancel ? (
-                          <button
-                            type="button"
-                            style={{
-                              flex: 1,
-                              borderRadius: 8,
-                              border: "1px solid rgba(239, 68, 68, 0.45)",
-                              background: "rgba(127, 29, 29, 0.35)",
-                              color: "#fecaca",
-                              padding: "8px 10px",
-                              fontSize: 11,
-                              fontWeight: 800,
-                              cursor: "pointer",
-                            }}
-                            onClick={() => onCancelBuild?.(activeBuild.actorId)}
-                          >
-                            Cancel
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null
-                }
-              />
-
-              <JobRow
-                label="Sleep"
-                title={activeSleep?.title}
-                subtitle={activeSleep?.subtitle}
-                remainingText={activeSleep?.remainingText}
-                progressRatio={activeSleep?.progressRatio ?? 0}
-                emptyText="No active sleep"
-                extra={activeSleep ? (
-                  <div style={{ color: "rgba(220, 252, 231, 0.8)", fontSize: 11 }}>
-                    {activeSleep.progressText}
-                  </div>
+                {statusSummary.feverDisplayCurrent > 0 ? (
+                  <JobRow
+                    label="Fever"
+                    title={`${statusSummary.feverDisplayCurrent} / 100`}
+                    subtitle={`Severity ${Math.round(statusSummary.feverSeverity * 100)}%`}
+                    remainingText={
+                      statusSummary.feverTier > 0 ? `Tier ${statusSummary.feverTier}` : "Clear"
+                    }
+                    progressRatio={statusSummary.feverDisplayCurrent / 100}
+                    emptyText="No fever data"
+                  />
                 ) : null}
-              />
+
+                <JobRow
+                  label="Sleep"
+                  title={`${statusSummary.sleepCurrent} / ${statusSummary.sleepMax}`}
+                  subtitle={
+                    statusSummary.sleepMultiplier >= 1
+                      ? `XP bonus +${Math.round((statusSummary.sleepMultiplier - 1) * 100)}%`
+                      : `XP penalty ${Math.round((statusSummary.sleepMultiplier - 1) * 100)}%`
+                  }
+                  remainingText={`${Math.round(statusSummary.sleepMultiplier * 100)}%`}
+                  progressRatio={Math.min(1, Math.max(0, statusSummary.sleepCurrent / statusSummary.sleepMax))}
+                  emptyText="No sleep data"
+                />
+              </div>
             </div>
+
+            {activeJobs.length > 0 ? (
+              <>
+                <div
+                  style={{
+                    fontSize: 12,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: "rgba(191, 219, 254, 0.85)",
+                    marginBottom: 12,
+                  }}
+                >
+                  Tasks / Jobs
+                </div>
+
+                <div style={{ display: "grid", gap: 14 }}>
+                  {activeResearch ? (
+                    <JobRow
+                      label="Research"
+                      title={activeResearch?.title}
+                      subtitle={activeResearch?.subtitle}
+                      remainingText={activeResearch?.remainingText}
+                      progressRatio={activeResearch?.progressRatio ?? 0}
+                      emptyText="No active research"
+                    />
+                  ) : null}
+
+                  {activeCraft ? (
+                    <JobRow
+                      label="Craft"
+                      title={activeCraft?.title}
+                      subtitle={activeCraft?.subtitle}
+                      remainingText={activeCraft?.remainingText}
+                      progressRatio={activeCraft?.progressRatio ?? 0}
+                      emptyText="No active hand craft"
+                    />
+                  ) : null}
+
+                  {activeBuild ? (
+                    <JobRow
+                      label="Builder"
+                      title={activeBuild?.title}
+                      subtitle={activeBuild?.subtitle}
+                      remainingText={activeBuild?.remainingText}
+                      progressRatio={activeBuild?.progressRatio ?? 0}
+                      emptyText="No active construction"
+                      extra={
+                        <div style={{ display: "grid", gap: 8 }}>
+                          <div style={{ color: "rgba(226, 232, 240, 0.78)", fontSize: 11 }}>
+                            {activeBuild.progressText}
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            {activeBuild.canPause ? (
+                              <button
+                                type="button"
+                                style={{
+                                  flex: 1,
+                                  borderRadius: 8,
+                                  border: "1px solid rgba(59, 130, 246, 0.45)",
+                                  background: "rgba(37, 99, 235, 0.22)",
+                                  color: "#dbeafe",
+                                  padding: "8px 10px",
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  cursor: "pointer",
+                                }}
+                                onClick={() => onPauseBuild?.(activeBuild.actorId)}
+                              >
+                                Pause
+                              </button>
+                            ) : null}
+
+                            {activeBuild.canResume ? (
+                              <button
+                                type="button"
+                                style={{
+                                  flex: 1,
+                                  borderRadius: 8,
+                                  border: "1px solid rgba(34, 197, 94, 0.45)",
+                                  background: "rgba(22, 163, 74, 0.22)",
+                                  color: "#dcfce7",
+                                  padding: "8px 10px",
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  cursor: "pointer",
+                                }}
+                                onClick={() => onResumeBuild?.(activeBuild.actorId)}
+                              >
+                                Resume
+                              </button>
+                            ) : null}
+
+                            {activeBuild.canCancel ? (
+                              <button
+                                type="button"
+                                style={{
+                                  flex: 1,
+                                  borderRadius: 8,
+                                  border: "1px solid rgba(239, 68, 68, 0.45)",
+                                  background: "rgba(127, 29, 29, 0.35)",
+                                  color: "#fecaca",
+                                  padding: "8px 10px",
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  cursor: "pointer",
+                                }}
+                                onClick={() => onCancelBuild?.(activeBuild.actorId)}
+                              >
+                                Cancel
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      }
+                    />
+                  ) : null}
+
+                  {activeSleep ? (
+                    <JobRow
+                      label="Sleep"
+                      title={activeSleep?.title}
+                      subtitle={activeSleep?.subtitle}
+                      remainingText={activeSleep?.remainingText}
+                      progressRatio={activeSleep?.progressRatio ?? 0}
+                      emptyText="No active sleep"
+                      extra={
+                        <div style={{ color: "rgba(220, 252, 231, 0.8)", fontSize: 11 }}>
+                          {activeSleep.progressText}
+                        </div>
+                      }
+                    />
+                  ) : null}
+                </div>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
