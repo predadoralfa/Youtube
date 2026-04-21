@@ -16,8 +16,10 @@ const { emitPlayerState } = require("./emitPlayerState");
 const { syncRuntimeStamina } = require("../../stamina.js");
 const { drinkFromRiverSource } = require("../../../../service/waterSourceService");
 const {
+  canStartPrimitiveShelterSleep,
   startPrimitiveShelterSleep,
 } = require("../../../../service/primitiveShelterSleepService");
+const { stopMovement } = require("../../input");
 
 async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
   if (rt.interact?.active && rt.interact?.kind === "ACTOR") {
@@ -33,6 +35,17 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
 
     if (pendingSleepActorId != null && String(pendingSleepActorId) === String(interactActorId)) {
       try {
+        if (!canStartPrimitiveShelterSleep(rt, 50)) {
+          rt.pendingSleep = null;
+          rt.interact = null;
+          stopMovement(rt, { nowMs: t });
+          rt.action = "idle";
+          bumpRev(rt);
+          markRuntimeDirty(rt.userId, t);
+          await emitPlayerState(io, rt);
+          return true;
+        }
+
         startPrimitiveShelterSleep(rt, interactActorId, t);
         bumpRev(rt);
         markRuntimeDirty(rt.userId, t);
@@ -90,11 +103,8 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
               actorId: String(interactActorId),
             };
             rt.interact = null;
-            rt.moveTarget = null;
-            rt.moveMode = "STOP";
+            stopMovement(rt, { nowMs: t });
             rt.action = "idle";
-            rt.inputDir = { x: 0, z: 0 };
-            rt.inputDirAtMs = 0;
 
             const activeSocket = getActiveSocket(rt.userId);
             if (activeSocket) {
@@ -152,11 +162,8 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
 
         if (completed) {
           rt.interact = null;
-          rt.moveTarget = null;
-          rt.moveMode = "STOP";
+          stopMovement(rt, { nowMs: t });
           rt.action = "idle";
-          rt.inputDir = { x: 0, z: 0 };
-          rt.inputDirAtMs = 0;
           rt.waterLock = null;
         }
 
@@ -185,12 +192,11 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
           const activeSocket = getActiveSocket(rt.userId);
           const roomName = rt.instanceId != null ? `inst:${Number(rt.instanceId)}` : null;
 
-          if (!result?.ok) {
-            if (result?.error === "ACTOR_NOT_FOUND") {
-              rt.interact = null;
-              rt.moveTarget = null;
-              rt.moveMode = "STOP";
-              rt.action = "idle";
+            if (!result?.ok) {
+              if (result?.error === "ACTOR_NOT_FOUND") {
+                rt.interact = null;
+                stopMovement(rt, { nowMs: t });
+                rt.action = "idle";
 
               if (activeSocket) {
                 activeSocket.emit("actor:collected", {
@@ -246,8 +252,7 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
 
           if (result.actorDisabled) {
             rt.interact = null;
-            rt.moveTarget = null;
-            rt.moveMode = "STOP";
+            stopMovement(rt, { nowMs: t });
             rt.action = "idle";
           }
 
@@ -314,8 +319,7 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
     rt.action = "move";
     await processAutomaticCombat(io, rt, t);
   } else {
-    rt.moveTarget = null;
-    rt.moveMode = "STOP";
+    stopMovement(rt, { nowMs: t });
     if (rt.action !== "idle") rt.action = "idle";
   }
 

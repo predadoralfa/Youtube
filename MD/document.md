@@ -562,6 +562,8 @@ Observacao:
 - backend e a unica fonte de verdade do mundo
 - frontend nao toma decisoes autoritativas
 - toda entidade de mundo importante precisa de modelo claro entre definicao, colocacao e runtime
+- movimentacao entre servidor e cliente nao pode depender de envio por tick
+- `move:state` nao pode ser usado como stream por tick nem como atalho de suavizacao, nem mesmo para o proprio jogador
 - regras de longa duracao precisam sair de hardcode e ir para banco sempre que fizer sentido
 - qualquer sistema novo deve nascer preparado para ser observado, persistido e expandido por instancia
 

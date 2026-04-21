@@ -10,7 +10,7 @@ function isFiniteNumber(n) {
  */
 function parseMoveIntentPayload(payload) {
   const dir = payload?.dir;
-  const yawDesired = payload?.yawDesired;
+  const yawDesired = payload?.yaw ?? payload?.yawDesired;
   const cameraPitch = payload?.cameraPitch;
   const cameraDistance = payload?.cameraDistance;
 
@@ -18,6 +18,7 @@ function parseMoveIntentPayload(payload) {
 
   return {
     dir: { x: Number(dir.x), z: Number(dir.z) },
+    seq: isFiniteNumber(payload?.seq) ? Number(payload.seq) : null,
     yawDesired: isFiniteNumber(yawDesired) ? Number(yawDesired) : null,
     cameraPitch: isFiniteNumber(cameraPitch) ? Number(cameraPitch) : null,
     cameraDistance: isFiniteNumber(cameraDistance)

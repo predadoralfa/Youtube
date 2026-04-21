@@ -15,7 +15,7 @@ const { awardSkillXp } = require("../../../../service/skillProgressionService");
 const { emitFullAndAck, resolveUserOrAck } = require("../context");
 const { safeAck } = require("../shared");
 const { getRuntime } = require("../../../../state/runtimeStore");
-const { resolveFeverDebuffTempoMultiplier } = require("../../../../state/movement/status");
+const { resolveFeverDebuffTempoMultiplier } = require("../../../../state/conditions/fever");
 
 function toNumber(value, fallback = 0) {
   const n = Number(value);
@@ -191,7 +191,7 @@ async function startCraftJob(invRt, craftDef, tx) {
   const baseCraftTimeMs = toNumber(craftDef.craft_time_ms ?? craftDef.craftTimeMs, 0);
   const rt = getRuntime(invRt.userId);
   const feverTempoMultiplier = resolveFeverDebuffTempoMultiplier(
-    rt?.status?.fever?.current ?? rt?.diseaseLevel ?? rt?.stats?.diseaseLevel ?? 100,
+    rt?.status?.fever?.current ?? rt?.diseaseLevel ?? rt?.stats?.diseaseLevel ?? 0,
     rt?.status?.fever?.severity ?? rt?.diseaseSeverity ?? rt?.stats?.diseaseSeverity ?? 0
   );
   const craftTimeMs = Math.max(

@@ -112,7 +112,9 @@ function readRuntimeCombatField(rt, field, fallback = 0) {
       );
     case "diseaseLevel":
       return toNum(
-        rt?.status?.disease?.level ??
+        rt?.status?.fever?.current ??
+          rt?.status?.disease?.current ??
+          rt?.status?.disease?.level ??
           combat.diseaseLevel ??
           stats.diseaseLevel ??
           rt?.diseaseLevel ??
@@ -121,7 +123,8 @@ function readRuntimeCombatField(rt, field, fallback = 0) {
       );
     case "diseaseSeverity":
       return toNum(
-        rt?.status?.disease?.severity ??
+        rt?.status?.fever?.severity ??
+          rt?.status?.disease?.severity ??
           combat.diseaseSeverity ??
           stats.diseaseSeverity ??
           rt?.diseaseSeverity ??

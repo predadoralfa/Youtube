@@ -18,8 +18,21 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
   const entityVitalsRef = useRef(new Map());
   const entityPositionsRef = useRef(new Map());
   const seenDamageEventIdsRef = useRef(new Set());
+  const predictedEnemyVitalsRef = useRef(new Map());
   const inventorySnapshotRef = useRef(null);
   const buildPlacementRef = useRef(buildPlacement);
+  const movementVisualRef = useRef({
+    seq: 0,
+    mode: "STOP",
+    dir: { x: 0, z: 0 },
+    clickTarget: null,
+    clickRequestedAt: 0,
+    lastActiveDir: { x: 0, z: 0 },
+    stopRequestedAt: 0,
+    directionChangedAt: 0,
+    lastAuthorityPos: null,
+    lastAuthorityChangeAt: 0,
+  });
 
   const [marker, setMarker] = useState({ visible: false, x: 0, y: 0 });
   const [floatingDamages, setFloatingDamages] = useState([]);
@@ -50,8 +63,10 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
       entityVitalsRef,
       entityPositionsRef,
       seenDamageEventIdsRef,
+      predictedEnemyVitalsRef,
       inventorySnapshotRef,
       buildPlacementRef,
+      movementVisualRef,
       setMarker,
       setFloatingDamages,
       setTargetHpBar,

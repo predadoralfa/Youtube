@@ -78,7 +78,9 @@ export function updateOverlayState({
   const selected = state.selectedTargetRef.current;
   if (selected?.kind === "ENEMY") {
     const pos = entityPositions.get(String(selected.id));
-    const vitals = state.entityVitalsRef.current.get(String(selected.id));
+    const selectedId = String(selected.id);
+    const predicted = state.predictedEnemyVitalsRef.current.get(selectedId) ?? null;
+    const vitals = predicted ?? state.entityVitalsRef.current.get(selectedId);
 
     if (!pos || !vitals || Number(vitals.hpMax ?? 0) <= 0) {
       state.setTargetHpBar(null);

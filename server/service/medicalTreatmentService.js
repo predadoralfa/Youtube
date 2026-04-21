@@ -351,7 +351,7 @@ function applyMedicalEffects(rt, itemCode, effects) {
   }
 
   if (Math.abs(nextFever - feverCurrent) > 1e-9 || feverSeverity !== readRuntimeDiseaseSeverity(rt)) {
-    syncRuntimeDisease(rt, nextFever, Math.max(0, Math.min(1, 1 - nextFever / 100)));
+    syncRuntimeDisease(rt, nextFever, Math.max(0, Math.min(1, nextFever / 100)));
   }
 
   return {

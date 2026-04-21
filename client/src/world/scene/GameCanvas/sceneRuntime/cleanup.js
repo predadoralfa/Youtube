@@ -89,6 +89,7 @@ export function cleanupSceneRuntime({
   state.entityVitalsRef.current.clear();
   state.entityPositionsRef.current.clear();
   state.seenDamageEventIdsRef.current.clear();
+  state.predictedEnemyVitalsRef.current.clear();
   state.cameraRef.current = null;
 
   state.setMarker({ visible: false, x: 0, y: 0 });

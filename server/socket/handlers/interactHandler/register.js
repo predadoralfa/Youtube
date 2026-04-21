@@ -19,6 +19,7 @@ const { applyApproach } = require("./movement");
 const { startEnemyCombat } = require("./combat");
 const { resolveActorCollectCooldownMs } = require("../../../service/actorCollectService");
 const { DEFAULT_COLLECT_COOLDOWN_MS } = require("../../../config/interactionConstants");
+const { stopMovement } = require("../../../state/movement/input");
 
 function registerInteractHandler(io, socket) {
   socket.on("interact:start", async (payload = {}) => {
@@ -128,9 +129,7 @@ function registerInteractHandler(io, socket) {
           rt.combat.targetKind = null;
         }
 
-        rt.moveMode = "STOP";
-        rt.moveTarget = null;
-        rt.moveStopRadius = null;
+        stopMovement(rt);
         rt.action = "idle";
       }
 

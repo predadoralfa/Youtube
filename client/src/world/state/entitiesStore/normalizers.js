@@ -100,6 +100,26 @@ export function normalizeEntity(raw) {
 
   const vitals = normalizeVitals(raw);
   const status = raw?.status ?? raw?.runtime?.status ?? null;
+  const movementRaw = raw?.movement ?? null;
+  const movement = movementRaw
+    ? {
+        mode: String(movementRaw.mode ?? "STOP"),
+        dir: {
+          x: Number(movementRaw?.dir?.x ?? 0),
+          z: Number(movementRaw?.dir?.z ?? 0),
+        },
+        target: movementRaw?.target
+          ? {
+              x: Number(movementRaw.target.x ?? 0),
+              z: Number(movementRaw.target.z ?? 0),
+            }
+          : null,
+        stopRadius: Number(movementRaw.stopRadius ?? 0.75),
+        updatedAtMs: Number(movementRaw.updatedAtMs ?? 0),
+        speed: Number(movementRaw.speed ?? 0) || null,
+        effectiveMoveSpeed: Number(movementRaw.effectiveMoveSpeed ?? 0) || null,
+      }
+    : null;
 
   return {
     entityId,
@@ -115,6 +135,7 @@ export function normalizeEntity(raw) {
     hp: toNum(raw.hp ?? vitals.hp.current, 0),
     vitals,
     status,
+    movement,
     action: raw.action ?? "idle",
     rev: Number(raw.rev ?? 0),
   };

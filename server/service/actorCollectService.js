@@ -11,7 +11,7 @@ const { ensureStarterInventory } = require("./inventoryProvisioning");
 const { consumeGatheringStamina } = require("./gatheringStaminaService");
 const { awardSkillXp, loadUserSkillSummary } = require("./skillProgressionService");
 const { DEFAULT_COLLECT_COOLDOWN_MS } = require("../config/interactionConstants");
-const { resolveFeverDebuffTempoMultiplier } = require("../state/movement/status");
+const { resolveFeverDebuffTempoMultiplier } = require("../state/conditions/fever");
 const {
   ensureResearchLoaded,
   hasCapability,
@@ -97,7 +97,7 @@ async function resolveActorCollectCooldownMs(userId, actor, fallbackMs = DEFAULT
     Math.round(baseCooldownMs - reductionPerLevelMs * effectiveLevel)
   );
   const feverTempoMultiplier = resolveFeverDebuffTempoMultiplier(
-    rt?.status?.fever?.current ?? rt?.diseaseLevel ?? rt?.stats?.diseaseLevel ?? 100,
+    rt?.status?.fever?.current ?? rt?.diseaseLevel ?? rt?.stats?.diseaseLevel ?? 0,
     rt?.status?.fever?.severity ?? rt?.diseaseSeverity ?? rt?.stats?.diseaseSeverity ?? 0
   );
 

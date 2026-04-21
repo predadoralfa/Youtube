@@ -1,6 +1,7 @@
 "use strict";
 
 const { clamp } = require("./shared");
+const { applyClickInput } = require("../../../state/movement/input");
 
 function applyApproach({ rt, nowMs, targetPos, stopRadius }) {
   const b = rt.bounds;
@@ -17,10 +18,11 @@ function applyApproach({ rt, nowMs, targetPos, stopRadius }) {
   const tx = clamp(Number(targetPos.x), minX, maxX);
   const tz = clamp(Number(targetPos.z), minZ, maxZ);
 
-  rt.moveMode = "CLICK";
-  rt.moveTarget = { x: tx, z: tz };
-  rt.moveStopRadius = stopRadius;
-  rt.moveTickAtMs = nowMs;
+  applyClickInput(rt, {
+    nowMs,
+    target: { x: tx, z: tz },
+    stopRadius,
+  });
   rt.action = "move";
 
   return true;

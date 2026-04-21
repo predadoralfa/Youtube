@@ -69,7 +69,7 @@ async function loadPlayerCombatStats(userId) {
   const persistedImmunityCurrent = support.supportsStatus
     ? (stats.immunity_current == null ? immunityMax : Number(stats.immunity_current))
     : immunityMax;
-  const diseaseLevel = support.supportsStatus ? Number(stats.disease_level ?? 100) || 100 : 100;
+  const diseaseLevel = support.supportsStatus ? Number(stats.disease_level ?? 0) || 0 : 0;
   const diseaseSeverity = support.supportsStatus ? Number(stats.disease_severity ?? 0) || 0 : 0;
   const sleepMax = support.supportsStatus ? 100 : 100;
   const persistedSleepCurrent = support.supportsStatus

@@ -10,9 +10,14 @@ const {
   PRIMITIVE_SHELTER_APPROACH_RADIUS,
 } = require("../../../service/buildService");
 const {
+  canStartPrimitiveShelterSleep,
   startPrimitiveShelterSleep,
   stopPrimitiveShelterSleep,
 } = require("../../../service/primitiveShelterSleepService");
+const {
+  readRuntimeSleepCurrent,
+  readRuntimeSleepMax,
+} = require("../../../state/movement/stamina/runtimeVitals");
 const { applyApproach } = require("../interactHandler/movement");
 
 function safeAck(ack, payload) {
@@ -74,6 +79,18 @@ function registerSleepHandler(io, socket) {
           ok: true,
           sleeping: true,
           pending: false,
+        });
+      }
+
+      if (!canStartPrimitiveShelterSleep(rt, 50)) {
+        const sleepMax = Math.max(1, Number(readRuntimeSleepMax(rt) ?? 100) || 100);
+        const sleepCurrent = Math.max(0, Number(readRuntimeSleepCurrent(rt) ?? 100) || 0);
+        const sleepPercent = Math.round((sleepCurrent / sleepMax) * 1000) / 10;
+        return safeAck(ack, {
+          ok: false,
+          code: "SLEEP_TOO_HIGH",
+          message: "Sleep must be 50% or less to start sleeping",
+          sleepPercent,
         });
       }
 

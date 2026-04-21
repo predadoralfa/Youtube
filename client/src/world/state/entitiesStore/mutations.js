@@ -99,6 +99,7 @@ export function applyDelta(state, emitChange, delta) {
         hunger: { current: 0, max: 0 },
         thirst: { current: 0, max: 0 },
       },
+      movement: null,
       action: "idle",
       rev: -1,
     });
@@ -122,6 +123,7 @@ export function applyDelta(state, emitChange, delta) {
     hp: nextHpCompat,
     vitals: nextVitals,
     status: nextStatus ?? base.status ?? null,
+    movement: delta.movement != null ? delta.movement : base.movement ?? null,
     action: delta.action != null ? delta.action : base.action,
     enemyDefCode:
       delta.enemyDefCode != null ? delta.enemyDefCode : base.enemyDefCode,

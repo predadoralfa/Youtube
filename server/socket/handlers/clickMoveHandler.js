@@ -5,6 +5,11 @@ const {
   isWASDActive,
 } = require("../../state/runtimeStore");
 
+const { applyClickInput } = require("../../state/movement/input");
+const { emitPlayerState } = require("../../state/movement/tickOnce/playerMovementPhase/emitPlayerState");
+const { resolveCarryWeightContext } = require("../../state/movement/tickOnce/carryWeight");
+const { processAutomaticCombat } = require("../../state/movement/tickOnce/playerCombat");
+const { advanceRuntimeMovementPhase } = require("../../state/movement/tickOnce/playerMovementPhase/processPhase");
 const { clearPlayerCombat } = require("./move/clearCombat");
 const { CLICK_MOVE_SPAM_MS } = require("../../config/movementConstants");
 
@@ -26,10 +31,7 @@ function registerClickMoveHandler(socket) {
       const rt = getRuntime(userId);
       if (!rt) return;
 
-      // ignora se caiu/pending/offline
       if (rt.connectionState === "DISCONNECTED_PENDING" || rt.connectionState === "OFFLINE") {
-        // opcional debug
-        // socket.emit("move:click:rejected", { reason: "OFFLINE", atMs: nowMs });
         return;
       }
 
@@ -39,27 +41,20 @@ function registerClickMoveHandler(socket) {
       const z = payload?.z;
 
       if (!isFiniteNumber(x) || !isFiniteNumber(z)) {
-        // socket.emit("move:click:rejected", { reason: "INVALID", atMs: nowMs });
         return;
       }
 
-      // anti-spam simples
       if (rt.lastClickAtMs && (nowMs - rt.lastClickAtMs) < CLICK_MOVE_SPAM_MS) {
-        // socket.emit("move:click:rejected", { reason: "SPAM", atMs: nowMs });
         return;
       }
       rt.lastClickAtMs = nowMs;
 
-      // click NÃO cancela WASD: se WASD ativo, ignora
-      if (isWASDActive(rt, nowMs)) {
-        // socket.emit("move:click:rejected", { reason: "WASD_ACTIVE", atMs: nowMs });
+      if (isWASDActive(rt)) {
         return;
       }
 
-      // bounds obrigatório (MVP)
       const b = rt.bounds;
       if (!b) {
-        // socket.emit("move:click:rejected", { reason: "NO_BOUNDS", atMs: nowMs });
         return;
       }
 
@@ -69,11 +64,9 @@ function registerClickMoveHandler(socket) {
       const maxZ = Number(b.maxZ);
 
       if (![minX, maxX, minZ, maxZ].every(Number.isFinite)) {
-        // socket.emit("move:click:rejected", { reason: "NO_BOUNDS", atMs: nowMs });
         return;
       }
 
-      // clamp do target dentro de bounds (recomendado)
       const tx = clamp(Number(x), minX, maxX);
       const tz = clamp(Number(z), minZ, maxZ);
 
@@ -87,12 +80,25 @@ function registerClickMoveHandler(socket) {
         }
       }
 
-      rt.moveMode = "CLICK";
-      rt.moveTarget = { x: tx, z: tz };
-      rt.moveTickAtMs = nowMs;
-
-      // ação opcional (não bumpRev aqui, o tick faz quando houver delta real)
+      applyClickInput(rt, {
+        nowMs,
+        target: { x: tx, z: tz },
+      });
       rt.action = "move";
+
+      await advanceRuntimeMovementPhase(
+        socket.server,
+        rt,
+        nowMs,
+        resolveCarryWeightContext,
+        processAutomaticCombat
+      );
+
+      await emitPlayerState(socket.server, rt, {
+        nowMs,
+        force: true,
+        includeInterest: false,
+      });
     } catch (e) {
       console.error("[CLICK_MOVE] error:", e);
     }

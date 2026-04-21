@@ -34,6 +34,7 @@ function VitalRow({
   height,
   current,
   max,
+  percentOverride = null,
   fillColor,
   backgroundColor,
   borderColor,
@@ -41,10 +42,21 @@ function VitalRow({
   textColor,
   fontSize,
   label,
+  pulse = false,
+  pulseColor = "rgba(251, 146, 60, 0.9)",
+  valueMode = "fraction",
 }) {
   const safeCurrent = Math.max(0, toNum(current, 0));
   const safeMax = Math.max(0, toNum(max, 0));
-  const percent = safeMax > 0 ? clamp01(safeCurrent / safeMax) : 0;
+  const rawOverride = percentOverride != null ? toNum(percentOverride, Number.NaN) : Number.NaN;
+  const hasOverride = Number.isFinite(rawOverride) && rawOverride > 0;
+  const percent = hasOverride
+    ? clamp01(rawOverride > 1 ? rawOverride / 100 : rawOverride)
+    : safeMax > 0
+      ? clamp01(safeCurrent / safeMax)
+      : 0;
+  const outerRadius = 6;
+  const innerRadius = 4;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -65,26 +77,45 @@ function VitalRow({
       ) : null}
 
       <div
-        style={{
-          position: "relative",
-          width,
-          height,
-          backgroundColor,
-          border: `1px solid ${borderColor}`,
-          borderRadius: Math.max(4, Math.floor(height / 2)),
-          overflow: "hidden",
-          boxShadow: "0 0 8px rgba(0,0,0,0.8)",
-        }}
-      >
-        <div
           style={{
-            width: `${percent * 100}%`,
-            height: "100%",
-            backgroundColor: fillColor,
-            transition: "width 0.12s linear",
-            borderRadius: Math.max(3, Math.floor(height / 2) - 1),
+            position: "relative",
+            width,
+            height,
+            backgroundColor,
+            border: `1px solid ${borderColor}`,
+            borderRadius: outerRadius,
+            overflow: "hidden",
+            boxShadow: pulse
+              ? `0 0 0 1px ${pulseColor}, 0 0 10px ${pulseColor}`
+              : "0 0 8px rgba(0,0,0,0.8)",
+            animation: pulse ? "feverBorderPulse 1.9s ease-in-out infinite" : "none",
+            "--pulse-color": pulseColor,
           }}
-        />
+        >
+          {pulse ? (
+            <style>{`
+              @keyframes feverBorderPulse {
+                0% {
+                  box-shadow: 0 0 0 1px var(--pulse-color), 0 0 8px var(--pulse-color);
+                }
+                50% {
+                  box-shadow: 0 0 0 1px var(--pulse-color), 0 0 16px var(--pulse-color);
+                }
+                100% {
+                  box-shadow: 0 0 0 1px var(--pulse-color), 0 0 8px var(--pulse-color);
+                }
+              }
+            `}</style>
+          ) : null}
+          <div
+            style={{
+              width: `${percent * 100}%`,
+              height: "100%",
+              backgroundColor: fillColor,
+              transition: "width 0.24s ease",
+              borderRadius: innerRadius,
+            }}
+          />
 
         {showText ? (
           <div
@@ -103,7 +134,7 @@ function VitalRow({
               userSelect: "none",
             }}
           >
-            {Math.floor(safeCurrent)} / {Math.floor(safeMax)}
+            {valueMode === "current" ? Math.floor(safeCurrent) : `${Math.floor(safeCurrent)} / ${Math.floor(safeMax)}`}
           </div>
         ) : null}
       </div>
@@ -134,6 +165,7 @@ export function HPBar({
   immunityMax = null,
   feverCurrent = null,
   feverMax = null,
+  feverPercent = null,
   sleepCurrent = null,
   sleepMax = null,
 
@@ -160,6 +192,15 @@ export function HPBar({
   showImmunity = false,
   showFever = false,
   showSleep = false,
+  hungerPulse = false,
+  thirstPulse = false,
+  immunityPulse = false,
+  sleepPulse = false,
+  hungerPulseColor = "rgba(251, 146, 60, 0.9)",
+  thirstPulseColor = "rgba(251, 146, 60, 0.9)",
+  immunityPulseColor = "rgba(251, 146, 60, 0.9)",
+  sleepPulseColor = "rgba(251, 146, 60, 0.9)",
+  showHpLabel = true,
   hpTextFontSize = "11px",
   staminaTextFontSize = "10px",
   hungerTextFontSize = "10px",
@@ -175,7 +216,7 @@ export function HPBar({
   hungerColor = "#38bdf8",
   thirstColor = "#22d3ee",
   immunityColor = "#60a5fa",
-  feverColor = "#fb7185",
+  feverColor = "#fb923c",
   sleepColor = "#34d399",
   trackColor = "#1a1a1a",
   borderColor = "#444",
@@ -215,7 +256,8 @@ export function HPBar({
     showFever &&
     feverCurrent != null &&
     feverMax != null &&
-    Number(feverMax) > 0;
+    Number(feverMax) > 0 &&
+    Number(feverCurrent) > 0;
   const hasSleep =
     showSleep &&
     sleepCurrent != null &&
@@ -256,7 +298,7 @@ export function HPBar({
         showText={showHpText}
         textColor={textColor}
         fontSize={hpTextFontSize}
-        label="HP"
+        label={showHpLabel ? "HP" : null}
       />
 
       {hasStamina ? (
@@ -288,6 +330,8 @@ export function HPBar({
           textColor={textColor}
           fontSize={hungerTextFontSize}
           label="Hunger"
+          pulse={hungerPulse}
+          pulseColor={hungerPulseColor}
         />
       ) : null}
 
@@ -304,6 +348,8 @@ export function HPBar({
           textColor={textColor}
           fontSize={thirstTextFontSize}
           label="Thirst"
+          pulse={thirstPulse}
+          pulseColor={thirstPulseColor}
         />
       ) : null}
 
@@ -320,6 +366,8 @@ export function HPBar({
           textColor={textColor}
           fontSize={immunityTextFontSize}
           label="IMMUNITY"
+          pulse={immunityPulse}
+          pulseColor={immunityPulseColor}
         />
       ) : null}
 
@@ -329,6 +377,7 @@ export function HPBar({
           height={thirstHeight + 2}
           current={feverCurrent}
           max={feverMax}
+          percentOverride={feverPercent}
           fillColor={feverColor}
           backgroundColor={trackColor}
           borderColor={borderColor}
@@ -336,6 +385,7 @@ export function HPBar({
           textColor={textColor}
           fontSize={feverTextFontSize}
           label="FEVER"
+          valueMode="current"
         />
       ) : null}
 
@@ -352,6 +402,8 @@ export function HPBar({
           textColor={textColor}
           fontSize={sleepTextFontSize}
           label="SLEEP"
+          pulse={sleepPulse}
+          pulseColor={sleepPulseColor}
         />
       ) : null}
     </div>

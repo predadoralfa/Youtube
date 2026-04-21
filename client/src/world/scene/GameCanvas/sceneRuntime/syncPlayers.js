@@ -8,6 +8,121 @@ import {
 } from "../helpers";
 import { sampleGroundTilt } from "./terrain";
 
+function lerpAngle(current, target, alpha) {
+  const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current));
+  return current + delta * alpha;
+}
+
+function updateAuthorityAnchor(state, entity) {
+  const movementVisual = state.movementVisualRef?.current ?? null;
+  const pos = {
+    x: Number(entity?.pos?.x ?? 0),
+    z: Number(entity?.pos?.z ?? 0),
+  };
+
+  if (!movementVisual) {
+    return pos;
+  }
+
+  const lastAuthorityPos = movementVisual.lastAuthorityPos ?? null;
+  const changed =
+    !lastAuthorityPos ||
+    Math.abs(Number(lastAuthorityPos.x ?? 0) - pos.x) > 0.0001 ||
+    Math.abs(Number(lastAuthorityPos.z ?? 0) - pos.z) > 0.0001;
+
+  if (changed) {
+    movementVisual.lastAuthorityPos = { x: pos.x, z: pos.z };
+    movementVisual.lastAuthorityChangeAt = performance.now();
+  }
+
+  return movementVisual.lastAuthorityPos ?? pos;
+}
+
+function resolveSelfVisualTarget(mesh, entity, state, sampleGroundHeight) {
+  const movementVisual = state.movementVisualRef?.current ?? null;
+  const movement = entity?.movement ?? null;
+  const speed = Number(
+    movement?.effectiveMoveSpeed ??
+      movement?.speed ??
+      state.runtimeRef.current?.effectiveMoveSpeed ??
+      state.runtimeRef.current?.speed ??
+      0
+  );
+  const authorityPos = updateAuthorityAnchor(state, entity);
+  const current = {
+    x: Number(mesh.position.x ?? authorityPos.x ?? 0),
+    z: Number(mesh.position.z ?? authorityPos.z ?? 0),
+  };
+  const now = performance.now();
+  const elapsed = Math.max(0, (now - Number(movementVisual?.lastAuthorityChangeAt ?? now)) / 1000);
+  const stopRequestedAt = Number(movementVisual?.stopRequestedAt ?? 0);
+  const stopAcked =
+    stopRequestedAt > 0 &&
+    Number(movementVisual?.lastAuthorityChangeAt ?? 0) >= stopRequestedAt;
+
+  let target = { x: authorityPos.x, z: authorityPos.z };
+  let yaw = Number(entity?.yaw ?? mesh.rotation.y ?? 0);
+
+  if (!Number.isFinite(speed) || speed <= 0) {
+    return { x: target.x, z: target.z, yaw };
+  }
+
+  if (movementVisual?.mode === "WASD" && String(entity?.action ?? "idle") === "move") {
+    const dir = movementVisual.dir ?? movement?.dir ?? { x: 0, z: 0 };
+    target = {
+      x: authorityPos.x + Number(dir.x ?? 0) * speed * elapsed,
+      z: authorityPos.z + Number(dir.z ?? 0) * speed * elapsed,
+    };
+    if (dir.x !== 0 || dir.z !== 0) {
+      yaw = Math.atan2(dir.x, dir.z);
+    }
+  } else if (movementVisual?.mode === "STOP") {
+    target = stopAcked ? { x: authorityPos.x, z: authorityPos.z } : { x: current.x, z: current.z };
+  } else if (movementVisual?.mode === "CLICK" && movementVisual.clickTarget) {
+    const targetPos = movementVisual.clickTarget;
+    const hasClickAck =
+      String(entity?.action ?? "idle") === "move" &&
+      String(movement?.mode ?? "STOP").toUpperCase() === "CLICK";
+    if (!hasClickAck) {
+      return {
+        x: current.x,
+        z: current.z,
+        yaw,
+      };
+    }
+    const dx = Number(targetPos.x ?? authorityPos.x) - authorityPos.x;
+    const dz = Number(targetPos.z ?? authorityPos.z) - authorityPos.z;
+    const dist = Math.hypot(dx, dz);
+    const stopRadius = Number(movementVisual.stopRadius ?? movement?.stopRadius ?? 0.75);
+    if (String(entity?.action ?? "idle") === "idle" && dist <= Math.max(0.05, stopRadius)) {
+      movementVisual.mode = "STOP";
+      movementVisual.clickTarget = null;
+      movementVisual.clickRequestedAt = 0;
+      target = { x: authorityPos.x, z: authorityPos.z };
+    } else if (dist > 0.0001) {
+      const travelDist = Math.max(0, dist - Math.max(0, stopRadius));
+      const step = Math.min(travelDist, speed * Math.max(elapsed, 0));
+      target = {
+        x: authorityPos.x + (dx / dist) * step,
+        z: authorityPos.z + (dz / dist) * step,
+      };
+      yaw = Math.atan2(dx / dist, dz / dist);
+    }
+  }
+
+  const followAlpha = movementVisual?.mode === "STOP" ? 0.35 : 1;
+  const nextX = current.x + (target.x - current.x) * followAlpha;
+  const nextZ = current.z + (target.z - current.z) * followAlpha;
+  const nextY = Number(typeof sampleGroundHeight === "function" ? sampleGroundHeight(nextX, nextZ) : 0);
+
+  return {
+    x: nextX,
+    y: nextY,
+    z: nextZ,
+    yaw,
+  };
+}
+
 export function syncPlayerMeshes({
   entities,
   selfKey,
@@ -77,6 +192,7 @@ export function syncPlayerMeshes({
         }
         return nextSelfHpBar;
       });
+
     }
   }
 
@@ -91,16 +207,6 @@ export function syncPlayerMeshes({
 
     const entityId = String(entityIdRaw);
     nextIds.add(entityId);
-
-    const groundY = Number(
-      typeof sampleGroundHeight === "function" ? sampleGroundHeight(entity?.pos?.x ?? 0, entity?.pos?.z ?? 0) : 0
-    );
-
-    entityPositions.set(entityId, {
-      x: entity.pos?.x ?? 0,
-      y: groundY,
-      z: entity.pos?.z ?? 0,
-    });
 
     const vitals = readEntityVitals(entity);
     const previous = state.entityVitalsRef.current.get(entityId) ?? {};
@@ -120,14 +226,29 @@ export function syncPlayerMeshes({
       applySelfColor(mesh, isSelfNow);
     }
 
-    const { x, y, z, yaw } = readPosYawFromEntity(entity);
-    const meshGroundY = Number(typeof sampleGroundHeight === "function" ? sampleGroundHeight(x, z) : 0);
-    const groundTilt = sampleGroundTilt(sampleGroundHeight, x, z);
+    const visual = isSelfNow
+      ? resolveSelfVisualTarget(mesh, entity, state, sampleGroundHeight)
+      : (() => {
+          const { x, y, z, yaw } = readPosYawFromEntity(entity);
+          return { x, y, z, yaw };
+        })();
+
+    const nextX = visual.x ?? 0;
+    const nextY = visual.y ?? null;
+    const nextZ = visual.z ?? 0;
+    const meshGroundY = Number(typeof sampleGroundHeight === "function" ? sampleGroundHeight(nextX, nextZ) : 0);
+    const groundTilt = sampleGroundTilt(sampleGroundHeight, nextX, nextZ);
     const groundAnchor = Number(mesh.userData?.groundAnchor ?? mesh.geometry?.parameters?.height / 2 ?? 0.875);
-    mesh.position.set(x, meshGroundY + groundAnchor, z);
-    mesh.rotation.y = yaw;
+    mesh.position.set(nextX, nextY == null ? meshGroundY + groundAnchor : nextY + groundAnchor, nextZ);
+    mesh.rotation.y = lerpAngle(mesh.rotation.y, visual.yaw ?? mesh.rotation.y, isSelfNow ? 1 : Math.min(1, 12 * (0.016)));
     mesh.rotation.x = groundTilt.pitch;
     mesh.rotation.z = groundTilt.roll;
+
+    entityPositions.set(entityId, {
+      x: nextX,
+      y: meshGroundY,
+      z: nextZ,
+    });
   }
 
   for (const [entityId, mesh] of state.meshByEntityIdRef.current.entries()) {

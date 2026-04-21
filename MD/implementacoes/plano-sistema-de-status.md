@@ -95,11 +95,13 @@ Saida esperada:
 Objetivo:
 
 - aplicar bonus/penalidade de XP por nivel de sono
+- bloquear o inicio do sleep acima de `50%`
+- conceder bonus extra de recuperacao de imunidade enquanto estiver dormindo
 - manter ajuste dinamico no servidor
 
 Saida esperada:
 
-- XP sensivel ao estado de sono
+- XP sensivel ao estado de sono e imunidade beneficiada durante o descanso
 
 ### Fase 7 - Economia e medico
 

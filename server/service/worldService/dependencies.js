@@ -1,6 +1,8 @@
 "use strict";
 
 const {
+  GaUser,
+  GaUserProfile,
   GaUserRuntime,
   GaInstance,
   GaLocal,
@@ -34,6 +36,8 @@ const {
 } = require("../../state/enemies/enemiesRuntimeStore");
 
 module.exports = {
+  GaUser,
+  GaUserProfile,
   GaUserRuntime,
   GaInstance,
   GaLocal,

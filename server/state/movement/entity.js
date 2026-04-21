@@ -1,5 +1,7 @@
 // server/state/movement/entity.js
 
+const { resolveFeverDebuffProfile } = require("../conditions/fever");
+
 function toNum(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -141,6 +143,18 @@ function readDiseaseSeverity(rt) {
   );
 }
 
+function readDiseasePercent(rt) {
+  return toNum(
+    rt?.diseasePercent ??
+      rt?.disease_percent ??
+      rt?.status?.fever?.percent ??
+      rt?.status?.disease?.percent ??
+      rt?.stats?.diseasePercent ??
+      rt?.stats?.disease_percent,
+    Math.round((Math.min(readDiseaseLevel(rt), 100) / 100) * 100000) / 1000
+  );
+}
+
 function readSleepCurrent(rt) {
   return toNum(
     rt?.sleepCurrent ??
@@ -166,21 +180,42 @@ function readSleepMax(rt) {
 function readFeverDebuffs(rt) {
   const feverCurrent = readDiseaseLevel(rt);
   const feverSeverity = readDiseaseSeverity(rt);
-  const severity = feverCurrent >= 100 ? 0 : Math.max(0, Math.min(1, feverSeverity || 1 - feverCurrent / 100));
-  const tier = feverCurrent >= 100 ? 0 : Math.max(1, Math.min(10, Math.ceil(severity * 10)));
-  const tempoMultiplier =
-    tier <= 0 ? 1 : tier <= 5 ? 1 + tier * 0.1 : 1 + 5 * 0.1 + (tier - 5) * 0.15;
-  return {
-    active: tier > 0,
-    tier,
-    tempoMultiplier,
-    staminaRegenMultiplier: tier > 0 ? 1 / tempoMultiplier : 1,
-  };
+  return resolveFeverDebuffProfile(feverCurrent, feverSeverity);
 }
 
 function bumpRev(rt) {
   const cur = Number(rt.rev ?? 0);
   rt.rev = Number.isFinite(cur) ? cur + 1 : 1;
+}
+
+function buildMovementSnapshot(rt) {
+  const input = rt?.movementInput ?? null;
+  const mode = String(input?.mode ?? "STOP").toUpperCase();
+  const dir = input?.dir ?? { x: 0, z: 0 };
+  const target = input?.target ?? null;
+  const stopRadius = Number(input?.stopRadius ?? 0.75);
+  const updatedAtMs = Number(input?.updatedAtMs ?? 0);
+  const effectiveMoveSpeed = Number(rt?.effectiveMoveSpeed ?? rt?.speed ?? 0);
+  const speed = Number(rt?.speed ?? 0);
+
+  return {
+    mode,
+    dir: {
+      x: Number(dir?.x ?? 0),
+      z: Number(dir?.z ?? 0),
+    },
+    target: target
+      ? {
+          x: Number(target.x ?? 0),
+          z: Number(target.z ?? 0),
+        }
+      : null,
+    stopRadius: Number.isFinite(stopRadius) && stopRadius > 0 ? stopRadius : 0.75,
+    updatedAtMs: Number.isFinite(updatedAtMs) ? updatedAtMs : 0,
+    speed: Number.isFinite(speed) && speed > 0 ? speed : null,
+    effectiveMoveSpeed:
+      Number.isFinite(effectiveMoveSpeed) && effectiveMoveSpeed > 0 ? effectiveMoveSpeed : null,
+  };
 }
 
 function toEntity(rt) {
@@ -197,6 +232,7 @@ function toEntity(rt) {
   const immunityPercent = readImmunityPercent(rt);
   const diseaseLevel = readDiseaseLevel(rt);
   const diseaseSeverity = readDiseaseSeverity(rt);
+  const diseasePercent = readDiseasePercent(rt);
   const sleepCurrent = readSleepCurrent(rt);
   const sleepMax = readSleepMax(rt);
   const debuffs = readFeverDebuffs(rt);
@@ -207,6 +243,7 @@ function toEntity(rt) {
     displayName: rt.displayName ?? null,
     pos: rt.pos,
     yaw: rt.yaw,
+    movement: buildMovementSnapshot(rt),
     hp: hpCurrent, // compat legado
     action: rt.action ?? "idle",
     rev: rt.rev ?? 0,
@@ -239,7 +276,10 @@ function toEntity(rt) {
       },
       fever: {
         current: diseaseLevel,
+        max: 100,
+        percent: diseasePercent,
         severity: diseaseSeverity,
+        active: diseaseLevel > 0,
       },
       debuffs,
       sleep: {
@@ -273,6 +313,7 @@ function toDelta(rt) {
     kind: "PLAYER",
     pos: rt.pos,
     yaw: rt.yaw,
+    movement: buildMovementSnapshot(rt),
     hp: hpCurrent, // compat legado
     action: rt.action ?? "idle",
     rev: rt.rev ?? 0,

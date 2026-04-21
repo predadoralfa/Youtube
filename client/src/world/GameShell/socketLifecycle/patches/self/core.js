@@ -7,10 +7,40 @@ function pickOptional(source, key, fallback) {
   return fallback;
 }
 
+function mergeStatusLike(base, overlay) {
+  if (!base && !overlay) return base ?? overlay ?? null;
+
+  return {
+    ...(base ?? {}),
+    ...(overlay ?? {}),
+    immunity: {
+      ...((base && base.immunity) ?? {}),
+      ...((overlay && overlay.immunity) ?? {}),
+    },
+    fever: {
+      ...((base && base.fever) ?? {}),
+      ...((overlay && overlay.fever) ?? {}),
+    },
+    debuffs: {
+      ...((base && base.debuffs) ?? {}),
+      ...((overlay && overlay.debuffs) ?? {}),
+    },
+    sleep: {
+      ...((base && base.sleep) ?? {}),
+      ...((overlay && overlay.sleep) ?? {}),
+    },
+  };
+}
+
 export function patchSelfFromBaseline(prev, payload, self) {
   if (!prev || !prev.runtime || !self) return prev;
 
   const nextVitals = normalizeVitals(self);
+  const payloadRev = Number(payload?.runtime?.rev ?? payload?.rev ?? self?.rev ?? prev.runtime.rev ?? 0);
+  const nextStatus = mergeStatusLike(
+    prev.runtime.status,
+    mergeStatusLike(payload?.runtime?.status ?? null, self?.status ?? null)
+  );
   return {
     ...prev,
     runtime: {
@@ -33,6 +63,13 @@ export function patchSelfFromBaseline(prev, payload, self) {
         y: self.pos?.y ?? prev.runtime.pos?.y ?? 0,
         z: self.pos?.z ?? prev.runtime.pos?.z ?? 0,
       },
+      speed:
+        payload?.runtime?.speed ??
+        payload?.speed ??
+        self?.speed ??
+        null,
+      rev: Number.isFinite(payloadRev) ? payloadRev : prev.runtime.rev ?? 0,
+      status: nextStatus,
       vitals: nextVitals,
     },
     ui: {
@@ -40,6 +77,7 @@ export function patchSelfFromBaseline(prev, payload, self) {
       self: {
         ...((prev.ui && prev.ui.self) ?? {}),
         ...nextVitals,
+        status: nextStatus,
         vitals: nextVitals,
       },
     },
@@ -62,6 +100,10 @@ export function patchSelfFromEntityDelta(prev, self) {
         y: self.pos?.y ?? prev.runtime.pos?.y ?? 0,
         z: self.pos?.z ?? prev.runtime.pos?.z ?? 0,
       },
+      rev: self.rev ?? prev.runtime.rev ?? 0,
+      speed: prev.runtime.speed ?? null,
+      effectiveMoveSpeed: prev.runtime.effectiveMoveSpeed ?? null,
+      action: self.action ?? prev.runtime.action ?? "idle",
       vitals: nextVitals,
     },
     ui: {
@@ -77,6 +119,12 @@ export function patchSelfFromEntityDelta(prev, self) {
 
 export function patchSelfFromMoveState(prev, payload) {
   if (!prev || !prev.runtime) return prev;
+
+  const nextRev = Number(payload?.rev ?? NaN);
+  const prevRev = Number(prev.runtime.rev ?? -1);
+  if (Number.isFinite(nextRev) && nextRev <= prevRev) {
+    return prev;
+  }
 
   const x = payload?.pos?.x;
   const y = payload?.pos?.y;
@@ -104,6 +152,11 @@ export function patchSelfFromMoveState(prev, payload) {
         y: y ?? prev.runtime.pos?.y ?? 0,
         z: z ?? prev.runtime.pos?.z ?? 0,
       },
+      rev: Number.isFinite(nextRev) ? nextRev : prev.runtime.rev ?? 0,
+      speed: payload?.speed ?? prev.runtime.speed ?? null,
+      effectiveMoveSpeed: payload?.effectiveMoveSpeed ?? prev.runtime.effectiveMoveSpeed ?? null,
+      movement: payload?.movement ?? prev.runtime.movement ?? null,
+      action: payload?.action ?? prev.runtime.action ?? "idle",
       status: payload?.status
         ? {
             ...(prev.runtime.status ?? {}),

@@ -2,7 +2,7 @@
 
 const { createLootContainerForEnemy } = require("../../../../service/lootService");
 const { COMBAT_BASE_COOLDOWN_MS } = require("../../../../config/combatConstants");
-const { resolveFeverDebuffTempoMultiplier } = require("../../../../state/movement/status");
+const { resolveFeverDebuffTempoMultiplier } = require("../../../../state/conditions/fever");
 
 async function applySuccessfulAttack({
   io,
@@ -53,7 +53,7 @@ async function applySuccessfulAttack({
     cooldownMs:
       (COMBAT_BASE_COOLDOWN_MS / (attackerStats.attackSpeed || 1)) *
       resolveFeverDebuffTempoMultiplier(
-        attackerRuntime?.status?.fever?.current ?? attackerRuntime?.diseaseLevel ?? 100,
+        attackerRuntime?.status?.fever?.current ?? attackerRuntime?.diseaseLevel ?? 0,
         attackerRuntime?.status?.fever?.severity ?? attackerRuntime?.diseaseSeverity ?? 0
       ),
     staminaCost: combatResult.staminaCost,

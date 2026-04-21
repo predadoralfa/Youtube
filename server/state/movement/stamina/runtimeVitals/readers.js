@@ -147,7 +147,7 @@ function readRuntimeDiseaseLevel(rt) {
       rt?.status?.fever?.current ??
       rt?.stats?.diseaseLevel ??
       rt?.stats?.disease_level,
-    100
+    0
   );
 }
 
@@ -160,6 +160,18 @@ function readRuntimeDiseaseSeverity(rt) {
       rt?.stats?.diseaseSeverity ??
       rt?.stats?.disease_severity,
     0
+  );
+}
+
+function readRuntimeDiseasePercent(rt) {
+  return toFiniteNumber(
+    rt?.diseasePercent ??
+      rt?.disease_percent ??
+      rt?.status?.fever?.percent ??
+      rt?.status?.disease?.percent ??
+      rt?.stats?.diseasePercent ??
+      rt?.stats?.disease_percent,
+    Math.round((Math.min(readRuntimeDiseaseLevel(rt), 100) / 100) * 100000) / 1000
   );
 }
 
@@ -199,6 +211,7 @@ module.exports = {
   readRuntimeImmunityPercent,
   readRuntimeDiseaseLevel,
   readRuntimeDiseaseSeverity,
+  readRuntimeDiseasePercent,
   readRuntimeSleepCurrent,
   readRuntimeSleepMax,
 };

@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { applyDayNightCycle } from "../../../light/dayNightCycle";
-import { getSocket } from "@/services/Socket";
 import { createPlayerMesh } from "../../../../entities/character/player";
 import { readPosYawFromRuntime } from "../../helpers";
 import { syncActorMeshes } from "../syncActors";
@@ -10,7 +9,7 @@ import { syncProceduralWorld } from "../procedural";
 import { updateOverlayState } from "../overlay";
 import { sampleGroundTilt } from "../terrain";
 
-export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveDir }) {
+export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
   let alive = true;
   const clock = new THREE.Clock();
   const fallbackTarget = new THREE.Object3D();
@@ -23,18 +22,6 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveDi
 
     const dt = Math.min(clock.getDelta(), 0.05);
     markerAccum += dt;
-
-    const socket = getSocket();
-    if (socket) {
-      const camState = runtime.cameraApi.getState();
-      socket.emit("move:intent", {
-        dir: getMoveDir(),
-        dt,
-        yawDesired: camState.yaw,
-        cameraPitch: camState.pitch,
-        cameraDistance: camState.distance,
-      });
-    }
 
     const actors = state.actorsRef.current ?? [];
     syncActorMeshes({
@@ -67,6 +54,7 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveDi
         selfKey,
         scene: runtime.scene,
         state,
+        dt,
         clearSelection: tools.clearSelection,
         entityPositions,
         sampleGroundHeight: runtime.sampleGroundHeight,

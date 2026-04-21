@@ -28,10 +28,8 @@ export function useSelfHud(state, worldStoreRef) {
         immunityMax: status.immunityMax,
         feverCurrent: status.feverCurrent,
         feverMax: status.feverMax,
-        feverSeverity: status.feverSeverity,
-        feverTier: status.feverTier,
-        feverTempoMultiplier: status.feverTempoMultiplier,
-        feverStaminaRegenMultiplier: status.feverStaminaRegenMultiplier,
+        feverPercent: status.feverPercent,
+        feverActive: status.feverActive,
         sleepCurrent: status.sleepCurrent,
         sleepMax: status.sleepMax,
       });

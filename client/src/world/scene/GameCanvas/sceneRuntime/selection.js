@@ -124,6 +124,17 @@ export function createSelectionTools({
     const z = Number(point?.z);
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
 
+    if (state?.movementVisualRef?.current) {
+      state.movementVisualRef.current.seq += 1;
+      state.movementVisualRef.current.mode = "CLICK";
+      state.movementVisualRef.current.dir = { x: 0, z: 0 };
+      state.movementVisualRef.current.lastActiveDir = { x: 0, z: 0 };
+      state.movementVisualRef.current.stopRequestedAt = 0;
+      state.movementVisualRef.current.clickRequestedAt = performance.now();
+      state.movementVisualRef.current.stopRadius = 0.75;
+      state.movementVisualRef.current.clickTarget = { x, z };
+    }
+
     socket.emit("move:click", { x, z });
   }
 

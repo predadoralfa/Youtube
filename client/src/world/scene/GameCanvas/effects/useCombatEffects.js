@@ -4,7 +4,7 @@ import { useSelfHud } from "./selfHud";
 
 export function useCombatEffects(state, worldStoreRef) {
   const damageTtlMs = 1200;
-  useDamageSocket(state, damageTtlMs);
+  useDamageSocket(state, worldStoreRef, damageTtlMs);
   useSelfHud(state, worldStoreRef);
   useFloatingCleanup(state, damageTtlMs);
 }

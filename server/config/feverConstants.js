@@ -1,0 +1,15 @@
+"use strict";
+
+const FEVER_TICK_INTERVAL_MS = 60 * 1000;
+const FEVER_MAX_VALUE = 100;
+const FEVER_START_VALUE = 2;
+const FEVER_STEP = 2;
+const FEVER_RECOVERY_STEP = 1;
+
+module.exports = {
+  FEVER_TICK_INTERVAL_MS,
+  FEVER_MAX_VALUE,
+  FEVER_START_VALUE,
+  FEVER_STEP,
+  FEVER_RECOVERY_STEP,
+};

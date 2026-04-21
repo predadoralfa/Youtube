@@ -22,6 +22,7 @@ const {
   depositPrimitiveShelterMaterial,
 } = require("../../../service/buildMaterialsService");
 const { applyApproach } = require("../interactHandler/movement");
+const { stopMovement } = require("../../../state/movement/input");
 
 function safeAck(ack, payload) {
   if (typeof ack === "function") {
@@ -244,11 +245,8 @@ function registerBuildHandler(io, socket) {
           };
           rt.pendingBuild = null;
           rt.interact = null;
-          rt.moveTarget = null;
-          rt.moveMode = "STOP";
+          stopMovement(rt);
           rt.action = "idle";
-          rt.inputDir = { x: 0, z: 0 };
-          rt.inputDirAtMs = 0;
           io.to(`inst:${Number(rt.instanceId)}`).emit("actor:updated", {
             actorId: String(result.actorId),
             actor: result.actorPayload,
@@ -578,11 +576,8 @@ function registerBuildHandler(io, socket) {
         rt.buildLock = null;
         rt.pendingBuild = null;
         rt.interact = null;
-        rt.moveTarget = null;
-        rt.moveMode = "STOP";
+        stopMovement(rt);
         rt.action = "idle";
-        rt.inputDir = { x: 0, z: 0 };
-        rt.inputDirAtMs = 0;
         removeActor(String(actorId));
         console.log("[BUILD][SERVER] cancel local remove", {
           socketId: socket.id,

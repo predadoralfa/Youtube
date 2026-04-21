@@ -61,14 +61,19 @@ function createBaseRuntime({
     bounds,
     autoFood,
 
-    moveMode: "STOP",
-    moveTarget: null,
-    moveStopRadius: 0.75,
     moveTickAtMs: 0,
-    wasdTickAtMs: 0,
-    inputDir: { x: 0, z: 0 },
-    inputDirAtMs: 0,
     lastClickAtMs: 0,
+    movementInput: {
+      mode: "STOP",
+      dir: { x: 0, z: 0 },
+      target: null,
+      stopRadius: 0.75,
+      seq: 0,
+      updatedAtMs: 0,
+      yaw: Number(row.yaw ?? 0),
+      cameraPitch: Number(row.camera_pitch ?? Math.PI / 4),
+      cameraDistance: Number(row.camera_distance ?? 26),
+    },
 
     combat: {
       hpCurrent: combatStats?.hpCurrent,

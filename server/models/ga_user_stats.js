@@ -78,7 +78,7 @@ module.exports = (sequelize, DataTypes) => {
       disease_level: {
         type: DataTypes.DOUBLE.UNSIGNED,
         allowNull: false,
-        defaultValue: 100
+        defaultValue: 0
       },
 
       disease_severity: {

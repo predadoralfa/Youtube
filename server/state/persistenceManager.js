@@ -16,7 +16,16 @@ async function flushUserRuntimeImmediate(userId) {
 }
 
 async function flushUserStatsImmediate(userId) {
-  return flushUserStats(userId, nowMs(), { force: true });
+  const now = nowMs();
+  const ok = await flushUserStats(userId, now, { force: true });
+  if (ok) {
+    const { getRuntime } = require("./runtimeStore");
+    const rt = getRuntime(userId);
+    if (rt) {
+      rt._lastStatsFlushAtMs = now;
+    }
+  }
+  return ok;
 }
 
 module.exports = {

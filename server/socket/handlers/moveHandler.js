@@ -1,16 +1,18 @@
-// server/socket/handlers/moveHandler.js
+"use strict";
 
 const {
   getRuntime,
   ensureRuntimeLoaded,
-  // regra única para “WASD ativo”, com timeout
-  isWASDActive,
+  markRuntimeDirty,
 } = require("../../state/runtimeStore");
-
-const { allowMove } = require("./move/throttle");
+const { bumpRev } = require("../../state/movement/entity");
+const { emitPlayerState } = require("../../state/movement/tickOnce/playerMovementPhase/emitPlayerState");
+const { applyWASDInput } = require("../../state/movement/input");
+const { resolveCarryWeightContext } = require("../../state/movement/tickOnce/carryWeight");
+const { processAutomaticCombat } = require("../../state/movement/tickOnce/playerCombat");
+const { advanceRuntimeMovementPhase } = require("../../state/movement/tickOnce/playerMovementPhase/processPhase");
+const { clearPlayerCombat } = require("./move/clearCombat");
 const { parseMoveIntentPayload } = require("./move/validate");
-const { applyWASDIntent } = require("./move/applyWASD");
-const { broadcastWASDResult } = require("./move/broadcast");
 
 function registerMoveHandler(socket) {
   socket.on("move:intent", async (payload) => {
@@ -23,7 +25,6 @@ function registerMoveHandler(socket) {
       const runtime = getRuntime(userId);
       if (!runtime) return;
 
-      // blindagem: se caiu / está pendente / offline, ignora intent
       if (
         runtime.connectionState === "DISCONNECTED_PENDING" ||
         runtime.connectionState === "OFFLINE"
@@ -33,57 +34,76 @@ function registerMoveHandler(socket) {
 
       if (runtime.buildLock?.active || runtime.sleepLock?.active) return;
 
-      if (!allowMove(runtime, nowMs)) return;
-
       const parsed = parseMoveIntentPayload(payload);
       if (!parsed) return;
 
-      const result = await applyWASDIntent({
-        runtime,
+      const isStoppingIntent = parsed.dir.x === 0 && parsed.dir.z === 0;
+
+      if (isStoppingIntent) {
+        await advanceRuntimeMovementPhase(
+          socket.server,
+          runtime,
+          nowMs,
+          resolveCarryWeightContext,
+          processAutomaticCombat
+        );
+      }
+
+      const result = applyWASDInput(runtime, {
         nowMs,
+        seq: parsed.seq,
         dir: parsed.dir,
-        yawDesired: parsed.yawDesired,
+        yaw: parsed.yawDesired,
         cameraPitch: parsed.cameraPitch,
         cameraDistance: parsed.cameraDistance,
-        isWASDActive,
       });
 
-      if (!result.ok) {
-        // log só no que interessa (mantém o comportamento atual)
-        if (result.reason === "invalid_speed") {
-          console.error("[MOVE] runtime.speed inválido/ausente", {
-            userId,
-            runtimeSpeed: runtime?.speed,
-          });
-        } else if (result.reason === "missing_bounds") {
-          console.error("[MOVE] runtime.bounds ausente (bloqueando movimento)", { userId });
-        } else if (result.reason === "invalid_bounds") {
-          console.error("[MOVE] runtime.bounds inválido (bloqueando movimento)", {
-            userId,
-            bounds: runtime.bounds,
+      if (!result.changed) return;
+
+      let changed = result.changed;
+      let actionChanged = false;
+
+      if (result.startedMoving && runtime.combat?.state === "ENGAGED") {
+        const combatCancelled = clearPlayerCombat(runtime);
+        if (combatCancelled) {
+          changed = true;
+          socket.emit("combat:cancelled", {
+            reason: "WASD",
+            atMs: nowMs,
           });
         }
-        return;
       }
 
-      if (result.combatCancelled) {
-        socket.emit("combat:cancelled", {
-          reason: "WASD",
-          atMs: nowMs,
+      if (result.startedMoving && runtime.action !== "move") {
+        runtime.action = "move";
+        actionChanged = true;
+      } else if (result.stoppedMoving && !runtime.interact?.active && runtime.action !== "idle") {
+        runtime.action = "idle";
+        actionChanged = true;
+      }
+
+      if (!isStoppingIntent) {
+        await advanceRuntimeMovementPhase(
+          socket.server,
+          runtime,
+          nowMs,
+          resolveCarryWeightContext,
+          processAutomaticCombat
+        );
+      }
+
+      if (!changed && !actionChanged) return;
+
+      bumpRev(runtime);
+      markRuntimeDirty(userId, nowMs);
+
+      if (result.dirChanged || result.modeChanged || result.lookChanged || actionChanged) {
+        await emitPlayerState(socket.server, runtime, {
+          nowMs,
+          force: true,
+          includeInterest: false,
         });
       }
-
-      // Se nada mudou, não replica
-      if (
-        !result.moved &&
-        !result.yawChanged &&
-        !result.cameraChanged &&
-        !result.modeOrActionChanged &&
-        !result.staminaChanged
-      )
-        return;
-
-      broadcastWASDResult({ socket, userId, runtime, nowMs });
     } catch (e) {
       console.error("[MOVE] error:", e);
     }

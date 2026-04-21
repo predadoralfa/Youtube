@@ -186,20 +186,12 @@ function resolveStatusSnapshot(snapshot) {
         100
     )
   );
-  const feverCurrent = Number(status?.fever?.current ?? snapshot?.runtime?.feverCurrent ?? 100);
-  const feverDisplayCurrent = Math.max(0, Math.min(100, 100 - feverCurrent));
-  const feverSeverity = Math.min(
-    1,
-    Math.max(
-      0,
-      Number(status?.fever?.severity ?? snapshot?.runtime?.feverSeverity ?? Math.max(0, 1 - feverCurrent / 100))
-    )
+  const feverCurrent = Number(status?.fever?.current ?? snapshot?.runtime?.feverCurrent ?? 0);
+  const feverMax = Number(status?.fever?.max ?? snapshot?.runtime?.feverMax ?? 100);
+  const feverPercent = Number(
+    status?.fever?.percent ?? snapshot?.runtime?.feverPercent ?? snapshot?.runtime?.status?.fever?.percent ?? 0
   );
-  const feverTier = Number(
-    status?.debuffs?.tier ??
-      snapshot?.runtime?.feverTier ??
-      (feverCurrent >= 100 ? 0 : Math.max(1, Math.min(10, Math.ceil(feverSeverity * 10))))
-  );
+  const feverActive = Boolean(status?.fever?.active ?? snapshot?.runtime?.feverActive ?? false);
   const sleepCurrent = Number(status?.sleep?.current ?? snapshot?.runtime?.sleepCurrent ?? 100);
   const sleepMax = Math.max(1, Number(status?.sleep?.max ?? snapshot?.runtime?.sleepMax ?? 100));
   const sleepMultiplierBps = resolveSleepXpMultiplierBasisPoints(sleepCurrent, sleepMax);
@@ -217,11 +209,9 @@ function resolveStatusSnapshot(snapshot) {
     immunityMax,
     immunityPercent: Number.isFinite(immunityPercentRaw) ? immunityPercentRaw : 0,
     feverCurrent,
-    feverDisplayCurrent,
-    feverDisplayPercent: Math.round((feverDisplayCurrent / 100) * 100),
-    feverSeverity,
-    feverTier,
-    feverPercent: Math.round((feverCurrent / 100) * 100),
+    feverMax,
+    feverPercent: Number.isFinite(feverPercent) ? feverPercent : 0,
+    feverActive,
     sleepCurrent,
     sleepMax,
     sleepMultiplier,
@@ -235,6 +225,11 @@ function MiniVitalRow({
   max,
   color,
   trackColor = "rgba(15, 23, 42, 0.92)",
+  percentText = null,
+  radius = 4,
+  trackBorderColor = "rgba(59, 130, 246, 0.24)",
+  pulse = false,
+  pulseColor = "rgba(239, 68, 68, 0.9)",
 }) {
   const safeCurrent = Math.max(0, Number(current ?? 0));
   const safeMax = Math.max(1, Number(max ?? 1));
@@ -263,7 +258,7 @@ function MiniVitalRow({
           {label}
         </span>
         <span style={{ color: "rgba(248, 250, 252, 0.82)", fontSize: 11 }}>
-          {percentLabel}%
+          {percentText ?? `${percentLabel}%`}
         </span>
       </div>
 
@@ -271,16 +266,18 @@ function MiniVitalRow({
         style={{
           height: 12,
           overflow: "hidden",
-          border: "1px solid rgba(59, 130, 246, 0.24)",
-          borderRadius: 10,
+          border: `1px solid ${trackBorderColor}`,
+          borderRadius: radius,
           background: trackColor,
+          boxShadow: pulse ? `0 0 0 1px ${pulseColor}, 0 0 12px ${pulseColor}` : "none",
+          animation: pulse ? "statusCriticalPulse 1.25s ease-in-out infinite" : "none",
         }}
       >
         <div
           style={{
             width: `${Math.round(ratio * 100)}%`,
             height: "100%",
-            borderRadius: 10,
+            borderRadius: radius,
             background: color,
             transition: "width 240ms ease",
           }}
@@ -296,10 +293,13 @@ function JobRow({
   subtitle,
   remainingText,
   progressRatio,
+  progressPercent,
   emptyText,
   extra = null,
   hideTitle = false,
   hideRemaining = false,
+  pulse = false,
+  pulseColor = "rgba(239, 68, 68, 0.9)",
 }) {
   const hasJob = Boolean(title);
 
@@ -348,15 +348,17 @@ function JobRow({
           height: 10,
           overflow: "hidden",
           border: "1px solid rgba(56, 189, 248, 0.24)",
-          borderRadius: 9,
+          borderRadius: 4,
           background: "rgba(5, 10, 18, 0.72)",
+          boxShadow: pulse ? `0 0 0 1px ${pulseColor}, 0 0 12px ${pulseColor}` : "none",
+          animation: pulse ? "statusCriticalPulse 1.25s ease-in-out infinite" : "none",
         }}
       >
         <div
           style={{
-            width: `${Math.round(clamp01(progressRatio) * 100)}%`,
+            width: `${Math.round(clamp01(progressPercent != null ? Number(progressPercent) / 100 : progressRatio) * 100)}%`,
             height: "100%",
-            borderRadius: 9,
+            borderRadius: 4,
             background: hasJob
               ? "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(34,197,94,0.9))"
               : "rgba(148, 163, 184, 0.22)",
@@ -510,9 +512,34 @@ export function PlayerStatusPanel({
   const activeSleep = useMemo(() => resolveActiveSleep(snapshot), [snapshot]);
   const statusSummary = useMemo(() => resolveStatusSnapshot(snapshot), [snapshot]);
   const activeJobs = [activeResearch, activeCraft].filter(Boolean);
+  const isLowWarn = (current, max) => Number(max ?? 0) > 0 && Number(current ?? 0) / Number(max ?? 1) <= 0.3;
+  const isCritical = (current, max) => Number(max ?? 0) > 0 && Number(current ?? 0) <= 5;
+  const hungerWarning = isLowWarn(statusSummary.hungerCurrent, statusSummary.hungerMax);
+  const thirstWarning = isLowWarn(statusSummary.thirstCurrent, statusSummary.thirstMax);
+  const sleepWarning = isLowWarn(statusSummary.sleepCurrent, statusSummary.sleepMax);
+  const immunityWarning = isLowWarn(statusSummary.immunityCurrent, statusSummary.immunityMax);
+  const hungerCritical = isCritical(statusSummary.hungerCurrent, statusSummary.hungerMax);
+  const thirstCritical = isCritical(statusSummary.thirstCurrent, statusSummary.thirstMax);
+  const sleepCritical = isCritical(statusSummary.sleepCurrent, statusSummary.sleepMax);
+  const immunityCritical = isCritical(statusSummary.immunityCurrent, statusSummary.immunityMax);
 
   return (
     <>
+      <style>
+        {`
+          @keyframes statusCriticalPulse {
+            0% {
+              box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.55), 0 0 8px rgba(239, 68, 68, 0.22);
+            }
+            50% {
+              box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.9), 0 0 16px rgba(239, 68, 68, 0.5);
+            }
+            100% {
+              box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.55), 0 0 8px rgba(239, 68, 68, 0.22);
+            }
+          }
+        `}
+      </style>
       <SleepOverlayCard
         sleepSummary={activeSleep}
         sleepCurrent={statusSummary.sleepCurrent}
@@ -621,6 +648,9 @@ export function PlayerStatusPanel({
                     current={statusSummary.hungerCurrent}
                     max={statusSummary.hungerMax}
                     color="linear-gradient(90deg, rgba(56,189,248,0.95), rgba(14,165,233,0.9))"
+                    trackColor="rgba(5, 10, 18, 0.72)"
+                    pulse={hungerWarning}
+                    pulseColor={hungerCritical ? "rgba(239, 68, 68, 0.9)" : "rgba(251, 146, 60, 0.9)"}
                   />
 
                   <MiniVitalRow
@@ -628,6 +658,9 @@ export function PlayerStatusPanel({
                     current={statusSummary.thirstCurrent}
                     max={statusSummary.thirstMax}
                     color="linear-gradient(90deg, rgba(34,211,238,0.95), rgba(6,182,212,0.9))"
+                    trackColor="rgba(5, 10, 18, 0.72)"
+                    pulse={thirstWarning}
+                    pulseColor={thirstCritical ? "rgba(239, 68, 68, 0.9)" : "rgba(251, 146, 60, 0.9)"}
                   />
 
                   <MiniVitalRow
@@ -635,65 +668,33 @@ export function PlayerStatusPanel({
                     current={statusSummary.sleepCurrent}
                     max={statusSummary.sleepMax}
                     color="linear-gradient(90deg, rgba(52,211,153,0.95), rgba(34,197,94,0.9))"
+                    trackColor="rgba(5, 10, 18, 0.72)"
+                    pulse={sleepWarning}
+                    pulseColor={sleepCritical ? "rgba(239, 68, 68, 0.9)" : "rgba(251, 146, 60, 0.9)"}
                   />
                 </div>
 
                 <div style={{ display: "grid", gap: 12 }}>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        alignItems: "baseline",
-                      }}
-                    >
-                      <span
-                        style={{
-                          color: "rgba(191, 219, 254, 0.86)",
-                          fontSize: 10,
-                          fontWeight: 800,
-                          letterSpacing: "0.11em",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        Immunity
-                      </span>
-                      <span style={{ color: "rgba(248, 250, 252, 0.82)", fontSize: 11 }}>
-                        {statusSummary.immunityPercent.toFixed(3)}%
-                      </span>
-                    </div>
+                  <MiniVitalRow
+                    label="Immunity"
+                    current={statusSummary.immunityCurrent}
+                    max={statusSummary.immunityMax}
+                    color="linear-gradient(90deg, rgba(96,165,250,0.95), rgba(34,197,94,0.9))"
+                    trackColor="rgba(5, 10, 18, 0.72)"
+                    percentText={`${statusSummary.immunityPercent.toFixed(1)}%`}
+                    radius={10}
+                    trackBorderColor="rgba(96, 165, 250, 0.24)"
+                    pulse={immunityWarning}
+                    pulseColor={immunityCritical ? "rgba(239, 68, 68, 0.9)" : "rgba(251, 146, 60, 0.9)"}
+                  />
 
-                    <div
-                      style={{
-                        height: 14,
-                        overflow: "hidden",
-                        border: "1px solid rgba(96, 165, 250, 0.24)",
-                        borderRadius: 999,
-                        background: "rgba(5, 10, 18, 0.72)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${statusSummary.immunityPercent}%`,
-                          height: "100%",
-                          borderRadius: 999,
-                          background: "linear-gradient(90deg, rgba(96,165,250,0.95), rgba(34,197,94,0.9))",
-                          transition: "width 240ms ease",
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {statusSummary.feverActive && statusSummary.feverDisplayCurrent > 0 ? (
+                  {statusSummary.feverActive && statusSummary.feverCurrent > 0 ? (
                     <JobRow
                       label="Fever"
-                      title={`${statusSummary.feverDisplayCurrent} / 100`}
-                      subtitle={`Severity ${Math.round(statusSummary.feverSeverity * 100)}%`}
-                      remainingText={
-                        statusSummary.feverTier > 0 ? `Tier ${statusSummary.feverTier}` : "Clear"
-                      }
-                      progressRatio={statusSummary.feverDisplayCurrent / 100}
+                      title={`${statusSummary.feverCurrent}`}
+                      subtitle={null}
+                      remainingText={statusSummary.feverActive ? "Active" : "Clear"}
+                      progressPercent={statusSummary.feverPercent}
                       emptyText="No fever data"
                     />
                   ) : null}

@@ -1,7 +1,23 @@
 "use strict";
 
+const {
+  readRuntimeSleepCurrent,
+  readRuntimeSleepMax,
+} = require("../state/movement/stamina/runtimeVitals");
+const { stopMovement } = require("../state/movement/input");
+
+function canStartPrimitiveShelterSleep(rt, maxStartPercent = 50) {
+  if (!rt) return false;
+
+  const sleepMax = Math.max(1, Number(readRuntimeSleepMax(rt) ?? 100) || 100);
+  const sleepCurrent = Math.max(0, Number(readRuntimeSleepCurrent(rt) ?? 100) || 0);
+  const sleepPercent = (sleepCurrent / sleepMax) * 100;
+  return sleepPercent <= Number(maxStartPercent ?? 50);
+}
+
 function startPrimitiveShelterSleep(rt, actorId, nowMs = Date.now()) {
   if (!rt) return null;
+  if (rt.sleepLock?.active !== true && !canStartPrimitiveShelterSleep(rt, 50)) return null;
 
   const lock = {
     active: true,
@@ -13,11 +29,8 @@ function startPrimitiveShelterSleep(rt, actorId, nowMs = Date.now()) {
   rt.sleepLock = lock;
   rt.pendingSleep = null;
   rt.interact = null;
-  rt.moveTarget = null;
-  rt.moveMode = "STOP";
+  stopMovement(rt, { nowMs });
   rt.action = "sleep";
-  rt.inputDir = { x: 0, z: 0 };
-  rt.inputDirAtMs = 0;
   return lock;
 }
 
@@ -28,15 +41,13 @@ function stopPrimitiveShelterSleep(rt) {
   rt.sleepLock = null;
   rt.pendingSleep = null;
   rt.interact = null;
-  rt.moveTarget = null;
-  rt.moveMode = "STOP";
+  stopMovement(rt);
   rt.action = "idle";
-  rt.inputDir = { x: 0, z: 0 };
-  rt.inputDirAtMs = 0;
   return prev;
 }
 
 module.exports = {
+  canStartPrimitiveShelterSleep,
   startPrimitiveShelterSleep,
   stopPrimitiveShelterSleep,
 };

@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { getSocket } from "@/services/Socket";
 import { projectWorldToScreenPx } from "../helpers";
 
-export function useDamageSocket(state, damageTtlMs) {
+export function useDamageSocket(state, worldStoreRef, damageTtlMs) {
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
@@ -71,14 +71,58 @@ export function useDamageSocket(state, damageTtlMs) {
       ]);
 
       const current = state.entityVitalsRef.current.get(targetKey) ?? {};
+      const currentHp = Number(current.hpCurrent ?? 0);
+      const currentHpMax = Number(current.hpMax ?? 0);
+      const nextHpCurrent = Number.isFinite(Number(targetHPAfter))
+        ? Math.max(0, Number(targetHPAfter))
+        : Math.max(0, currentHp - exactDamage);
+      const nextHpMax = Number.isFinite(Number(targetHPMax)) ? Math.max(0, Number(targetHPMax)) : currentHpMax;
+
+      if (String(data?.targetKind ?? fallbackKind).toUpperCase() === "ENEMY") {
+        state.predictedEnemyVitalsRef.current.set(targetKey, {
+          hpCurrent: nextHpCurrent,
+          hpMax: nextHpMax,
+          lastDamageTime: Date.now(),
+        });
+      }
+
+      const store = worldStoreRef?.current ?? null;
+      if (store?.applyDelta && String(data?.targetKind ?? fallbackKind).toUpperCase() === "ENEMY") {
+        const worldEntity = store.entities?.get?.(targetKey) ?? null;
+        const currentRev = Number(worldEntity?.rev ?? 0);
+        store.applyDelta({
+          entityId: targetKey,
+          rev: Number.isFinite(currentRev) ? currentRev + 0.1 : 0.1,
+          hp: nextHpCurrent,
+          vitals: {
+            hp: {
+              current: nextHpCurrent,
+              max: nextHpMax,
+            },
+          },
+        });
+      }
+
       state.entityVitalsRef.current.set(targetKey, {
         ...current,
-        hpCurrent: Number.isFinite(Number(targetHPAfter))
-          ? Math.max(0, Number(targetHPAfter))
-          : Math.max(0, Number((current.hpCurrent ?? 0) - exactDamage)),
-        hpMax: Number.isFinite(Number(targetHPMax)) ? Math.max(0, Number(targetHPMax)) : current.hpMax,
+        hpCurrent: nextHpCurrent,
+        hpMax: nextHpMax,
         lastDamageTime: Date.now(),
       });
+
+      const selected = state.selectedTargetRef.current;
+      if (selected?.kind === "ENEMY" && String(selected.id) === targetKey) {
+        const enemyName =
+          state.meshByEnemyIdRef.current.get(targetKey)?.userData?.displayName ?? `Enemy ${targetKey}`;
+        state.setTargetHpBar({
+          id: targetKey,
+          x: state.targetHpBar?.x ?? null,
+          y: state.targetHpBar?.y ?? null,
+          displayName: enemyName,
+          hpCurrent: nextHpCurrent,
+          hpMax: nextHpMax,
+        });
+      }
     };
 
     const onDamageTaken = (data) => applyDamageEvent(data, "OUTGOING_PLAYER");
@@ -88,6 +132,7 @@ export function useDamageSocket(state, damageTtlMs) {
       state.setFloatingDamages([]);
       state.setTargetHpBar(null);
       state.setTargetLootCard(null);
+      state.predictedEnemyVitalsRef.current.clear();
     };
 
     socket.on("combat:damage_taken", onDamageTaken);

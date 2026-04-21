@@ -53,6 +53,8 @@ function buildBaseline(rt) {
     userId: String(rt.userId ?? rt.user_id ?? ""),
     entityId: String(rt.entityId ?? rt.userId ?? rt.user_id ?? ""),
     instanceId: String(rt.instanceId ?? rt.instance_id ?? ""),
+    rev: Number(rt.rev ?? 0),
+    speed: rt.speed ?? null,
     pos_x: Number(rt.pos?.x ?? rt.pos_x ?? 0),
     pos_y: Number(rt.pos?.y ?? rt.pos_y ?? 0),
     pos_z: Number(rt.pos?.z ?? rt.pos_z ?? 0),
@@ -85,10 +87,13 @@ function buildBaseline(rt) {
             max: Number(rt.status.immunity?.max ?? rt.immunityMax ?? 0),
             percent: Number(rt.status.immunity?.percent ?? rt.immunityPercent ?? 0),
           },
-          fever: {
-            current: Number(rt.status.fever?.current ?? rt.diseaseLevel ?? 0),
-            severity: Number(rt.status.fever?.severity ?? rt.diseaseSeverity ?? 0),
-          },
+      fever: {
+        current: Number(rt.status.fever?.current ?? rt.diseaseLevel ?? 0),
+        max: 100,
+        percent: Number(rt.status.fever?.percent ?? rt.diseasePercent ?? Math.round((Math.min(Number(rt.status.fever?.current ?? rt.diseaseLevel ?? 0), 100) / 100) * 100000) / 1000),
+        severity: Number(rt.status.fever?.severity ?? rt.diseaseSeverity ?? 0),
+        active: Number(rt.status.fever?.current ?? rt.diseaseLevel ?? 0) > 0,
+      },
           debuffs: rt.status.debuffs ?? null,
           sleep: {
             current: Number(rt.status.sleep?.current ?? rt.sleepCurrent ?? 0),

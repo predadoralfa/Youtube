@@ -11,11 +11,15 @@ const {
   shouldQueueStaminaPersist,
 } = require("../stamina");
 const {
+  readRuntimeImmunityCurrent,
+  readRuntimeImmunityMax,
+} = require("../stamina/runtimeVitals");
+const {
   applyImmunityTick,
-  applyFeverTick,
   applySleepTick,
   resolveClimateStressFactor,
 } = require("../status");
+const { applyFeverTick } = require("../../conditions/fever");
 const { emitDeltaToInterest } = require("../emit");
 const { ensureInventoryLoaded } = require("../../inventory/loader");
 const { ensureEquipmentLoaded } = require("../../equipment/loader");
@@ -38,22 +42,25 @@ async function processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor) {
       (rt?.hungerCurrent ?? rt?.stats?.hungerCurrent ?? 100) /
       Math.max(1, rt?.hungerMax ?? rt?.stats?.hungerMax ?? 100);
     const thirstRatio = rt?.thirstSupported
-      ? (rt?.thirstCurrent ?? rt?.stats?.thirstCurrent ?? 100) /
+      ? (rt?.thirstCurrent ?? rt?.stats?.thirstCurrent ?? 100) / 
         Math.max(1, rt?.thirstMax ?? rt?.stats?.thirstMax ?? 100)
       : 1;
     const hpRatio =
       (rt?.hpCurrent ?? rt?.stats?.hpCurrent ?? 100) / Math.max(1, rt?.hpMax ?? rt?.stats?.hpMax ?? 100);
+    const immunityBeforeTick = readRuntimeImmunityCurrent(rt);
+    const immunityMaxBeforeTick = readRuntimeImmunityMax(rt);
     const immunityResult = applyImmunityTick(rt, t, {
       timeFactor: worldTimeFactor,
       climateStressFactor,
       hungerRatio,
       thirstRatio,
       hpRatio,
+      sleeping: rt?.sleepLock?.active === true,
     });
     const feverResult = applyFeverTick(rt, t, {
       timeFactor: worldTimeFactor,
-      immunityCurrent: immunityResult.immunityCurrent,
-      immunityMax: immunityResult.immunityMax,
+      immunityCurrent: immunityBeforeTick,
+      immunityMax: immunityMaxBeforeTick,
       sleeping: rt?.sleepLock?.active === true,
     });
     const sleepResult = applySleepTick(rt, t, {

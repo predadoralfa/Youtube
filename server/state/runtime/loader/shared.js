@@ -1,5 +1,7 @@
 "use strict";
 
+const { resolveFeverDebuffProfile } = require("../../conditions/fever");
+
 function sanitizeSpeed(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -9,36 +11,6 @@ function sanitizeSpeed(value) {
 function toNum(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
-}
-
-function resolveFeverDebuffProfile(feverCurrent, feverSeverity) {
-  const current = Math.max(0, Math.min(100, toNum(feverCurrent, 100)));
-  if (current >= 100) {
-    return {
-      active: false,
-      tier: 0,
-      tempoMultiplier: 1,
-      staminaRegenMultiplier: 1,
-    };
-  }
-
-  const severity = Math.max(
-    0,
-    Math.min(
-      1,
-      Number.isFinite(Number(feverSeverity)) ? toNum(feverSeverity, 0) : 1 - current / 100
-    )
-  );
-  const tier = Math.max(1, Math.min(10, Math.ceil(severity * 10)));
-  const tempoMultiplier =
-    tier <= 5 ? 1 + tier * 0.1 : 1 + 5 * 0.1 + (tier - 5) * 0.15;
-
-  return {
-    active: true,
-    tier,
-    tempoMultiplier,
-    staminaRegenMultiplier: 1 / tempoMultiplier,
-  };
 }
 
 function applyCombatStatsToRuntime(runtime, combatStats) {

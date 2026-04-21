@@ -1,5 +1,6 @@
 "use strict";
 
+const { resolveFeverDebuffProfile } = require("../../../conditions/fever");
 const { toFiniteNumber } = require("../shared");
 
 function syncRuntimeHp(rt, current, max) {
@@ -90,7 +91,7 @@ function syncRuntimeThirst(rt, current, max) {
 function ensureStatus(runtime) {
   if (!runtime.status) runtime.status = {};
   if (!runtime.status.immunity) runtime.status.immunity = {};
-  if (!runtime.status.fever) runtime.status.fever = { current: 100, severity: 0 };
+  if (!runtime.status.fever) runtime.status.fever = { current: 0, severity: 0 };
   if (!runtime.status.disease) runtime.status.disease = runtime.status.fever;
   if (!runtime.status.debuffs) runtime.status.debuffs = { active: false, tier: 0, tempoMultiplier: 1, staminaRegenMultiplier: 1 };
   if (!runtime.status.medical) runtime.status.medical = { cooldowns: {} };
@@ -122,27 +123,30 @@ function syncRuntimeImmunity(rt, current, max, percent = null) {
 function syncRuntimeDisease(rt, level, severity) {
   const nextLevel = toFiniteNumber(level, 0);
   const nextSeverity = toFiniteNumber(severity, 0);
+  const nextPercent = nextLevel <= 0 ? 0 : Math.round((Math.min(nextLevel, 100) / 100) * 100000) / 1000;
 
   rt.diseaseLevel = nextLevel;
   rt.diseaseSeverity = nextSeverity;
+  rt.diseasePercent = nextPercent;
 
   const status = ensureStatus(rt);
   status.fever = {
     current: nextLevel,
+    max: 100,
+    percent: nextPercent,
     severity: nextSeverity,
+    active: nextLevel > 0,
   };
   status.disease = status.fever;
   status.debuffs = {
     ...(status.debuffs ?? {}),
-    active: nextLevel < 100,
-    tier: nextLevel >= 100 ? 0 : Math.max(1, Math.min(10, Math.ceil(nextSeverity * 10))),
-    tempoMultiplier: nextLevel >= 100 ? 1 : 1 + Math.min(10, Math.max(1, Math.ceil(nextSeverity * 10))) * 0.1 + Math.max(0, Math.min(5, Math.max(1, Math.ceil(nextSeverity * 10)) - 5)) * 0.05,
-    staminaRegenMultiplier: nextLevel >= 100 ? 1 : 1 / (1 + Math.min(10, Math.max(1, Math.ceil(nextSeverity * 10))) * 0.1 + Math.max(0, Math.min(5, Math.max(1, Math.ceil(nextSeverity * 10)) - 5)) * 0.05),
+    ...resolveFeverDebuffProfile(nextLevel, nextSeverity),
   };
 
   if (!rt.stats) rt.stats = {};
   rt.stats.diseaseLevel = nextLevel;
   rt.stats.diseaseSeverity = nextSeverity;
+  rt.stats.diseasePercent = nextPercent;
 }
 
 function syncRuntimeSleep(rt, current, max) {

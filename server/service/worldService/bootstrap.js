@@ -27,11 +27,73 @@ const {
   addEnemy,
   getEnemiesForInstance,
 } = require("./dependencies");
+const { loadSpeedFromStats } = require("../../state/runtime/loader/queries");
 const { getProceduralMapProfile } = require("../../config/mapProceduralProfiles");
+
+function safePretty(value) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "[unserializable]";
+  }
+}
+
+function logBootstrapPlayer({
+  userId,
+  displayName,
+  combatStats,
+  speed,
+  instance,
+}) {
+  const payload = {
+    player: {
+      id: Number(userId),
+      name: displayName ?? null,
+    },
+    stats: combatStats
+      ? {
+          hp_current: combatStats.hpCurrent,
+          hp_max: combatStats.hpMax,
+          stamina_current: combatStats.staminaCurrent,
+          stamina_max: combatStats.staminaMax,
+          hunger_current: combatStats.hungerCurrent,
+          hunger_max: combatStats.hungerMax,
+          thirst_current: combatStats.thirstCurrent,
+          thirst_max: combatStats.thirstMax,
+          immunity_current: combatStats.immunityCurrent,
+          immunity_max: combatStats.immunityMax,
+          immunity_percent: combatStats.immunityPercent,
+          disease_level: combatStats.diseaseLevel,
+          disease_severity: combatStats.diseaseSeverity,
+          sleep_current: combatStats.sleepCurrent,
+          sleep_max: combatStats.sleepMax,
+          attack_power: combatStats.attackPower,
+          defense: combatStats.defense,
+          attack_speed: combatStats.attackSpeed,
+          attack_range: combatStats.attackRange,
+          move_speed: speed,
+        }
+      : null,
+    world: {
+      instance: instance
+        ? {
+            id: instance.id,
+            local_id: instance.local_id,
+            instance_type: instance.instance_type,
+            status: instance.status,
+          }
+        : null,
+    },
+  };
+
+  console.log(`[BOOTSTRAP][PLAYER ${Number(userId)}] ${displayName ?? "Unknown"}`);
+  console.log(safePretty(payload));
+}
 
 const bootstrap = async (req, res) => {
   try {
     const userId = req.user.id;
+    const displayName = req.user.display_name?.trim() || `User ${userId}`;
 
     const runtime = await GaUserRuntime.findOne({
       where: { user_id: userId },
@@ -56,6 +118,11 @@ const bootstrap = async (req, res) => {
     }
 
     const combatStats = await loadPlayerCombatStats(userId);
+    const speed = await loadSpeedFromStats(userId);
+    if (speed == null) {
+      console.error(`[BOOTSTRAP] move_speed ausente para userId=${userId}`);
+      return res.status(500).json({ message: "Velocidade de movimento ausente no banco de dados" });
+    }
     const hpCurrent = combatStats.hpCurrent;
     const hpMax = combatStats.hpMax;
     const staminaCurrent = combatStats.staminaCurrent;
@@ -227,12 +294,24 @@ const bootstrap = async (req, res) => {
 
     const worldClock = await getWorldClockBootstrap();
 
+    logBootstrapPlayer({
+      userId,
+      displayName,
+      instance,
+      combatStats,
+      speed,
+      local,
+      worldClock,
+    });
+
     const responsePayload = {
       ok: true,
       snapshot: {
         runtime: {
           user_id: runtime.user_id,
           instance_id: runtime.instance_id,
+          rev: Number(runtime.rev ?? 0),
+          speed,
           pos: {
             x: runtime.pos_x,
             y: runtime.pos_y,
@@ -267,7 +346,10 @@ const bootstrap = async (req, res) => {
             },
             fever: {
               current: diseaseLevel,
+              max: 100,
+              percent: Math.round((Math.min(diseaseLevel, 100) / 100) * 100000) / 1000,
               severity: diseaseSeverity,
+              active: diseaseLevel > 0,
             },
             debuffs: combatStats.debuffs ?? null,
             sleep: {
@@ -305,10 +387,13 @@ const bootstrap = async (req, res) => {
                 max: immunityMax,
                 percent: immunityPercent,
               },
-              fever: {
-                current: diseaseLevel,
-                severity: diseaseSeverity,
-              },
+            fever: {
+              current: diseaseLevel,
+              max: 100,
+              percent: Math.round((Math.min(diseaseLevel, 100) / 100) * 100000) / 1000,
+              severity: diseaseSeverity,
+              active: diseaseLevel > 0,
+            },
               debuffs: combatStats.debuffs ?? null,
               sleep: {
                 current: sleepCurrent,

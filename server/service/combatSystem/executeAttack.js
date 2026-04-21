@@ -5,7 +5,7 @@ const { getRuntime, markStatsDirty } = require("../../state/runtimeStore");
 const { markEnemyDead } = require("../enemyRespawnService");
 const { COMBAT_BASE_COOLDOWN_MS } = require("../../config/combatConstants");
 const { consumeAttackerStamina } = require("./stamina");
-const { resolveFeverDebuffTempoMultiplier } = require("../../state/movement/status");
+const { resolveFeverDebuffTempoMultiplier } = require("../../state/conditions/fever");
 
 async function executeAttack(params) {
   const {
@@ -203,7 +203,7 @@ function runtimeFeverCurrent(attackerId) {
     runtime?.status?.fever?.current ??
       runtime?.diseaseLevel ??
       runtime?.stats?.diseaseLevel ??
-      100
+      0
   );
 }
 

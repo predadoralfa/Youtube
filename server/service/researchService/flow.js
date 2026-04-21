@@ -7,6 +7,7 @@ const { ensureResearchLoaded } = require("./definitions");
 const { buildResearchPayload } = require("./payload");
 const { consumeResearchItemCosts } = require("./costs");
 const { persistDirtyResearch } = require("./persistence");
+const { resolveFeverDebuffTempoMultiplier } = require("../../state/conditions/fever");
 const {
   STATUS_RUNNING,
   STATUS_COMPLETED,
@@ -88,7 +89,12 @@ async function processResearchTick(rt, nowMs = Date.now(), dtMs = 50) {
 
   const studyDef = resolveCurrentStudy(active.levels, active.activeLevel);
   const targetTimeMs = Math.max(1, toFiniteNumber(studyDef?.studyTimeMs, 1));
-  const nextProgress = clamp(toFiniteNumber(active.progressMs, 0) + Math.max(0, dtMs), 0, targetTimeMs);
+  const feverTempoMultiplier = resolveFeverDebuffTempoMultiplier(
+    rt?.status?.fever?.current ?? rt?.diseaseLevel ?? rt?.stats?.diseaseLevel ?? 0,
+    rt?.status?.fever?.severity ?? rt?.diseaseSeverity ?? rt?.stats?.diseaseSeverity ?? 0
+  );
+  const effectiveDtMs = Math.max(0, dtMs) / Math.max(1, feverTempoMultiplier);
+  const nextProgress = clamp(toFiniteNumber(active.progressMs, 0) + effectiveDtMs, 0, targetTimeMs);
   if (nextProgress === active.progressMs) {
     return { changed: false, completed: false };
   }

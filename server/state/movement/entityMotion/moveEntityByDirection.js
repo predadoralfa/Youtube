@@ -5,8 +5,14 @@ const { resolveTerrainHeightFromBounds } = require("../terrain");
 const { resolveDesiredPosition } = require("./resolveDesiredPosition");
 
 function moveEntityByDirection({ pos, dir, speed, dt, bounds }) {
+  const currentPos = {
+    x: Number(pos?.x ?? 0),
+    y: Number(pos?.y ?? 0),
+    z: Number(pos?.z ?? 0),
+  };
   const direction = normalize2D(Number(dir?.x ?? 0), Number(dir?.z ?? 0));
   if (direction.x === 0 && direction.z === 0) {
+    const groundY = resolveTerrainHeightFromBounds(bounds, currentPos.x, currentPos.z);
     return {
       ok: true,
       moved: false,
@@ -15,11 +21,6 @@ function moveEntityByDirection({ pos, dir, speed, dt, bounds }) {
     };
   }
 
-  const currentPos = {
-    x: Number(pos?.x ?? 0),
-    y: Number(pos?.y ?? 0),
-    z: Number(pos?.z ?? 0),
-  };
   const groundY = resolveTerrainHeightFromBounds(bounds, currentPos.x, currentPos.z);
 
   const desired = {

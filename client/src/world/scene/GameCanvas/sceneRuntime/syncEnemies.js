@@ -264,7 +264,21 @@ export function syncEnemyMeshes({
 
     const vitals = readEntityVitals(enemy);
     const previous = state.entityVitalsRef.current.get(enemyId) ?? {};
-    state.entityVitalsRef.current.set(enemyId, { ...previous, ...vitals });
+    const previousHp = Number(previous.hpCurrent ?? NaN);
+    const nextHp = Number(vitals.hpCurrent ?? NaN);
+    const hpCurrent =
+      Number.isFinite(previousHp) && Number.isFinite(nextHp) ? Math.min(previousHp, nextHp) : vitals.hpCurrent;
+
+    state.entityVitalsRef.current.set(enemyId, {
+      ...previous,
+      ...vitals,
+      hpCurrent,
+    });
+    state.predictedEnemyVitalsRef.current.set(enemyId, {
+      hpCurrent: Math.max(0, hpCurrent),
+      hpMax: Number(vitals.hpMax ?? previous.hpMax ?? 0),
+      lastDamageTime: previous.lastDamageTime ?? null,
+    });
     applyEnemyMotion(mesh, enemy, nowMs);
   }
 
@@ -284,6 +298,7 @@ export function syncEnemyMeshes({
 
     state.meshByEnemyIdRef.current.delete(enemyId);
     state.entityVitalsRef.current.delete(enemyId);
+    state.predictedEnemyVitalsRef.current.delete(enemyId);
     entityPositions.delete(enemyId);
   }
 }

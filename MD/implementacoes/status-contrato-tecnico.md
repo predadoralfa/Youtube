@@ -35,7 +35,7 @@ O sistema novo entra no mesmo trilho ja usado por:
 Ou seja:
 
 - status persistente fica em `ga_user_stats`
-- runtime fica com valores derivados e transitórios
+- runtime fica com valores derivados e transitorios
 - `updated_at` do registro continua sendo o ancorador temporal padrao para catch-up
 
 ### 3. `ga_user_runtime` continua sendo apenas estado de sessao
@@ -52,9 +52,11 @@ Status persistente nao deve ser armazenado como verdade primaria em `ga_user_run
 
 - qualquer mudanca relevante de status deve marcar `dirtyStats`
 - a persistencia final continua passando por `flushUserStats`
+- a febre usa flush imediato quando muda de valor, para nao depender apenas do ciclo em batch
+- o flush imediato marca o ultimo write de stats para o batch nao regravar o mesmo estado logo em seguida
 - o caminho de desconexao e shutdown continua valido sem tratamento especial novo
 
-### 5. O tick de status sera servidor-side
+### 5. O tick de status sera server-side
 
 - o sistema precisa de um loop autoritativo
 - esse loop pode ser separado ou acoplado a outro tick central
@@ -62,7 +64,7 @@ Status persistente nao deve ser armazenado como verdade primaria em `ga_user_run
 
 ---
 
-## Contrato De Dados
+## Contrato de Dados
 
 ### Tabela canonica
 
@@ -84,15 +86,16 @@ Status persistente nao deve ser armazenado como verdade primaria em `ga_user_run
 
 - `immunity_current`
 - `immunity_max`
-- `disease_level` e `disease_severity` funcionam como armazenamento interno temporario da fever
+- `disease_level`
+- `disease_severity`
 - `sleep_current`
 - `sleep_max`
 
 ### Regra dos campos
 
 - `immunity_current` e `immunity_max` representam a resistencia atual do jogador
-- `disease_level` representa a barra atual da fever em faixa `0` a `100`
-- `disease_severity` representa a intensidade da fever em faixa `0` a `1`
+- `disease_level` representa a carga atual da fever e pode continuar crescendo acima de `100`
+- `disease_severity` representa a intensidade normalizada da fever em faixa `0` a `1`
 - `sleep_current` e `sleep_max` representam o estado de sono como percentual de bonus/penalidade
 
 ### Tipos esperados
@@ -101,11 +104,13 @@ Status persistente nao deve ser armazenado como verdade primaria em `ga_user_run
 - limites logicos continuam sendo validados no servidor
 - `immunity_max` deve permanecer no intervalo `100..500`
 - `sleep_current` e `sleep_max` devem permanecer no intervalo `0..100`
-- `disease_level` deve permanecer no intervalo `0..100`
+- `disease_level` nao possui teto duro para progressao, mas o percentual visual e limitado a `100`
+- `disease_severity` deve permanecer no intervalo `0..1`
+- `disease_level` e `disease_severity` continuam sendo os campos persistidos no banco para fever
 
 ---
 
-## Contrato De Runtime
+## Contrato de Runtime
 
 O runtime do jogador deve passar a carregar um bloco de status derivado, junto com os outros stats.
 
@@ -119,7 +124,10 @@ runtime.status = {
   },
   fever: {
     current,
-    severity
+    max,
+    percent,
+    severity,
+    active
   },
   debuffs: {
     active,
@@ -137,11 +145,12 @@ runtime.status = {
 }
 ```
 
-O runtime tambem pode expor espelhos simples para facilitar uso interno, mas a fonte primária continua sendo `runtime.status`.
+O runtime tambem pode expor espelhos simples para facilitar uso interno, mas a fonte primaria continua sendo `runtime.status`.
 
 Regras de dominio fechadas:
 
-- `sleep` controla bonus e penalidade de XP, nao resistencia a fever
+- `sleep` controla bonus e penalidade de XP, e enquanto o jogador dorme tambem adiciona bonus de recuperacao na imunidade
+- o inicio do sleep e bloqueado se a barra estiver acima de `50%`
 - `immunity` controla resistencia e recuperacao da fever
 - fome abaixo de `30%` reduz imunidade de forma gradual
 - HP abaixo de `90%` reduz imunidade
@@ -160,9 +169,16 @@ Regras de dominio fechadas:
 - `debuffs` e um espelho derivado da febre para multiplicadores de tempo
 - a fever e resolvida por varreduras periodicas do servidor
 - a fever nao drena HP ou stamina diretamente; ela usa a imunidade como referencia de risco
-- a varredura atual acontece a cada `30` minutos de jogo
+- a varredura atual acontece a cada `1` minuto de jogo
+- a fever comeca em `0` e cresce em passos de `2`
+- se o jogador nao estiver dormindo e a rolagem aleatoria ficar acima da imunidade atual, a fever sobe `2`
+- se o jogador nao estiver dormindo e a rolagem ficar dentro da imunidade atual, a fever desce `1`
+- se o jogador estiver dormindo, a fever nao inicia e qualquer fever ativa recua `1`
+- a barra visual de fever pode preencher ate `100`, mesmo que `disease_level` continue crescendo
 - o tratamento medico base de `HERBS` cura `5%` de HP e entra em cooldown de `1` hora de jogo
 - `sleep` aplica multiplicador de XP entre `-10%` e `+20%`, com bonus acima de `30%`
+- quando o estado de sleep esta ativo, a imunidade recebe um bonus fixo adicional de `+0.5` na taxa de recuperacao
+- o sleep so pode ser iniciado se a barra estiver em `50%` ou menos; acima disso o servidor deve bloquear a entrada
 - qualquer ganho de XP deve passar pelo mesmo caminho central de ajuste por sono
 - a barra de sono vai de `0` a `100`
 - fora da cama, a barra recua ao longo de `24h` de jogo
@@ -170,7 +186,7 @@ Regras de dominio fechadas:
 
 ---
 
-## Contrato De Tick
+## Contrato de Tick
 
 ### Entrada
 
@@ -200,7 +216,7 @@ O tick pode:
 
 ---
 
-## Contrato De Integracao
+## Contrato de Integracao
 
 ### Leituras existentes que serao reutilizadas
 
@@ -209,6 +225,7 @@ O tick pode:
 - `refreshRuntimeCombatStats`
 - `flushUserStats`
 - `flushUserStatsImmediate`
+- `flushDirtyBatch`
 
 ### Novas leituras esperadas
 
@@ -232,7 +249,7 @@ O tick pode:
 
 ---
 
-## Regra De Compatibilidade
+## Regra de Compatibilidade
 
 - fome e sede nao serao reestruturadas nesta etapa
 - o sistema novo nao deve quebrar auto food
@@ -259,4 +276,4 @@ Ao terminar este contrato, a implementacao seguinte pode seguir sem ambiguidade:
 - fever usa o mesmo runtime/persistencia padrao
 - sleep entra como modificador de XP e estado persistente
 - o servidor continua como unica fonte de verdade
-- o checklist pode avançar para a implementacao do nucleo de imunidade
+- o checklist pode avancar para a implementacao do nucleo de imunidade

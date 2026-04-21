@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Definir a camada de imunidade como um sistema lento, progressivo e independente de sono.
+Definir a camada de imunidade como um sistema lento, progressivo e sensivel ao estado de sono.
 
 ---
 
@@ -37,7 +37,7 @@ Immunity:
 - a perda base leva cerca de `8h` de jogo do cheio ao zero
 - o pior caso de fome e sede zeradas dobra a perda e leva cerca de `4h` de jogo do cheio ao zero
 - a perda deve ser causada principalmente por fome e sede baixos, com clima e HP como fatores secundarios
-- sono nao deve afetar imunidade diretamente
+- sono nao deve ser a fonte primaria de imunidade, mas enquanto o jogador dorme ele adiciona recuperacao extra
 - fever nao deve reduzir imunidade diretamente nesta fase
 
 ---
@@ -70,7 +70,7 @@ Direcao:
 - clima ruim aumenta perda de forma secundaria
 - situacao fragil de sobrevivencia aumenta perda
 - situacao normal permite recuperacao
-- sono nao entra neste calculo
+- sono nao entra na formula de perda por fome/sede, mas entra como bonus de recuperacao quando ativo
 - a febre nao reduz imunidade diretamente nesta fase
 - a febre usa a imunidade como fonte de recuperacao ou piora na varredura periodica
 
@@ -90,22 +90,16 @@ Faixas praticas:
 Formula base:
 
 ```cpp
-Chance = BaseChance * (1 - Current / Max)
+Chance = 1 - (Current / Max)
 ```
 
-Restricao:
-
-```cpp
-Chance >= MinChance
-```
-
-Onde `MinChance` fica na faixa de `2%` a `5%`.
+Onde `Chance` e sempre limitada entre `0` e `1`.
 
 Na pratica atual:
 
 - a chance de inicio da febre vem do risco residual da imunidade
 - o jogador com `90%` de imunidade tem cerca de `10%` de chance de ganhar febre na varredura
-- o mesmo raciocinio vale para a recuperacao quando a febre ja esta instalada
+- o mesmo raciocinio vale para a reducao quando a febre ja esta instalada
 
 ---
 
