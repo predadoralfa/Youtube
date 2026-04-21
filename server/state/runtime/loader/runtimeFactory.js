@@ -12,17 +12,6 @@ function createBaseRuntime({
   nowMs,
 }) {
   const terrainY = resolveTerrainHeightFromBounds(bounds, row.pos_x ?? 0, row.pos_z ?? 0);
-  console.log(
-    "[RUNTIME][TERRAIN]",
-    JSON.stringify({
-      userId: row.user_id,
-      instanceId: row.instance_id,
-      posX: Number(row.pos_x ?? 0),
-      posYDb: Number(row.pos_y ?? 0),
-      posZ: Number(row.pos_z ?? 0),
-      terrainY,
-    })
-  );
 
   return {
     userId: row.user_id,
