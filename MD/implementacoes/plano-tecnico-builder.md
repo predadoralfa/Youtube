@@ -34,8 +34,23 @@ Hoje o sistema ja trabalha com:
 - requisicoes de construcao pelo socket
 - progresso de construcao processado no tick
 - XP de builder ao concluir
-- requisitos checados apenas nas maos
+- requisitos checados no inventario de materiais da obra
 - visual de projeto no mundo para os outros jogadores
+
+A fase de materiais da obra ja existe e cobre:
+
+- inventario proprio de materiais da obra
+- deposito parcial antes do inicio do `RUNNING`
+- deposito manual pelo card da construcao com quantidade digitada
+- deposito vindo das maos ou do equipamento quando o item esta realmente disponivel
+- retorno ou drop dos materiais ao cancelar
+- card do shelter com o estado de deposito
+- card do shelter com timer e controles de `pause`, `resume` e `cancel` quando a obra esta ativa
+
+Proxima extensao planejada:
+
+- polir fluxo de UI para obras maiores
+- ampliar o contrato para novas estruturas com receitas mais complexas
 
 Arquivos centrais:
 
@@ -80,7 +95,7 @@ Antes desse fluxo, pode existir uma cadeia anterior de preparo:
 
 1. study/research libera o conhecimento
 2. craft produz os componentes ou ferramentas
-3. o jogador leva os itens para as maos
+3. o jogador leva os itens para o fluxo de deposito da obra
 4. o builder consome e inicia a obra
 
 ## Estados Do Builder
@@ -117,11 +132,14 @@ Nesse estado:
 
 ## Regras De Requisito
 
-O builder atual usa uma regra simples e importante:
+O builder atual nao depende mais apenas de uma checagem de maos para o `Primitive Shelter`.
 
-- contar apenas itens equipados nas maos
-- ignorar containers
-- ignorar inventario guardado fora de `HAND_L` e `HAND_R`
+- o projeto usa o container proprio `BUILD_MATERIALS`
+- a leitura do card pode encontrar o item nas maos ou no equipamento
+- a validacao final continua server-side
+- o mesmo `itemInstanceId` nao deve ser contado duas vezes se estiver espelhado em mais de uma fonte
+
+Para receitas legadas ou futuras, a regra de fonte pode variar, mas o contrato da obra continua sendo o mesmo: a obra precisa de deposito persistido antes do `RUNNING`.
 
 Isso combina com a filosofia geral do projeto:
 
@@ -147,7 +165,7 @@ Parametro atual:
 - `buildSkillCode = SKILL_BUILDING`
 - `buildXpReward = 50`
 - `canCancel = true`
-- `canBuild = true`
+- `canBuild = true` quando o deposito da obra estiver completo
 
 ## Fluxo Tecnico
 
@@ -166,10 +184,11 @@ O servidor:
 
 Quando o jogador clica em `Build`:
 
-- o servidor checa os requisitos
+- o servidor checa os requisitos no container da obra
 - o servidor checa o estado atual
-- o servidor consome os itens
-- o servidor muda o estado para `RUNNING`
+- se os materiais ainda nao estiverem completos, o projeto continua em fase de deposito
+- o servidor consome os itens da obra quando o deposito fecha
+- o servidor muda o estado para `RUNNING` somente depois da receita completa
 - o servidor registra o inicio e o tempo total
 - o servidor recompensa XP de builder
 
@@ -191,14 +210,24 @@ Quando o tempo termina:
 - o actor continua existindo no mundo
 - os outros jogadores enxergam o resultado confirmado
 
+### 5. Cancelamento
+
+Se a obra for cancelada:
+
+- os materiais depositados sao retirados do container da obra
+- o servidor tenta devolver os materiais ao inventario do jogador
+- o excedente e dropado ao redor da construcao
+- o actor e o container de materiais sao encerrados
+
 ## Integracao Com O Frontend
 
 O frontend faz apenas:
 
 - abrir a janela de builder
 - mostrar os requisitos
-- mostrar o estado do projeto
-- enviar intents de `place`, `start` e `cancel`
+- permitir informar quantidade e depositar materiais no card da obra
+- mostrar o estado do projeto e o timer do card
+- enviar intents de `place`, `deposit`, `start`, `pause`, `resume` e `cancel`
 
 O frontend nao faz:
 
@@ -217,6 +246,13 @@ Se no futuro houver variacoes diferentes de builder, o ideal e:
 - um `code` por tipo de construcao
 - um `default_state_json` por tipo
 - um seed ou migration por mudanca estrutural
+
+Para a fase de deposito de materiais:
+
+- usar um container persistido para a obra
+- associar o container ao actor do shelter
+- salvar os slots e quantidades no banco
+- evitar depender de estado temporario do front
 
 ## Como O Sistema Deve Evoluir
 
@@ -266,6 +302,7 @@ Se o builder existe, ele precisa ter:
 - posicao ou projeto
 - estado
 - requisito
+- inventario da obra quando houver deposito de materiais
 - progresso
 - conclusao autoritativa
 

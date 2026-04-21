@@ -104,7 +104,6 @@ async function onCombatAttack(socket, io, payload) {
 
 function registerCombatHandlers(socket, io) {
   socket.on("combat:attack", (payload) => onCombatAttack(socket, io, payload));
-  console.log(`[COMBAT] handlers registrados para socket ${socket.id}`);
 }
 
 module.exports = {

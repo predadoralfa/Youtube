@@ -81,11 +81,21 @@ function countHeldItemsByCode(snapshot, itemCode) {
       ? equipmentSource.item_defs
       : itemDefs;
 
+  const seenItemInstanceIds = new Set();
   let total = 0;
   for (const container of containers) {
     const role = String(container?.slotRole ?? "").trim().toUpperCase();
     if (role !== "HAND_L" && role !== "HAND_R") continue;
-    total += countSlotsByCode(container?.slots, itemCode, itemInstances, itemDefs);
+    for (const slot of Array.isArray(container?.slots) ? container.slots : []) {
+      const qty = Math.max(0, Number(slot?.qty ?? 0));
+      if (qty <= 0) continue;
+      const slotCode = getItemDefCodeFromSlot(slot, itemInstances, itemDefs);
+      if (slotCode !== normalizeCode(itemCode)) continue;
+      const instanceId = String(slot?.itemInstanceId ?? slot?.item_instance_id ?? "");
+      if (instanceId && seenItemInstanceIds.has(instanceId)) continue;
+      if (instanceId) seenItemInstanceIds.add(instanceId);
+      total += qty;
+    }
   }
 
   for (const slot of equipmentSlots) {
@@ -98,10 +108,121 @@ function countHeldItemsByCode(snapshot, itemCode) {
       getItemDefCodeFromSlot(slot, equipmentItemInstances, equipmentItemDefs) ||
       normalizeCode(slot?.item?.code ?? slot?.itemCode ?? slot?.item_code ?? "");
     if (resolvedCode !== normalizeCode(itemCode)) continue;
+    const instanceId = String(slot?.itemInstanceId ?? slot?.item_instance_id ?? "");
+    if (instanceId && seenItemInstanceIds.has(instanceId)) continue;
+    if (instanceId) seenItemInstanceIds.add(instanceId);
     total += qty;
   }
 
   return total;
+}
+
+function resolveHeldSourceSlotsForCode(snapshot, itemCode) {
+  const source = getInventorySource(snapshot);
+  const equipmentSource = getEquipmentSource(snapshot);
+  const itemInstances = Array.isArray(source?.itemInstances)
+    ? source.itemInstances
+    : Array.isArray(source?.item_instances)
+      ? source.item_instances
+      : [];
+  const itemDefs = Array.isArray(source?.itemDefs)
+    ? source.itemDefs
+    : Array.isArray(source?.item_defs)
+      ? source.item_defs
+      : [];
+  const targetCode = normalizeCode(itemCode);
+  const containers = Array.isArray(source?.containers) ? source.containers : [];
+  const matches = [];
+  const seenItemInstanceIds = new Set();
+
+  for (const container of containers) {
+    const role = String(container?.slotRole ?? "").trim().toUpperCase();
+    if (role !== "HAND_L" && role !== "HAND_R") continue;
+
+    for (const slot of Array.isArray(container?.slots) ? container.slots : []) {
+      const qty = Math.max(0, Number(slot?.qty ?? 0));
+      if (qty <= 0) continue;
+      const slotCode = getItemDefCodeFromSlot(slot, itemInstances, itemDefs);
+      if (slotCode !== targetCode) continue;
+      const instanceId = String(slot?.itemInstanceId ?? slot?.item_instance_id ?? "");
+      if (instanceId && seenItemInstanceIds.has(instanceId)) continue;
+      if (instanceId) seenItemInstanceIds.add(instanceId);
+      matches.push({
+        containerId: container?.id ?? container?.containerId ?? null,
+        slotIndex: slot?.slotIndex ?? slot?.slot ?? null,
+        role,
+        kind: "INVENTORY",
+        qty,
+        itemInstanceId: slot?.itemInstanceId ?? slot?.item_instance_id ?? null,
+      });
+    }
+  }
+
+  const equipmentSlots = Array.isArray(equipmentSource?.slots) ? equipmentSource.slots : [];
+  const equipmentItemInstances = Array.isArray(equipmentSource?.itemInstances)
+    ? equipmentSource.itemInstances
+    : Array.isArray(equipmentSource?.item_instances)
+      ? equipmentSource.item_instances
+      : itemInstances;
+  const equipmentItemDefs = Array.isArray(equipmentSource?.itemDefs)
+    ? equipmentSource.itemDefs
+    : Array.isArray(equipmentSource?.item_defs)
+      ? equipmentSource.item_defs
+      : itemDefs;
+
+  for (const slot of equipmentSlots) {
+    const slotCode = String(slot?.slotCode ?? "").trim().toUpperCase();
+    if (slotCode !== "HAND_L" && slotCode !== "HAND_R") continue;
+    const qty = Math.max(0, Number(slot?.qty ?? 0));
+    if (qty <= 0) continue;
+
+    const resolvedCode =
+      getItemDefCodeFromSlot(slot, equipmentItemInstances, equipmentItemDefs) ||
+      normalizeCode(slot?.item?.code ?? slot?.itemCode ?? slot?.item_code ?? "");
+    if (resolvedCode !== targetCode) continue;
+    const instanceId = String(slot?.itemInstanceId ?? slot?.item_instance_id ?? "");
+    if (instanceId && seenItemInstanceIds.has(instanceId)) continue;
+    if (instanceId) seenItemInstanceIds.add(instanceId);
+
+    matches.push({
+      containerId: null,
+      slotIndex: null,
+      role: slotCode,
+      kind: "EQUIPMENT",
+      qty,
+      itemInstanceId: slot?.itemInstanceId ?? slot?.item_instance_id ?? null,
+    });
+  }
+
+  return matches.sort((a, b) => Number(b.qty ?? 0) - Number(a.qty ?? 0));
+}
+
+function resolveHeldSourceSlotForCode(snapshot, itemCode) {
+  const matches = resolveHeldSourceSlotsForCode(snapshot, itemCode);
+  return Array.isArray(matches) && matches.length ? matches[0] : null;
+}
+
+function countContainerItemsByCode(snapshot, slotRole, itemCode) {
+  const source = getInventorySource(snapshot);
+  const containers = Array.isArray(source?.containers) ? source.containers : [];
+  const itemInstances = Array.isArray(source?.itemInstances)
+    ? source.itemInstances
+    : Array.isArray(source?.item_instances)
+      ? source.item_instances
+      : [];
+  const itemDefs = Array.isArray(source?.itemDefs)
+    ? source.itemDefs
+    : Array.isArray(source?.item_defs)
+      ? source.item_defs
+      : [];
+  const targetRole = String(slotRole ?? "").trim().toUpperCase();
+  if (!targetRole) return 0;
+
+  const container =
+    containers.find((entry) => String(entry?.slotRole ?? "").trim().toUpperCase() === targetRole) ?? null;
+  if (!container) return 0;
+
+  return countSlotsByCode(container?.slots, itemCode, itemInstances, itemDefs);
 }
 
 function formatDurationMs(totalMs) {
@@ -113,8 +234,9 @@ function formatDurationMs(totalMs) {
   return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
-function resolvePrimitiveShelterBuildRequirements(actorState, inventorySnapshot) {
+function resolvePrimitiveShelterBuildRequirements(actorState, inventorySnapshot, options = {}) {
   const state = actorState ?? {};
+  const actorId = options?.actorId ?? state.actorId ?? state.id ?? null;
   const defaultRequirements = Array.isArray(state.buildRequirements) && state.buildRequirements.length
     ? state.buildRequirements
     : [{ itemCode: "GRAVETO", quantity: 1 }];
@@ -130,10 +252,18 @@ function resolvePrimitiveShelterBuildRequirements(actorState, inventorySnapshot)
   const requirements = defaultRequirements.map((req) => {
     const itemCode = normalizeCode(req?.itemCode ?? req?.code ?? "GRAVETO");
     const requiredQty = Math.max(1, Number(req?.quantity ?? req?.qty ?? 1));
-    const haveQty = countHeldItemsByCode(inventorySnapshot, itemCode);
+    const heldQty = countHeldItemsByCode(inventorySnapshot, itemCode);
+    const haveQty = countContainerItemsByCode(
+      inventorySnapshot,
+      state.buildMaterialsSlotRole ??
+        state.build_materials_slot_role ??
+        `BUILD_MATERIALS:${actorId ?? state.ownerUserId ?? state.owner_user_id ?? ""}`,
+      itemCode
+    );
     return {
       itemCode,
       requiredQty,
+      heldQty,
       haveQty,
       isMet: haveQty >= requiredQty,
     };
@@ -152,9 +282,13 @@ function resolvePrimitiveShelterBuildRequirements(actorState, inventorySnapshot)
     requirements,
     requirementsMet: requirements.every((req) => req.isMet),
     canBuild,
+    canPause: constructionState === "RUNNING",
+    canResume: constructionState === "PAUSED",
+    canDeposit: constructionState !== "RUNNING" && constructionState !== "COMPLETED",
     xpReward: Math.max(0, Number(state.buildXpReward ?? 50)),
     skillCode: String(state.buildSkillCode ?? "SKILL_BUILDING").trim() || "SKILL_BUILDING",
     canCancel: constructionState === "PLANNED",
+    canDismantle: constructionState === "COMPLETED",
     isPlanned: constructionState === "PLANNED",
     isRunning: constructionState === "RUNNING",
     isCompleted: constructionState === "COMPLETED",
@@ -164,6 +298,9 @@ function resolvePrimitiveShelterBuildRequirements(actorState, inventorySnapshot)
 
 export {
   countHeldItemsByCode,
+  resolveHeldSourceSlotsForCode,
+  resolveHeldSourceSlotForCode,
+  countContainerItemsByCode,
   formatDurationMs,
   resolvePrimitiveShelterBuildRequirements,
 };

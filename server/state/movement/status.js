@@ -8,6 +8,7 @@ const {
   readRuntimeStaminaMax,
   readRuntimeImmunityCurrent,
   readRuntimeImmunityMax,
+  readRuntimeImmunityPercent,
   readRuntimeDiseaseLevel,
   readRuntimeDiseaseSeverity,
   readRuntimeSleepCurrent,
@@ -20,7 +21,8 @@ const {
 } = require("./stamina/runtimeVitals");
 
 const IMMUNITY_TICK_INTERVAL_MS = 60 * 1000;
-const IMMUNITY_FULL_RECOVERY_WORLD_HOURS = 24;
+const IMMUNITY_FULL_RECOVERY_WORLD_HOURS = 8;
+const IMMUNITY_FULL_DECAY_WORLD_HOURS = 8;
 const IMMUNITY_MIN_VALUE = 100;
 const IMMUNITY_MAX_VALUE = 500;
 const IMMUNITY_MIN_DOSE_CHANCE = 0.02;
@@ -74,6 +76,67 @@ function resolveImmunityRecoveryPerSecond(immunityMax, timeFactor = 1) {
   return (max * factor) / (IMMUNITY_FULL_RECOVERY_WORLD_HOURS * 60 * 60);
 }
 
+function resolveImmunityPercent(immunityCurrent, immunityMax) {
+  const max = Math.max(1, toFiniteNumber(immunityMax, IMMUNITY_MIN_VALUE));
+  const current = clamp(toFiniteNumber(immunityCurrent, IMMUNITY_MIN_VALUE), 0, max);
+  return Math.round((current / max) * 100000) / 1000;
+}
+
+function resolveNeedStressLevel(ratio) {
+  const need = clamp(toFiniteNumber(ratio, 1), 0, 1);
+
+  if (need >= 0.3) {
+    return 0;
+  }
+
+  if (need >= 0.15) {
+    return 0.3;
+  }
+
+  if (need >= 0.05) {
+    return 0.6;
+  }
+
+  return 1.25;
+}
+
+function resolveNeedRecoveryMultiplier(hungerRatio, thirstRatio) {
+  const hunger = clamp(toFiniteNumber(hungerRatio, 1), 0, 1);
+  const thirst = clamp(toFiniteNumber(thirstRatio, 1), 0, 1);
+  const weakestNeed = Math.min(hunger, thirst);
+
+  if (weakestNeed >= 0.3) {
+    return 1;
+  }
+  if (weakestNeed >= 0.15) {
+    return 0.15;
+  }
+  if (weakestNeed >= 0.05) {
+    return 0.05;
+  }
+  return 0;
+}
+
+function resolveNeedLossMultiplier(hungerRatio, thirstRatio) {
+  const hunger = clamp(toFiniteNumber(hungerRatio, 1), 0, 1);
+  const thirst = clamp(toFiniteNumber(thirstRatio, 1), 0, 1);
+  const weakestNeed = Math.min(hunger, thirst);
+
+  if (weakestNeed >= 0.3) {
+    return 0;
+  }
+
+  if (weakestNeed >= 0.15) {
+    return 0.5;
+  }
+
+  if (weakestNeed >= 0.05) {
+    return 1;
+  }
+
+  return 2;
+}
+
 function resolveImmunityLossPerSecond({
   immunityMax,
   timeFactor = 1,
@@ -88,14 +151,13 @@ function resolveImmunityLossPerSecond({
   const hunger = clamp(toFiniteNumber(hungerRatio, 1), 0, 1);
   const thirst = clamp(toFiniteNumber(thirstRatio, 1), 0, 1);
   const hp = clamp(toFiniteNumber(hpRatio, 1), 0, 1);
-  const hungerStress = clamp((0.1 - hunger) / 0.1, 0, 1);
-  const thirstStress = clamp((0.1 - thirst) / 0.1, 0, 1);
   const hpStress = clamp((0.9 - hp) / 0.9, 0, 1);
-  const baselineStress = climateStress * 0.5 + hpStress * 0.15;
-  const criticalNeedStress = hungerStress + thirstStress + (hungerStress > 0 && thirstStress > 0 ? Math.min(hungerStress, thirstStress) : 0);
-  const baselineLoss = ((max * factor) / (IMMUNITY_FULL_RECOVERY_WORLD_HOURS * 60 * 60)) * baselineStress;
-  const criticalNeedLoss = ((max * factor) / (8 * 60)) * criticalNeedStress;
-  return baselineLoss + criticalNeedLoss;
+  const climateLoss = ((max * factor) / (IMMUNITY_FULL_DECAY_WORLD_HOURS * 60 * 60)) * Math.max(0, climateStress - 1) * 0.15;
+  const hpLoss = ((max * factor) / (IMMUNITY_FULL_DECAY_WORLD_HOURS * 60 * 60)) * hpStress * 0.2;
+  const needLoss =
+    ((max * factor) / (IMMUNITY_FULL_DECAY_WORLD_HOURS * 60 * 60)) *
+    resolveNeedLossMultiplier(hunger, thirst);
+  return climateLoss + hpLoss + needLoss;
 }
 
 function resolveDiseaseChance(immunityCurrent, immunityMax) {
@@ -246,7 +308,7 @@ function applyImmunityTick(
   const dt = elapsedMs / 1000;
   rt.immunityTickAtMs = now;
 
-  const immunityCurrent = clamp(readRuntimeImmunityCurrent(rt), IMMUNITY_MIN_VALUE, IMMUNITY_MAX_VALUE);
+  const immunityCurrent = clamp(readRuntimeImmunityCurrent(rt), 0, IMMUNITY_MAX_VALUE);
   const immunityMax = clamp(readRuntimeImmunityMax(rt), IMMUNITY_MIN_VALUE, IMMUNITY_MAX_VALUE);
   const recoveryPerSecond = resolveImmunityRecoveryPerSecond(immunityMax, timeFactor);
   const lossPerSecond = resolveImmunityLossPerSecond({
@@ -258,13 +320,20 @@ function applyImmunityTick(
     hpRatio,
   });
 
-  const recovery = Math.max(0, immunityMax - immunityCurrent) > 0 ? recoveryPerSecond * dt : 0;
+  const recoveryMultiplier = resolveNeedRecoveryMultiplier(hungerRatio, thirstRatio);
+  const effectiveRecoveryPerSecond = recoveryPerSecond * recoveryMultiplier;
+  const recovery = Math.max(0, immunityMax - immunityCurrent) > 0 ? effectiveRecoveryPerSecond * dt : 0;
   const loss = lossPerSecond * dt;
-  const nextImmunityCurrent = clamp(immunityCurrent + recovery - loss, IMMUNITY_MIN_VALUE, immunityMax);
+  const nextImmunityCurrent = clamp(immunityCurrent + recovery - loss, 0, immunityMax);
   const immunityChanged = Math.abs(nextImmunityCurrent - immunityCurrent) > 1e-9;
+  const immunityPercent = resolveImmunityPercent(nextImmunityCurrent, immunityMax);
 
-  if (immunityChanged || readRuntimeImmunityMax(rt) !== immunityMax) {
-    syncRuntimeImmunity(rt, nextImmunityCurrent, immunityMax);
+  if (
+    immunityChanged ||
+    readRuntimeImmunityMax(rt) !== immunityMax ||
+    Number(readRuntimeImmunityPercent(rt)) !== immunityPercent
+  ) {
+    syncRuntimeImmunity(rt, nextImmunityCurrent, immunityMax, immunityPercent);
   }
 
   const diseaseChance = resolveDiseaseChance(nextImmunityCurrent, immunityMax);
@@ -276,8 +345,14 @@ function applyImmunityTick(
     dt,
     recovery,
     loss,
+    recoveryPerSecond,
+    recoveryMultiplier,
+    effectiveRecoveryPerSecond,
+    lossPerSecond,
+    lossMultiplier: resolveNeedLossMultiplier(hungerRatio, thirstRatio),
     immunityCurrent: nextImmunityCurrent,
     immunityMax,
+    immunityPercent,
   };
 }
 
@@ -288,6 +363,7 @@ function applyFeverTick(
     timeFactor = 1,
     immunityCurrent = IMMUNITY_MIN_VALUE,
     immunityMax = IMMUNITY_MIN_VALUE,
+    sleeping = false,
     intervalMs = null,
   } = {}
 ) {
@@ -348,6 +424,18 @@ function applyFeverTick(
   let feverChanged = false;
 
   if (current >= FEVER_MAX_VALUE) {
+    if (sleeping) {
+      return {
+        changed: false,
+        feverChanged: false,
+        feverCurrent: current,
+        feverSeverity: clamp(readRuntimeDiseaseSeverity(rt), 0, 1),
+        feverActive: false,
+        dt,
+        onsetChance,
+      };
+    }
+
     if (Math.random() < onsetChance) {
       nextCurrent = FEVER_START_VALUE;
       feverChanged = true;
@@ -368,23 +456,8 @@ function applyFeverTick(
     syncRuntimeDisease(rt, nextCurrent, feverSeverity);
   }
 
-  const feverRatio = clamp(nextCurrent / FEVER_MAX_VALUE, 0, 1);
-  const targetHpCurrent = clamp(readRuntimeHpMax(rt) * feverRatio, 0, readRuntimeHpMax(rt));
-  const targetStaminaCurrent = clamp(readRuntimeStaminaMax(rt) * feverRatio, 0, readRuntimeStaminaMax(rt));
-  let vitalsChanged = false;
-
-  if (readRuntimeHpCurrent(rt) > targetHpCurrent + 1e-9) {
-    syncRuntimeHp(rt, targetHpCurrent, readRuntimeHpMax(rt));
-    vitalsChanged = true;
-  }
-
-  if (readRuntimeStaminaCurrent(rt) > targetStaminaCurrent + 1e-9) {
-    syncRuntimeStamina(rt, targetStaminaCurrent, readRuntimeStaminaMax(rt));
-    vitalsChanged = true;
-  }
-
   return {
-    changed: feverChanged || vitalsChanged,
+    changed: feverChanged,
     feverChanged,
     feverCurrent: nextCurrent,
     feverSeverity,
@@ -496,6 +569,9 @@ module.exports = {
   SLEEP_WORLD_HOURS_TO_FULL,
   resolveClimateStressFactor,
   resolveImmunityRecoveryPerSecond,
+  resolveNeedRecoveryMultiplier,
+  resolveNeedLossMultiplier,
+  resolveImmunityPercent,
   resolveImmunityLossPerSecond,
   resolveDiseaseChance,
   resolveFeverDebuffTier,

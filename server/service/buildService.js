@@ -9,7 +9,13 @@ const { toFiniteNumber } = require("./actorService/shared");
 const { awardSkillXp } = require("./skillProgressionService");
 const { ensureInventoryLoaded } = require("../state/inventory/loader");
 const { ensureEquipmentLoaded } = require("../state/equipment/loader");
-const { markDirty } = require("../state/inventory/store");
+const { clearInventory } = require("../state/inventory/store");
+const {
+  ensurePrimitiveShelterMaterialsContainer,
+  getPrimitiveShelterMaterialsSlotRole,
+  countItemDefIdInContainer,
+  clearPrimitiveShelterMaterialsContainer,
+} = require("./buildMaterialsService");
 
 function parseMaybeJsonObject(value) {
   if (value == null) return null;
@@ -74,6 +80,9 @@ function buildPrimitiveShelterState(ownerUserId, ownerName, worldPos) {
     buildRequirements: config.buildRequirements,
     buildSkillCode: config.buildSkillCode,
     buildXpReward: config.buildXpReward,
+    buildMaterialsSlotRole: null,
+    buildMaterialsContainerId: null,
+    buildMaterialsSlotCount: 0,
     canCancel: true,
     canBuild: true,
     footprint: {
@@ -83,6 +92,10 @@ function buildPrimitiveShelterState(ownerUserId, ownerName, worldPos) {
     placedAt: new Date().toISOString(),
     placedWorldPos: worldPos ? { x: Number(worldPos.x ?? 0), z: Number(worldPos.z ?? 0) } : null,
   };
+}
+
+function countRequirementQtyInBuildContainer(invRt, slotRole, itemDefId) {
+  return countItemDefIdInContainer(invRt, slotRole, itemDefId);
 }
 
 function resolvePrimitiveShelterDistance(posA, posB) {
@@ -131,49 +144,6 @@ function resolveConstructionProgress(state, nowMs = Date.now()) {
     isPlanned: false,
     isCompleted: false,
   };
-}
-
-function findHandIngredientSlots(invRt, itemDefId, quantity) {
-  let remaining = Number(quantity);
-  const matches = [];
-
-  for (const container of invRt.containers ?? []) {
-    const slotRole = String(container?.slotRole ?? "");
-    if (slotRole !== "HAND_L" && slotRole !== "HAND_R") continue;
-
-    for (const slot of container.slots ?? []) {
-      if (remaining <= 0) break;
-      if (slot.itemInstanceId == null || Number(slot.qty ?? 0) <= 0) continue;
-
-      const instance = invRt.itemInstanceById?.get(String(slot.itemInstanceId)) ?? null;
-      const instanceItemDefId = instance?.itemDefId ?? instance?.item_def_id ?? null;
-      if (!instance || Number(instanceItemDefId) !== Number(itemDefId)) continue;
-
-      const take = Math.min(remaining, Number(slot.qty ?? 0));
-      matches.push({ container, slot, take });
-      remaining -= take;
-    }
-  }
-
-  if (remaining > 0) {
-    const err = new Error("Put a Graveto in HAND_L or HAND_R first.");
-    err.code = "BUILD_MISSING_INGREDIENTS";
-    throw err;
-  }
-
-  return matches;
-}
-
-async function persistSlot(tx, container, slotIndex, slot) {
-  await db.GaContainerSlot.upsert(
-    {
-      container_id: Number(container.id),
-      slot_index: Number(slotIndex),
-      item_instance_id: slot.itemInstanceId == null ? null : Number(slot.itemInstanceId),
-      qty: slot.itemInstanceId == null ? 0 : Number(slot.qty ?? 0),
-    },
-    { transaction: tx }
-  );
 }
 
 async function persistActorState(actor, nextState, tx) {
@@ -327,7 +297,22 @@ async function placePrimitiveShelter({ userId, instanceId, worldPos, tx }) {
     transaction: tx,
   });
 
-  const actorPayload = buildActorPayload(created.actor, actorDef, spawn, state);
+  const materialsContainer = await ensurePrimitiveShelterMaterialsContainer({
+    userId: ownerUserId,
+    actorId: Number(created.actor.id),
+    slotCount: state.buildRequirements.length || 1,
+    tx,
+  });
+
+  const nextState = {
+    ...state,
+    buildMaterialsSlotRole: materialsContainer.slotRole,
+    buildMaterialsContainerId: materialsContainer.container?.id != null ? Number(materialsContainer.container.id) : null,
+    buildMaterialsSlotCount: materialsContainer.slotCount,
+  };
+  await persistActorState(created.actor, nextState, tx);
+
+  const actorPayload = buildActorPayload(created.actor, actorDef, spawn, nextState);
 
   return {
     ok: true,
@@ -395,8 +380,18 @@ async function startPrimitiveShelterConstruction({ userId, actorId, tx, inventor
   const equipmentRt = equipmentRuntime ?? (await ensureEquipmentLoaded(ownerUserId));
   void equipmentRt;
 
-  const ingredientSpends = [];
-  const touchedContainers = new Set();
+  const buildMaterialsSlotRole =
+    String(state?.buildMaterialsSlotRole ?? state?.build_materials_slot_role ?? getPrimitiveShelterMaterialsSlotRole(runtimeActorId)).trim() ||
+    getPrimitiveShelterMaterialsSlotRole(runtimeActorId);
+  const buildMaterialsContainer = inventoryRt.containersByRole?.get(buildMaterialsSlotRole) ?? null;
+  if (!buildMaterialsContainer) {
+    return {
+      ok: false,
+      code: "BUILD_MATERIALS_CONTAINER_MISSING",
+      message: "The build materials container is missing. Reopen the shelter card to refresh it.",
+    };
+  }
+
   for (const requirement of requirements) {
     const itemCode = String(requirement?.itemCode ?? requirement?.code ?? "").trim().toUpperCase();
     const quantity = Math.max(1, Number(requirement?.quantity ?? requirement?.qty ?? 1));
@@ -417,42 +412,14 @@ async function startPrimitiveShelterConstruction({ userId, actorId, tx, inventor
       };
     }
 
-    ingredientSpends.push({
-      itemDef,
-      quantity,
-      matches: findHandIngredientSlots(inventoryRt, Number(itemDef.id), quantity),
-    });
-  }
-
-  for (const spend of ingredientSpends) {
-    for (const match of spend.matches) {
-      const slotIndex = match.container.slots.indexOf(match.slot);
-      match.slot.qty = Number(match.slot.qty ?? 0) - match.take;
-      if (match.slot.qty <= 0) {
-        if (match.slot.itemInstanceId != null) {
-          inventoryRt.itemInstanceById?.delete(String(match.slot.itemInstanceId));
-        }
-        match.slot.itemInstanceId = null;
-        match.slot.qty = 0;
-      }
-      await persistSlot(tx, match.container, slotIndex, match.slot);
-      const container = inventoryRt.containersById?.get(String(match.container.id)) ?? null;
-      if (container) container.rev = Number(container.rev ?? 0) + 1;
-      touchedContainers.add(String(match.container.id));
-      markDirty(ownerUserId, match.container.id);
+    const haveQty = countRequirementQtyInBuildContainer(inventoryRt, buildMaterialsSlotRole, Number(itemDef.id));
+    if (haveQty < quantity) {
+      return {
+        ok: false,
+        code: "BUILD_MISSING_MATERIALS",
+        message: "Deposit all required materials before starting construction.",
+      };
     }
-  }
-
-  if (touchedContainers.size > 0) {
-    await db.GaContainer.update(
-      { rev: db.Sequelize.literal("rev + 1") },
-      {
-        where: {
-          id: Array.from(touchedContainers),
-        },
-        transaction: tx,
-      }
-    );
   }
 
   const startedAtMs = Date.now();
@@ -466,6 +433,7 @@ async function startPrimitiveShelterConstruction({ userId, actorId, tx, inventor
     buildRequirements: requirements.length ? requirements : buildConfig.buildRequirements,
     buildSkillCode: buildConfig.buildSkillCode,
     buildXpReward: buildConfig.buildXpReward,
+    buildMaterialsSlotRole,
     canCancel: false,
     canBuild: false,
   };
@@ -567,7 +535,7 @@ async function pausePrimitiveShelterConstruction({ userId, actorId, tx }) {
   };
 }
 
-async function resumePrimitiveShelterConstruction({ userId, actorId, tx }) {
+async function resumePrimitiveShelterConstruction({ userId, actorId, tx, currentPos = null }) {
   const ownerUserId = Number(userId);
   const runtimeActorId = Number(actorId);
 
@@ -615,6 +583,18 @@ async function resumePrimitiveShelterConstruction({ userId, actorId, tx }) {
     };
   }
 
+  const distance = resolvePrimitiveShelterDistance(currentPos ?? null, {
+    x: actor.pos_x,
+    z: actor.pos_z,
+  });
+  if (distance > PRIMITIVE_SHELTER_APPROACH_RADIUS) {
+    return {
+      ok: false,
+      code: "BUILD_TOO_FAR",
+      message: "Move inside the marked area to resume construction.",
+    };
+  }
+
   const progress = resolveConstructionProgress(state, Date.now());
   const startedAtMs = Date.now() - Math.max(0, progress.progressMs);
   const nextState = {
@@ -644,6 +624,11 @@ async function cancelPrimitiveShelter({ userId, actorId, tx }) {
   const ownerUserId = Number(userId);
   const runtimeActorId = Number(actorId);
 
+  console.log("[BUILD][SERVICE] cancelPrimitiveShelter:start", {
+    userId: ownerUserId,
+    actorId: runtimeActorId,
+  });
+
   if (!Number.isInteger(ownerUserId) || ownerUserId <= 0) {
     return { ok: false, code: "INVALID_USER_ID", message: "Invalid user id" };
   }
@@ -664,6 +649,10 @@ async function cancelPrimitiveShelter({ userId, actorId, tx }) {
   });
 
   if (!actor) {
+    console.log("[BUILD][SERVICE] cancelPrimitiveShelter:not_found", {
+      userId: ownerUserId,
+      actorId: runtimeActorId,
+    });
     return { ok: false, code: "ACTOR_NOT_FOUND", message: "Build actor not found" };
   }
 
@@ -674,38 +663,91 @@ async function cancelPrimitiveShelter({ userId, actorId, tx }) {
   const state = parseMaybeJsonObject(actor.state_json) || {};
   const actorOwnerId = Number(state?.ownerUserId ?? state?.owner_user_id ?? NaN);
   if (!Number.isFinite(actorOwnerId) || actorOwnerId !== ownerUserId) {
+    console.log("[BUILD][SERVICE] cancelPrimitiveShelter:not_owner", {
+      userId: ownerUserId,
+      actorId: runtimeActorId,
+      actorOwnerId,
+    });
     return { ok: false, code: "NOT_OWNER", message: "You do not own this construction" };
   }
 
   const constructionState = String(state?.constructionState ?? state?.construction_state ?? "PLANNED")
     .trim()
     .toUpperCase();
-  if (constructionState !== "PLANNED" && constructionState !== "RUNNING" && constructionState !== "PAUSED") {
+  if (
+    constructionState !== "PLANNED" &&
+    constructionState !== "RUNNING" &&
+    constructionState !== "PAUSED" &&
+    constructionState !== "COMPLETED"
+  ) {
+    console.log("[BUILD][SERVICE] cancelPrimitiveShelter:not_cancelable", {
+      userId: ownerUserId,
+      actorId: runtimeActorId,
+      constructionState,
+    });
     return {
       ok: false,
       code: "BUILD_NOT_CANCELABLE",
-      message: "Only planned, paused or running constructions can be cancelled.",
+      message: "Only planned, paused, running or completed constructions can be cancelled.",
     };
+  }
+
+  clearInventory(ownerUserId);
+  const invRt = await ensureInventoryLoaded(ownerUserId);
+  const eqRt = await ensureEquipmentLoaded(ownerUserId);
+  let droppedActors = [];
+  try {
+    const clearResult = await clearPrimitiveShelterMaterialsContainer({
+      userId: ownerUserId,
+      actorId: runtimeActorId,
+      invRt,
+      eqRt,
+      tx,
+    });
+    droppedActors = Array.isArray(clearResult?.droppedActors) ? clearResult.droppedActors : [];
+  } catch (error) {
+    console.warn("[BUILD][SERVICE] cancelPrimitiveShelter:materials_cleanup_failed", {
+      userId: ownerUserId,
+      actorId: runtimeActorId,
+      message: error?.message ?? String(error),
+    });
   }
 
   const spawnId = actor.actor_spawn_id == null ? null : Number(actor.actor_spawn_id);
 
   if (spawnId) {
+    console.log("[BUILD][SERVICE] cancelPrimitiveShelter:destroy_spawn", {
+      userId: ownerUserId,
+      actorId: runtimeActorId,
+      spawnId,
+    });
     await db.GaActorSpawn.destroy({
       where: { id: spawnId },
       transaction: tx,
     });
   }
 
+  console.log("[BUILD][SERVICE] cancelPrimitiveShelter:destroy_actor", {
+    userId: ownerUserId,
+    actorId: runtimeActorId,
+    instanceId: Number(actor.instance_id),
+  });
   await db.GaActorRuntime.destroy({
     where: { id: runtimeActorId },
     transaction: tx,
+  });
+
+  console.log("[BUILD][SERVICE] cancelPrimitiveShelter:done", {
+    userId: ownerUserId,
+    actorId: runtimeActorId,
+    instanceId: Number(actor.instance_id),
   });
 
   return {
     ok: true,
     actorId: runtimeActorId,
     instanceId: Number(actor.instance_id),
+    droppedActors,
   };
 }
 

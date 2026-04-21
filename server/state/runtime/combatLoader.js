@@ -63,17 +63,17 @@ async function loadPlayerCombatStats(userId) {
   const persistedHungerCurrent = readStrictNumber(stats.hunger_current, "hunger_current", userId);
   const thirstMax = support.supportsThirst ? Number(stats.thirst_max ?? 100) || 100 : 100;
   const persistedThirstCurrent = support.supportsThirst
-    ? Number(stats.thirst_current ?? thirstMax) || thirstMax
+    ? (stats.thirst_current == null ? thirstMax : Number(stats.thirst_current))
     : thirstMax;
   const immunityMax = support.supportsStatus ? Number(stats.immunity_max ?? 100) || 100 : 100;
   const persistedImmunityCurrent = support.supportsStatus
-    ? Number(stats.immunity_current ?? immunityMax) || immunityMax
+    ? (stats.immunity_current == null ? immunityMax : Number(stats.immunity_current))
     : immunityMax;
   const diseaseLevel = support.supportsStatus ? Number(stats.disease_level ?? 100) || 100 : 100;
   const diseaseSeverity = support.supportsStatus ? Number(stats.disease_severity ?? 0) || 0 : 0;
   const sleepMax = support.supportsStatus ? 100 : 100;
   const persistedSleepCurrent = support.supportsStatus
-    ? Number(stats.sleep_current ?? sleepMax) || sleepMax
+    ? (stats.sleep_current == null ? sleepMax : Number(stats.sleep_current))
     : sleepMax;
   const attackPower = readStrictNumber(stats.attack_power, "attack_power", userId);
   const defense = readStrictNumber(stats.defense, "defense", userId);
@@ -90,7 +90,8 @@ async function loadPlayerCombatStats(userId) {
     : 0;
   const thirstCurrent = Math.max(0, Math.min(thirstMax, persistedThirstCurrent - offlineThirstDrain));
   const thirstWasAdjusted = support.supportsThirst && Math.abs(thirstCurrent - persistedThirstCurrent) > 1e-9;
-  const immunityCurrent = Math.max(100, Math.min(immunityMax, persistedImmunityCurrent));
+  const immunityCurrent = Math.max(0, Math.min(immunityMax, persistedImmunityCurrent));
+  const immunityPercent = Math.round((immunityCurrent / Math.max(1, immunityMax)) * 100000) / 1000;
   const immunityWasAdjusted = support.supportsStatus && Math.abs(immunityCurrent - persistedImmunityCurrent) > 1e-9;
   const sleepDrainPerSecond = support.supportsStatus
     ? resolveSleepDrainPerSecond(sleepMax, timeFactor)
@@ -113,6 +114,7 @@ async function loadPlayerCombatStats(userId) {
     thirstWasAdjusted,
     immunityCurrent,
     immunityMax,
+    immunityPercent,
     immunityWasAdjusted,
     diseaseLevel,
     diseaseSeverity,

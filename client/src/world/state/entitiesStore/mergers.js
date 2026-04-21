@@ -104,3 +104,32 @@ export function mergeVitals(baseVitals, rawDelta, nextHpCompat) {
     },
   };
 }
+
+export function mergeStatus(baseStatus, rawDelta) {
+  const deltaStatus = rawDelta?.status ?? null;
+
+  if (!baseStatus && !deltaStatus) {
+    return null;
+  }
+
+  return {
+    ...(baseStatus ?? {}),
+    ...(deltaStatus ?? {}),
+    immunity: {
+      ...((baseStatus && baseStatus.immunity) ?? {}),
+      ...((deltaStatus && deltaStatus.immunity) ?? {}),
+    },
+    fever: {
+      ...((baseStatus && baseStatus.fever) ?? {}),
+      ...((deltaStatus && deltaStatus.fever) ?? {}),
+    },
+    debuffs: {
+      ...((baseStatus && baseStatus.debuffs) ?? {}),
+      ...((deltaStatus && deltaStatus.debuffs) ?? {}),
+    },
+    sleep: {
+      ...((baseStatus && baseStatus.sleep) ?? {}),
+      ...((deltaStatus && deltaStatus.sleep) ?? {}),
+    },
+  };
+}

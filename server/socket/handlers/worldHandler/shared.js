@@ -24,13 +24,8 @@ function ackErr(ack, err) {
   ack({ ok: false, error: String(err?.message || err) });
 }
 
-function logWorld(message, data) {
-  console.log(`[WORLD] ${message}`, data || {});
-}
-
 module.exports = {
   emitBaseline,
   ackOk,
   ackErr,
-  logWorld,
 };

@@ -154,7 +154,9 @@ export function updateOverlayState({
       String(actorState?.constructionKind ?? "").trim().toUpperCase() === "PRIMITIVE_SHELTER";
 
     if (isBuildActor) {
-      const buildState = resolvePrimitiveShelterBuildRequirements(actorState, state.inventorySnapshotRef.current);
+      const buildState = resolvePrimitiveShelterBuildRequirements(actorState, state.inventorySnapshotRef.current, {
+        actorId,
+      });
       const worldPos = new THREE.Vector3();
       mesh?.getWorldPosition?.(worldPos);
       worldPos.y += 1.05;
@@ -170,7 +172,15 @@ export function updateOverlayState({
         const isOwner = selfUserId != null && ownerUserId != null && Number(selfUserId) === Number(ownerUserId);
         const canCancel = isOwner && buildState.canCancel;
         const canBuild = isOwner && buildState.canBuild;
+        const canPause = isOwner && buildState.canPause;
+        const canResume = isOwner && buildState.canResume;
+        const canDeposit = isOwner && buildState.canDeposit;
         const canSleep = isOwner && buildState.isCompleted;
+        const canDismantle = isOwner && buildState.canDismantle;
+        const sleepCurrent =
+          Number(state.runtimeRef.current?.status?.sleep?.current ?? state.runtimeRef.current?.sleepCurrent ?? 100);
+        const sleepMax =
+          Math.max(1, Number(state.runtimeRef.current?.status?.sleep?.max ?? state.runtimeRef.current?.sleepMax ?? 100));
 
         state.setTargetBuildCard({
           id: actorId,
@@ -183,7 +193,13 @@ export function updateOverlayState({
           stateLabel: buildState.constructionStateLabel,
           canCancel,
           canBuild,
+          canPause,
+          canResume,
+          canDeposit,
           canSleep,
+          canDismantle,
+          sleepCurrent,
+          sleepMax,
           buildState,
           buildDurationLabel: buildState.progressLabel,
           xpReward: buildState.xpReward,
@@ -194,6 +210,52 @@ export function updateOverlayState({
                 const cancelBuild = state.cancelBuild ?? null;
                 if (typeof cancelBuild !== "function") return;
 
+                window.setTimeout(() => {
+                  cancelBuild(actorId);
+                }, 0);
+              }
+            : null,
+          onPause: canPause
+            ? () => {
+                const pauseBuild = state.pauseBuild ?? null;
+                if (typeof pauseBuild !== "function") return;
+                window.setTimeout(() => {
+                  pauseBuild(actorId);
+                }, 0);
+              }
+            : null,
+          onResume: canResume
+            ? () => {
+                const resumeBuild = state.resumeBuild ?? null;
+                if (typeof resumeBuild !== "function") return null;
+                return resumeBuild(actorId);
+              }
+            : null,
+          onDismantle: canDismantle
+            ? () => {
+                const cancelBuild = state.cancelBuild ?? null;
+                if (state.selectedTargetRef) state.selectedTargetRef.current = null;
+                if (state.combatTargetRef) state.combatTargetRef.current = null;
+                if (state.selectedObjectRef) state.selectedObjectRef.current = null;
+                if (typeof state.setSnapshot === "function") {
+                  state.setSnapshot((prev) => {
+                    if (!prev) return prev;
+                    const actors = Array.isArray(prev.actors) ? prev.actors : [];
+                    if (!actors.some((entry) => String(entry.id) === actorId)) return prev;
+
+                    return {
+                      ...prev,
+                      actors: actors.filter((entry) => String(entry.id) !== actorId),
+                    };
+                  });
+                }
+                const worldStore = state.worldStoreRef?.current ?? null;
+                if (worldStore?.removeActor) {
+                  worldStore.removeActor(actorId);
+                }
+                state.setTargetBuildCard(null);
+                state.clearTargetBuildCard?.();
+                if (typeof cancelBuild !== "function") return;
                 window.setTimeout(() => {
                   cancelBuild(actorId);
                 }, 0);
@@ -211,14 +273,22 @@ export function updateOverlayState({
             : null,
           onBuild: canBuild
             ? () => {
-              const startBuild = state.startBuild ?? null;
-              state.selectedTargetRef.current = null;
-              state.setTargetBuildCard(null);
-              if (typeof startBuild !== "function") return;
-              window.setTimeout(() => {
-                startBuild(actorId);
-              }, 0);
-            }
+                const startBuild = state.startBuild ?? null;
+                state.selectedTargetRef.current = null;
+                if (typeof startBuild !== "function") return;
+                window.setTimeout(() => {
+                  startBuild(actorId);
+                }, 0);
+              }
+            : null,
+          onDepositMaterial: canDeposit
+            ? (itemCode, qty) => {
+                const depositBuildMaterial = state.depositBuildMaterial ?? null;
+                if (typeof depositBuildMaterial !== "function") {
+                  return Promise.resolve({ ok: false, code: "DEPOSIT_UNAVAILABLE" });
+                }
+                return depositBuildMaterial(actorId, itemCode, qty);
+              }
             : null,
         });
       }

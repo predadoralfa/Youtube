@@ -103,7 +103,6 @@ function VitalRow({
               userSelect: "none",
             }}
           >
-            {label ? `${label} ` : ""}
             {Math.floor(safeCurrent)} / {Math.floor(safeMax)}
           </div>
         ) : null}

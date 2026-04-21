@@ -5,18 +5,12 @@ const { getRuntime } = require("../../../../state/runtimeStore");
 const { startFoodConsumption } = require("../../../../service/autoFoodService");
 const { toDelta } = require("../../../../state/movement/entity");
 const { resolveUserOrAck } = require("../context");
-const { safeAck, summarizeIntent } = require("../shared");
+const { safeAck } = require("../shared");
 
 function registerConsumeEvent(socket) {
   socket.on("inv:eat", (intent, ack) => {
     const userId = resolveUserOrAck(socket, ack);
     if (!userId) return;
-
-    console.log("[INV][EAT] received", {
-      userId,
-      socketId: socket.id,
-      intent: summarizeIntent(intent),
-    });
 
     withInventoryLock(userId, async () => {
       try {
@@ -32,14 +26,6 @@ function registerConsumeEvent(socket) {
 
         const result = await startFoodConsumption(rt, intent?.itemInstanceId, {
           skipLock: true,
-        });
-
-        console.log("[INV][EAT] result", {
-          userId,
-          itemInstanceId: intent?.itemInstanceId ?? null,
-          ok: result?.ok === true,
-          code: result?.code ?? null,
-          inventoryChanged: Boolean(result?.inventory?.ok),
         });
 
         if (result?.ok !== true) {

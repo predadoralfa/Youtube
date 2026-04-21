@@ -9,6 +9,7 @@ const {
   resolveClimateStressFactor,
   resolveImmunityRecoveryPerSecond,
   resolveImmunityLossPerSecond,
+  resolveNeedRecoveryMultiplier,
   IMMUNITY_MIN_VALUE,
   IMMUNITY_MAX_VALUE,
 } = require("../../movement/status");
@@ -70,6 +71,14 @@ async function ensureRuntimeLoaded(userId) {
           Math.max(1, Number(combatStats?.hungerMax ?? 100) || 100)
       )
     );
+    const thirstRatio = Math.max(
+      0,
+      Math.min(
+        1,
+        (Number(combatStats?.thirstCurrent ?? 100) || 100) /
+          Math.max(1, Number(combatStats?.thirstMax ?? 100) || 100)
+      )
+    );
     const hpRatio = Math.max(
       0,
       Math.min(
@@ -82,19 +91,21 @@ async function ensureRuntimeLoaded(userId) {
       combatStats.immunityMax,
       worldTimeFactor
     );
+    const recoveryMultiplier = resolveNeedRecoveryMultiplier(hungerRatio, thirstRatio);
     const lossPerSecond = resolveImmunityLossPerSecond({
       immunityMax: combatStats.immunityMax,
       timeFactor: worldTimeFactor,
       climateStressFactor,
       hungerRatio,
+      thirstRatio,
       hpRatio,
     });
     const nextImmunityCurrent = Math.max(
-      IMMUNITY_MIN_VALUE,
+      0,
       Math.min(
         IMMUNITY_MAX_VALUE,
         Number(combatStats.immunityCurrent ?? IMMUNITY_MIN_VALUE) +
-          recoveryPerSecond * elapsedSeconds -
+          recoveryPerSecond * recoveryMultiplier * elapsedSeconds -
           lossPerSecond * elapsedSeconds
       )
     );

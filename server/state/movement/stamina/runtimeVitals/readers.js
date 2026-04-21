@@ -127,6 +127,17 @@ function readRuntimeImmunityMax(rt) {
   );
 }
 
+function readRuntimeImmunityPercent(rt) {
+  return toFiniteNumber(
+    rt?.immunityPercent ??
+      rt?.immunity_percent ??
+      rt?.status?.immunity?.percent ??
+      rt?.stats?.immunityPercent ??
+      rt?.stats?.immunity_percent,
+    Math.round((readRuntimeImmunityCurrent(rt) / Math.max(1, readRuntimeImmunityMax(rt))) * 100000) / 1000
+  );
+}
+
 function readRuntimeDiseaseLevel(rt) {
   return toFiniteNumber(
     rt?.diseaseLevel ??
@@ -185,6 +196,7 @@ module.exports = {
   readRuntimeThirstMax,
   readRuntimeImmunityCurrent,
   readRuntimeImmunityMax,
+  readRuntimeImmunityPercent,
   readRuntimeDiseaseLevel,
   readRuntimeDiseaseSeverity,
   readRuntimeSleepCurrent,

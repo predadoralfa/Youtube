@@ -46,47 +46,6 @@ function formatRatio(current, max) {
   return formatNum(toFiniteNumber(current, 0) / safeMax, 3);
 }
 
-function maybeLogVitalsRegen(rt, payload) {
-  if (!rt) return;
-
-  const signature = [
-    formatNum(payload.hungerRegenMultiplier, 3),
-    formatNum(payload.thirstRegenMultiplier, 3),
-    formatNum(payload.combinedRegenMultiplier, 3),
-  ].join("|");
-
-  if (rt.debugVitalsRegenLastSignature === signature) {
-    return;
-  }
-
-  rt.debugVitalsRegenLastSignature = signature;
-
-  const hungerPart = formatNum(payload.hungerRegenMultiplier, 3);
-  const thirstPart = formatNum(payload.thirstRegenMultiplier, 3);
-  const combinedPart = formatNum(payload.combinedRegenMultiplier, 3);
-  const hpBase = formatNum(HP_BASE_REGEN_PER_SEC, 3);
-  const staminaBase = formatNum(STAMINA_BASE_REGEN_PER_SEC, 3);
-  const dt = formatNum(payload.dt, 3);
-  const hpMultiplier = formatNum(payload.effectiveHpRegenMultiplier, 3);
-  const staminaMultiplier = formatNum(payload.effectiveStaminaRegenMultiplier, 3);
-  const hpEq = `${hpBase} * ${dt} * ${hpMultiplier} = ${formatNum(payload.hpRegen, 4)}`;
-  const staminaEq = `${staminaBase} * ${dt} * ${staminaMultiplier} = ${formatNum(payload.regen, 4)}`;
-
-  console.log(
-    [
-      "[VITALS_REGEN]",
-      `userId=${rt.userId}`,
-      `hunger=${formatNum(payload.hungerCurrent, 3)}/${formatNum(payload.hungerMax, 3)} ratio=${formatRatio(payload.hungerCurrent, payload.hungerMax)} mult=${hungerPart}`,
-      `thirst=${formatNum(payload.thirstCurrent, 3)}/${formatNum(payload.thirstMax, 3)} ratio=${formatRatio(payload.thirstCurrent, payload.thirstMax)} mult=${thirstPart}`,
-      `combined=${combinedPart}`,
-      `hp=${hpEq}`,
-      `stamina=${staminaEq}`,
-      `nextHp=${formatNum(payload.nextHpCurrent, 3)}`,
-      `nextStamina=${formatNum(payload.nextCurrent, 3)}`,
-    ].join(" | ")
-  );
-}
-
 function applyVitalsTick(
   rt,
   nowMs,
@@ -166,26 +125,6 @@ function applyVitalsTick(
   const hungerChanged = Math.abs(nextHungerCurrent - hungerCurrent) > 1e-9;
   const thirstChanged = Math.abs(nextThirstCurrent - thirstCurrent) > 1e-9;
   const changed = hpChanged || staminaChanged || hungerChanged || thirstChanged;
-
-  maybeLogVitalsRegen(rt, {
-    dt,
-    hungerCurrent,
-    hungerMax,
-    thirstCurrent,
-    thirstMax,
-    hungerRegenMultiplier,
-    thirstRegenMultiplier,
-    thirstSupported,
-    combinedRegenMultiplier: resolveCombinedRegenMultiplier(hungerRegenMultiplier, thirstRegenMultiplier),
-    effectiveHpRegenMultiplier,
-    effectiveStaminaRegenMultiplier,
-    hpRegen,
-    regen,
-    hpCurrent,
-    nextHpCurrent,
-    current,
-    nextCurrent,
-  });
 
   if (hpChanged || hpMax !== readRuntimeHpMax(rt)) {
     syncRuntimeHp(rt, nextHpCurrent, hpMax);

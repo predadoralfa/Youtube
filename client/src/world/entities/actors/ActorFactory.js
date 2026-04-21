@@ -94,6 +94,8 @@ function normalizeActorType(actorType) {
     case "TWIG_PATCH":
     case "TWIG":
       return "TWIG_PATCH";
+    case "RIVER_PATCH":
+      return "RIVER_PATCH";
     case "FIBER_PATCH":
     case "GRASS_PATCH":
       return "GRASS";
@@ -668,6 +670,50 @@ export function createTwigPatchMesh(actor) {
 }
 
 /**
+ * Cria um mesh para RIVER_PATCH (fonte de agua)
+ */
+export function createRiverMesh(actor) {
+  const group = new THREE.Group();
+  applyActorUserData(group, actor, true);
+
+  const baseGeo = new THREE.PlaneGeometry(6.5, 2.4, 1, 1);
+  const baseMat = new THREE.MeshStandardMaterial({
+    color: 0x1d8fe3,
+    roughness: 0.2,
+    metalness: 0.05,
+    transparent: true,
+    opacity: 0.72,
+    side: THREE.DoubleSide,
+  });
+  const base = new THREE.Mesh(baseGeo, baseMat);
+  base.rotation.x = -Math.PI / 2;
+  base.position.y = 0.03;
+  base.castShadow = false;
+  base.receiveShadow = true;
+  group.add(base);
+
+  const foamGeo = new THREE.PlaneGeometry(6.1, 2.0, 1, 1);
+  const foamMat = new THREE.MeshStandardMaterial({
+    color: 0x7fd9ff,
+    roughness: 0.15,
+    metalness: 0.02,
+    transparent: true,
+    opacity: 0.38,
+    side: THREE.DoubleSide,
+  });
+  const foam = new THREE.Mesh(foamGeo, foamMat);
+  foam.rotation.x = -Math.PI / 2;
+  foam.position.y = 0.02;
+  foam.castShadow = false;
+  foam.receiveShadow = true;
+  group.add(foam);
+
+  group.castShadow = false;
+  group.receiveShadow = true;
+  return group;
+}
+
+/**
  * Cria um mesh para PRIMITIVE_SHELTER (projeto de construção)
  */
 export function createPrimitiveShelterMesh(actor) {
@@ -799,6 +845,8 @@ export function createActorMesh(actor) {
       return createTreeMesh(actor);
     case "TWIG_PATCH":
       return createTwigPatchMesh(actor);
+    case "RIVER_PATCH":
+      return createRiverMesh(actor);
     case "GRASS":
       return createGrassMesh(actor);
     case "PRIMITIVE_SHELTER":

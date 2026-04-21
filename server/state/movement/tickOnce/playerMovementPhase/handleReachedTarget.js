@@ -14,6 +14,7 @@ const { startPrimitiveShelterConstruction } = require("../../../../service/build
 const { resolveActorCollectCooldownMs } = require("../../../../service/actorCollectService");
 const { emitPlayerState } = require("./emitPlayerState");
 const { syncRuntimeStamina } = require("../../stamina.js");
+const { drinkFromRiverSource } = require("../../../../service/waterSourceService");
 const {
   startPrimitiveShelterSleep,
 } = require("../../../../service/primitiveShelterSleepService");
@@ -23,6 +24,12 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
     const interactActorId = rt.interact?.id ?? null;
     const pendingBuildActorId = rt.pendingBuild?.actorId ?? null;
     const pendingSleepActorId = rt.pendingSleep?.actorId ?? null;
+    console.log("[BUILD][SERVER] reached target", {
+      userId: rt.userId,
+      interactActorId,
+      pendingBuildActorId,
+      pendingSleepActorId,
+    });
 
     if (pendingSleepActorId != null && String(pendingSleepActorId) === String(interactActorId)) {
       try {
@@ -42,6 +49,10 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
     if (pendingBuildActorId != null && String(pendingBuildActorId) === String(interactActorId)) {
       try {
         await withInventoryLock(rt.userId, async () => {
+          console.log("[BUILD][SERVER] auto start begin", {
+            userId: rt.userId,
+            actorId: interactActorId,
+          });
           const invRt = await ensureInventoryLoaded(rt.userId);
           const eqRt = await ensureEquipmentLoaded(rt.userId);
           const tx = await db.sequelize.transaction();
@@ -56,10 +67,22 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
 
             if (!result?.ok) {
               await tx.rollback().catch(() => {});
+              console.warn("[BUILD][SERVER] auto start rejected", {
+                userId: rt.userId,
+                actorId: interactActorId,
+                code: result?.code ?? null,
+                message: result?.message ?? null,
+              });
               return;
             }
 
             await tx.commit();
+            console.log("[BUILD][SERVER] auto start completed", {
+              userId: rt.userId,
+              actorId: interactActorId,
+              instanceId: rt.instanceId,
+              rev: result.rev ?? null,
+            });
 
             rt.pendingBuild = null;
             rt.buildLock = {
@@ -93,6 +116,58 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
       } catch (err) {
         console.error(
           `[BUILD] failed to start construction: userId=${rt.userId} actorId=${interactActorId}`,
+          err
+        );
+      }
+      return true;
+    }
+
+    const actor = getActor(String(interactActorId));
+    const actorDefCode = String(
+      actor?.actorDef?.code ??
+      actor?.actorDefCode ??
+      actor?.actorType ??
+      actor?.actor_type ??
+      ""
+    ).trim().toUpperCase();
+    if (actorDefCode === "RIVER_PATCH") {
+      try {
+        const drinkResult = drinkFromRiverSource(rt, actor, t);
+        const thirstCurrent = Number(drinkResult?.thirstCurrent ?? 0);
+        const thirstMax = Number(drinkResult?.thirstMax ?? 0);
+        const changed = Boolean(drinkResult?.ok && drinkResult?.changed);
+        const completed = Boolean(drinkResult?.ok && thirstMax > 0 && thirstCurrent >= thirstMax);
+
+        if (changed) {
+          console.log("[WATER][SERVER] drink", {
+            userId: rt.userId,
+            actorId: interactActorId,
+            thirstCurrent,
+            thirstMax,
+            restored: drinkResult?.restored ?? null,
+            cooldownUntilMs: drinkResult?.cooldownUntilMs ?? null,
+          });
+          markStatsDirty(rt.userId);
+        }
+
+        if (completed) {
+          rt.interact = null;
+          rt.moveTarget = null;
+          rt.moveMode = "STOP";
+          rt.action = "idle";
+          rt.inputDir = { x: 0, z: 0 };
+          rt.inputDirAtMs = 0;
+          rt.waterLock = null;
+        }
+
+        if (changed || completed) {
+          bumpRev(rt);
+          markRuntimeDirty(rt.userId, t);
+          await emitPlayerState(io, rt);
+        }
+      } catch (err) {
+        console.error(
+          `[WATER] failed to drink from river: userId=${rt.userId} actorId=${interactActorId}`,
           err
         );
       }

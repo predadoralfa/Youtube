@@ -8,9 +8,14 @@ import { GameCanvasView } from "./view";
 export function GameCanvas(props) {
   const currentWorldTime = useWorldClock(props.worldClock);
   const state = useGameCanvasState(currentWorldTime, props.buildPlacement ?? null);
+  state.worldStoreRef = props.worldStoreRef ?? null;
+  state.setSnapshot = props.setSnapshot ?? null;
   state.clearBuildPlacement = props.onClearBuildPlacement ?? null;
   state.cancelBuild = props.onCancelBuild ?? null;
+  state.pauseBuild = props.onPauseBuild ?? null;
+  state.resumeBuild = props.onResumeBuild ?? null;
   state.startBuild = props.onStartBuild ?? null;
+  state.depositBuildMaterial = props.onDepositBuildMaterial ?? null;
   state.startSleep = props.onStartSleep ?? null;
   state.stopSleep = props.onStopSleep ?? null;
   const clearTargetBuildCard = useCallback(() => {

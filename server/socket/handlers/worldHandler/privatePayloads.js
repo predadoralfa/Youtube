@@ -7,7 +7,6 @@ const { loadCarryWeightStats } = require("../../../state/inventory/weight");
 const { getRuntime } = require("../../../state/runtimeStore");
 const { buildAutoFoodPayload } = require("../../../service/autoFoodService");
 const { ensureResearchLoaded, buildResearchPayload } = require("../../../service/researchService");
-const { logWorld } = require("./shared");
 
 async function emitInventoryFull(socket) {
   const userId = socket.data.userId;
@@ -31,19 +30,6 @@ async function emitInventoryFull(socket) {
     };
   }
   socket.emit("inv:full", inv);
-  logWorld("emitInventoryFull", {
-    userId,
-    socketId: socket.id,
-    heldState: invRt?.heldState
-      ? {
-          mode: invRt.heldState.mode ?? null,
-          containerId: invRt.heldState.sourceContainerId ?? null,
-          slotIndex: invRt.heldState.sourceSlotIndex ?? null,
-          qty: invRt.heldState.qty ?? null,
-        }
-      : null,
-    containers: invRt?.containers?.length ?? 0,
-  });
 }
 
 async function emitResearchFull(socket) {

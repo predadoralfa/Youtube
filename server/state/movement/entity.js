@@ -108,6 +108,17 @@ function readImmunityMax(rt) {
   );
 }
 
+function readImmunityPercent(rt) {
+  return toNum(
+    rt?.immunityPercent ??
+      rt?.immunity_percent ??
+      rt?.status?.immunity?.percent ??
+      rt?.stats?.immunityPercent ??
+      rt?.stats?.immunity_percent,
+    Math.round((readImmunityCurrent(rt) / Math.max(1, readImmunityMax(rt))) * 100000) / 1000
+  );
+}
+
 function readDiseaseLevel(rt) {
   return toNum(
     rt?.diseaseLevel ??
@@ -183,6 +194,7 @@ function toEntity(rt) {
   const thirstMax = readThirstMax(rt);
   const immunityCurrent = readImmunityCurrent(rt);
   const immunityMax = readImmunityMax(rt);
+  const immunityPercent = readImmunityPercent(rt);
   const diseaseLevel = readDiseaseLevel(rt);
   const diseaseSeverity = readDiseaseSeverity(rt);
   const sleepCurrent = readSleepCurrent(rt);
@@ -223,6 +235,7 @@ function toEntity(rt) {
       immunity: {
         current: immunityCurrent,
         max: immunityMax,
+        percent: immunityPercent,
       },
       fever: {
         current: diseaseLevel,
@@ -248,6 +261,7 @@ function toDelta(rt) {
   const thirstMax = readThirstMax(rt);
   const immunityCurrent = readImmunityCurrent(rt);
   const immunityMax = readImmunityMax(rt);
+  const immunityPercent = readImmunityPercent(rt);
   const diseaseLevel = readDiseaseLevel(rt);
   const diseaseSeverity = readDiseaseSeverity(rt);
   const sleepCurrent = readSleepCurrent(rt);
@@ -287,6 +301,7 @@ function toDelta(rt) {
       immunity: {
         current: immunityCurrent,
         max: immunityMax,
+        percent: immunityPercent,
       },
       fever: {
         current: diseaseLevel,

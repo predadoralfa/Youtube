@@ -143,14 +143,23 @@ Regras de dominio fechadas:
 
 - `sleep` controla bonus e penalidade de XP, nao resistencia a fever
 - `immunity` controla resistencia e recuperacao da fever
-- fome abaixo de `10%` reduz imunidade
+- fome abaixo de `30%` reduz imunidade de forma gradual
 - HP abaixo de `90%` reduz imunidade
-- sede abaixo de `10%` reduz imunidade
-- fome ou sede em `0%` aceleram fortemente a perda de imunidade
+- sede abaixo de `30%` reduz imunidade de forma gradual
+- fome e sede abaixo de `30%` ao mesmo tempo geram agravo na perda de imunidade
+- fome e sede usam faixas de perda e recuperacao em degraus, com corte forte abaixo de `15%` e `5%`
+- ambos acima de `30%` liberam recuperacao plena da imunidade
+- a sede passa a ter fonte ambiental de recuperacao via actors de agua no mapa, como `RIVER_PATCH`
+- a recuperacao da sede via agua acontece em ciclos com cooldown, em vez de encher tudo de uma vez
+- cada ciclo de agua recupera uma parcela pequena da sede, seguindo o mesmo ritmo base de interacao usado para coleta
+- o pior caso de fome e sede muito baixas acelera fortemente a queda da imunidade
+- a referencia operacional da imunidade e de aproximadamente `8h` para cair de `100` a `0` no caso base e `4h` no pior caso com fome e sede zeradas
+- a recuperacao de `0` a `100` continua em aproximadamente `8h`
 - a unica doenca ativa nesta fase e `fever`, hardcoded no servidor
 - o front-end deve receber o nome em ingles: `fever`
 - `debuffs` e um espelho derivado da febre para multiplicadores de tempo
 - a fever e resolvida por varreduras periodicas do servidor
+- a fever nao drena HP ou stamina diretamente; ela usa a imunidade como referencia de risco
 - a varredura atual acontece a cada `30` minutos de jogo
 - o tratamento medico base de `HERBS` cura `5%` de HP e entra em cooldown de `1` hora de jogo
 - `sleep` aplica multiplicador de XP entre `-10%` e `+20%`, com bonus acima de `30%`

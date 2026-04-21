@@ -91,9 +91,9 @@ export function GameCanvasView({
             <HPBar
               visible={true}
               mode="hud"
-              width={220}
-              hpHeight={22}
-              staminaHeight={16}
+              width={330}
+              hpHeight={25}
+              staminaHeight={18}
               hungerHeight={16}
               thirstHeight={16}
               hpCurrent={state.selfHpBar.hpCurrent}
@@ -108,8 +108,8 @@ export function GameCanvasView({
               showImmunity={false}
               showFever={false}
               showSleep={false}
-              hpTextFontSize="11px"
-              staminaTextFontSize="10px"
+              hpTextFontSize="14px"
+              staminaTextFontSize="12px"
               hungerTextFontSize="10px"
               thirstTextFontSize="10px"
               immunityTextFontSize="10px"
@@ -159,13 +159,23 @@ export function GameCanvasView({
             stateLabel={state.targetBuildCard.stateLabel}
             canCancel={state.targetBuildCard.canCancel}
             canBuild={state.targetBuildCard.canBuild}
+            canPause={state.targetBuildCard.canPause}
+            canResume={state.targetBuildCard.canResume}
+            canDeposit={state.targetBuildCard.canDeposit}
             canSleep={state.targetBuildCard.canSleep}
+            canDismantle={state.targetBuildCard.canDismantle}
+            sleepCurrent={state.targetBuildCard.sleepCurrent}
+            sleepMax={state.targetBuildCard.sleepMax}
             buildState={state.targetBuildCard.buildState}
             buildDurationLabel={state.targetBuildCard.buildDurationLabel}
             xpReward={state.targetBuildCard.xpReward}
             onCancel={state.targetBuildCard.onCancel}
+            onPause={state.targetBuildCard.onPause}
+            onResume={state.targetBuildCard.onResume}
             onBuild={state.targetBuildCard.onBuild}
+            onDepositMaterial={state.targetBuildCard.onDepositMaterial}
             onSleep={state.targetBuildCard.onSleep}
+            onDismantle={state.targetBuildCard.onDismantle}
             onClose={onCloseTargetBuildCard}
           />
         </div>

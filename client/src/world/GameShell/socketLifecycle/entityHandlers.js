@@ -66,6 +66,7 @@ export function createEntityHandlers(state, store) {
       yaw: payload?.yaw,
       hp: payload?.hp,
       vitals: payload?.vitals,
+      status: payload?.status,
       action: payload?.action,
     });
 

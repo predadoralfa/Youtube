@@ -8,10 +8,7 @@ const {
   deleteRuntime,
   getAllRuntimes,
 } = require("./runtime/store");
-
-// loader + stats
-const { ensureRuntimeLoaded, refreshRuntimeStats } = require("./runtime/loader");
-
+ 
 // mutation helpers
 const { markRuntimeDirty, markStatsDirty, setConnectionState } = require("./runtime/dirty");
 
@@ -24,6 +21,14 @@ const { INPUT_DIR_ACTIVE_MS, CHUNK_SIZE } = require("../config/worldConstants");
 
 // chunk helpers
 const { computeChunk } = require("./runtime/chunk");
+
+function ensureRuntimeLoaded(...args) {
+  return require("./runtime/loader/ensureRuntimeLoaded").ensureRuntimeLoaded(...args);
+}
+
+function refreshRuntimeStats(...args) {
+  return require("./runtime/loader/refreshers").refreshRuntimeStats(...args);
+}
 
 module.exports = {
   // store

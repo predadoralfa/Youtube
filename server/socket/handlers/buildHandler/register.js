@@ -3,9 +3,11 @@
 const db = require("../../../models");
 const { ensureRuntimeLoaded, getRuntime } = require("../../../state/runtimeStore");
 const { addActor, removeActor } = require("../../../state/actorsRuntimeStore");
-const { withInventoryLock } = require("../../../state/inventory/store");
+const { withInventoryLock, clearInventory } = require("../../../state/inventory/store");
+const { clearEquipment } = require("../../../state/equipment/store");
 const { ensureInventoryLoaded } = require("../../../state/inventory/loader");
 const { ensureEquipmentLoaded } = require("../../../state/equipment/loader");
+const { buildInventoryFull } = require("../../../state/inventory/fullPayload");
 const { emitFullAndAck } = require("../inventoryHandler/context");
 const {
   placePrimitiveShelter,
@@ -16,6 +18,9 @@ const {
   resolvePrimitiveShelterDistance,
   PRIMITIVE_SHELTER_APPROACH_RADIUS,
 } = require("../../../service/buildService");
+const {
+  depositPrimitiveShelterMaterial,
+} = require("../../../service/buildMaterialsService");
 const { applyApproach } = require("../interactHandler/movement");
 
 function safeAck(ack, payload) {
@@ -66,6 +71,11 @@ function registerBuildHandler(io, socket) {
           actor,
         });
 
+        clearInventory(userId);
+        const freshInvRt = await ensureInventoryLoaded(userId);
+        const freshEqRt = await ensureEquipmentLoaded(userId);
+        socket.emit("inv:full", buildInventoryFull(freshInvRt, freshEqRt));
+
         return safeAck(ack, {
           ok: true,
           actorId: result.actorId,
@@ -94,6 +104,10 @@ function registerBuildHandler(io, socket) {
       if (socket.data?._worldJoined !== true) return;
 
       const userId = socket.data.userId;
+      console.log("[BUILD][SERVER] start received", {
+        userId,
+        actorId: payload?.actorId ?? null,
+      });
       await ensureRuntimeLoaded(userId);
       const rt = getRuntime(userId);
       if (!rt) return;
@@ -145,6 +159,14 @@ function registerBuildHandler(io, socket) {
             x: actor.pos_x,
             z: actor.pos_z,
           });
+          console.log("[BUILD][SERVER] start resolved", {
+            userId,
+            actorId,
+            distance,
+            stopRadius: PRIMITIVE_SHELTER_APPROACH_RADIUS,
+            pendingBuild: rt.pendingBuild ?? null,
+            interact: rt.interact ?? null,
+          });
 
           if (distance > PRIMITIVE_SHELTER_APPROACH_RADIUS) {
             const moved = applyApproach({
@@ -166,6 +188,13 @@ function registerBuildHandler(io, socket) {
               startedAtMs: Date.now(),
               timeoutMs: 60000,
             };
+
+            console.log("[BUILD][SERVER] start queued approach", {
+              userId,
+              actorId,
+              moved,
+              pendingBuild: rt.pendingBuild,
+            });
 
             if (!moved) {
               console.warn("[BUILD][SERVER] failed to queue approach", {
@@ -191,10 +220,22 @@ function registerBuildHandler(io, socket) {
 
           if (!result?.ok) {
             await tx.rollback().catch(() => {});
+            console.warn("[BUILD][SERVER] start failed", {
+              userId,
+              actorId,
+              code: result?.code ?? null,
+              message: result?.message ?? null,
+            });
             return safeAck(ack, result);
           }
 
           await tx.commit();
+          console.log("[BUILD][SERVER] start completed", {
+            userId,
+            actorId,
+            instanceId: rt.instanceId,
+            rev: result.rev ?? null,
+          });
 
           addActor(result.actorPayload);
           rt.buildLock = {
@@ -239,6 +280,110 @@ function registerBuildHandler(io, socket) {
         ok: false,
         code: error?.code || "BUILD_ERR",
         message: error?.message || "Failed to start build",
+      });
+    }
+  });
+
+  socket.on("build:deposit", async (payload = {}, ack) => {
+    try {
+      if (socket.data?._worldJoined !== true) return;
+
+      const userId = socket.data.userId;
+      await ensureRuntimeLoaded(userId);
+      const rt = getRuntime(userId);
+      if (!rt) return;
+
+      const actorId = Number(payload?.actorId);
+      const itemInstanceId = Number(payload?.itemInstanceId);
+      const qty = Number(payload?.qty ?? 1);
+      if (!Number.isInteger(actorId) || actorId <= 0) {
+        return safeAck(ack, {
+          ok: false,
+          code: "INVALID_ACTOR_ID",
+          message: "Invalid actor id",
+        });
+      }
+      if (!Number.isInteger(itemInstanceId) || itemInstanceId <= 0) {
+        return safeAck(ack, {
+          ok: false,
+          code: "INVALID_ITEM_INSTANCE_ID",
+          message: "Invalid item instance id",
+        });
+      }
+
+      await withInventoryLock(userId, async () => {
+        const invRt = await ensureInventoryLoaded(userId);
+        const eqRt = await ensureEquipmentLoaded(userId);
+        const tx = await db.sequelize.transaction();
+        try {
+          const result = await depositPrimitiveShelterMaterial({
+            userId,
+            actorId,
+            itemInstanceId,
+            qty,
+            invRt,
+            eqRt,
+            tx,
+          });
+
+          if (!result?.ok) {
+            await tx.rollback().catch(() => {});
+            console.warn("[BUILD][SERVER] deposit rejected", {
+              userId,
+              actorId,
+              itemInstanceId,
+              qty,
+              code: result?.code ?? null,
+              message: result?.message ?? null,
+            });
+            return safeAck(ack, result);
+          }
+
+          await tx.commit();
+          clearInventory(userId);
+          clearEquipment(userId);
+          const freshInvRt = await ensureInventoryLoaded(userId);
+          const freshEqRt = await ensureEquipmentLoaded(userId);
+          socket.emit("inv:full", buildInventoryFull(freshInvRt, freshEqRt));
+
+          console.log("[BUILD][SERVER] deposit completed", {
+            userId,
+            actorId,
+            itemInstanceId,
+            qty,
+            sourceKind: result?.sourceKind ?? null,
+            requirementIndex: result?.requirementIndex ?? null,
+          });
+
+          return safeAck(ack, {
+            ok: true,
+            actorId: String(actorId),
+            itemInstanceId: String(itemInstanceId),
+            qty: Number(result?.qty ?? qty),
+            sourceKind: result?.sourceKind ?? null,
+          });
+        } catch (error) {
+          await tx.rollback().catch(() => {});
+          console.warn("[BUILD][SERVER] deposit error", {
+            userId,
+            actorId,
+            itemInstanceId,
+            qty,
+            message: error?.message,
+            code: error?.code,
+          });
+          return safeAck(ack, {
+            ok: false,
+            code: error?.code || "BUILD_ERR",
+            message: error?.message || "Failed to deposit materials",
+          });
+        }
+      });
+    } catch (error) {
+      return safeAck(ack, {
+        ok: false,
+        code: error?.code || "BUILD_ERR",
+        message: error?.message || "Failed to deposit materials",
       });
     }
   });
@@ -326,18 +471,36 @@ function registerBuildHandler(io, socket) {
 
       const tx = await db.sequelize.transaction();
       try {
+        console.log("[BUILD][SERVER] resume received", {
+          userId,
+          actorId,
+          pos: rt.pos ?? null,
+        });
         const result = await resumePrimitiveShelterConstruction({
           userId,
           actorId,
           tx,
+          currentPos: rt.pos ?? null,
         });
 
         if (!result?.ok) {
           await tx.rollback().catch(() => {});
+          console.warn("[BUILD][SERVER] resume rejected", {
+            userId,
+            actorId,
+            code: result?.code ?? null,
+            message: result?.message ?? null,
+          });
           return safeAck(ack, result);
         }
 
         await tx.commit();
+        console.log("[BUILD][SERVER] resume completed", {
+          userId,
+          actorId,
+          instanceId: result.instanceId ?? rt.instanceId,
+          rev: result.rev ?? null,
+        });
 
         rt.buildLock = {
           active: true,
@@ -374,12 +537,6 @@ function registerBuildHandler(io, socket) {
 
   socket.on("build:cancel", async (payload = {}, ack) => {
     try {
-      console.log("[BUILD][SERVER] cancel request", {
-        socketId: socket.id,
-        userId: socket.data?.userId,
-        payload,
-      });
-
       if (socket.data?._worldJoined !== true) return;
 
       const userId = socket.data.userId;
@@ -398,6 +555,13 @@ function registerBuildHandler(io, socket) {
 
       const tx = await db.sequelize.transaction();
       try {
+        console.log("[BUILD][SERVER] cancel begin", {
+          socketId: socket.id,
+          userId,
+          actorId,
+          instanceId: rt.instanceId,
+        });
+
         const result = await cancelPrimitiveShelter({
           userId,
           actorId,
@@ -420,15 +584,36 @@ function registerBuildHandler(io, socket) {
         rt.inputDir = { x: 0, z: 0 };
         rt.inputDirAtMs = 0;
         removeActor(String(actorId));
+        console.log("[BUILD][SERVER] cancel local remove", {
+          socketId: socket.id,
+          userId,
+          actorId: String(actorId),
+          instanceId: Number(result.instanceId ?? rt.instanceId),
+        });
+
+        const droppedActors = Array.isArray(result?.droppedActors) ? result.droppedActors : [];
+        for (const droppedActor of droppedActors) {
+          io.to(`inst:${Number(result.instanceId ?? rt.instanceId)}`).emit("world:object_spawn", {
+            objectKind: "ACTOR",
+            actor: droppedActor,
+          });
+        }
         io.to(`inst:${Number(result.instanceId ?? rt.instanceId)}`).emit("world:object_despawn", {
           objectKind: "ACTOR",
           actorId: String(actorId),
         });
 
-        console.log("[BUILD][SERVER] cancel ok", {
+        console.log("[BUILD][SERVER] cancel despawn emitted", {
+          socketId: socket.id,
+          userId,
           actorId: String(actorId),
           instanceId: Number(result.instanceId ?? rt.instanceId),
         });
+
+        clearInventory(userId);
+        const freshInvRt = await ensureInventoryLoaded(userId);
+        const freshEqRt = await ensureEquipmentLoaded(userId);
+        socket.emit("inv:full", buildInventoryFull(freshInvRt, freshEqRt));
 
         return safeAck(ack, {
           ok: true,
@@ -437,6 +622,9 @@ function registerBuildHandler(io, socket) {
       } catch (error) {
         await tx.rollback().catch(() => {});
         console.log("[BUILD][SERVER] cancel error", {
+          socketId: socket.id,
+          userId,
+          actorId,
           message: error?.message,
           code: error?.code,
         });
@@ -448,6 +636,9 @@ function registerBuildHandler(io, socket) {
       }
     } catch (error) {
       console.log("[BUILD][SERVER] cancel fatal", {
+        socketId: socket.id,
+        userId: socket.data?.userId,
+        actorId: payload?.actorId,
         message: error?.message,
         code: error?.code,
       });

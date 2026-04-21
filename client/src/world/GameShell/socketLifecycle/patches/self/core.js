@@ -104,6 +104,12 @@ export function patchSelfFromMoveState(prev, payload) {
         y: y ?? prev.runtime.pos?.y ?? 0,
         z: z ?? prev.runtime.pos?.z ?? 0,
       },
+      status: payload?.status
+        ? {
+            ...(prev.runtime.status ?? {}),
+            ...payload.status,
+          }
+        : prev.runtime.status,
       vitals: payload?.vitals
         ? normalizeVitals({ vitals: payload.vitals })
         : prev.runtime.vitals,

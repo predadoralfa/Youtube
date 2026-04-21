@@ -12,7 +12,9 @@ Definir a camada de imunidade como um sistema lento, progressivo e independente 
 - recuperar de doencas
 - variar com clima, fome e HP
 - manter limites minimo e maximo
-- cair rapidamente quando fome ou sede zeram
+- cair de forma mais rapida quando fome ou sede ficam baixas
+- usar faixas de estado da fome e da sede para perda e recuperacao
+- servir como resistencia central para fever sem mexer diretamente em HP ou stamina
 
 ---
 
@@ -31,15 +33,18 @@ Immunity:
 - `Current` nunca deve passar de `Max`
 - `Max` nunca deve sair do intervalo `100..500`
 - recuperacao deve ser lenta o bastante para sustentar gameplay
-- a perda deve ser causada principalmente por clima
-- fome e HP entram como fatores secundarios
+- a recuperacao atual leva cerca de `8h` de jogo do zero ao cheio
+- a perda base leva cerca de `8h` de jogo do cheio ao zero
+- o pior caso de fome e sede zeradas dobra a perda e leva cerca de `4h` de jogo do cheio ao zero
+- a perda deve ser causada principalmente por fome e sede baixos, com clima e HP como fatores secundarios
 - sono nao deve afetar imunidade diretamente
+- fever nao deve reduzir imunidade diretamente nesta fase
 
 ---
 
 ## Recuperacao
 
-- recuperacao total estimada em aproximadamente `24h` de jogo
+- recuperacao total estimada em aproximadamente `8h` de jogo
 - o sistema deve ser continuo e nao instantaneo
 - a recuperacao nao deve depender de acao manual constante
 - a febre e a unica doenca considerada nesta fase
@@ -50,20 +55,33 @@ Immunity:
 
 Fatores:
 
-- clima: principal influencia
-- fome abaixo de `10%`: influencia leve
+- clima: influencia pequena
+- fome abaixo de `30%`: influencia gradual na perda
 - HP abaixo de `90%`: influencia leve
-- sede abaixo de `10%`: influencia leve
-- fome ou sede em `0%` aceleram fortemente a perda de imunidade
+- sede abaixo de `30%`: influencia gradual na perda
+- fome ou sede em `0%` ativam o multiplicador maximo de perda
+- fome e sede abaixo de `30%` juntos geram agravo adicional
+- fome e sede muito baixas representam o pior caso de perda de imunidade e servem como referencia de perda maxima
+- a sede tambem pode ser recuperada por fonte ambiental de agua no mapa, como `RIVER_PATCH`
+- a agua ambiental recupera a sede em pequenos ciclos com cooldown, nao em preenchimento instantaneo
 
 Direcao:
 
-- clima ruim aumenta perda
+- clima ruim aumenta perda de forma secundaria
 - situacao fragil de sobrevivencia aumenta perda
-- situacao normal reduz impacto negativo
+- situacao normal permite recuperacao
 - sono nao entra neste calculo
 - a febre nao reduz imunidade diretamente nesta fase
 - a febre usa a imunidade como fonte de recuperacao ou piora na varredura periodica
+
+Faixas praticas:
+
+- acima de `30%`: sem perda por fome ou sede
+- entre `15%` e `30%`: perda lenta
+- entre `5%` e `15%`: perda media
+- abaixo de `5%`: perda forte
+- fome e sede zeradas aplicam o multiplicador maximo de `2x`
+- fome e sede baixas ao mesmo tempo somam efeito e recebem agravo
 
 ---
 

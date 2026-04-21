@@ -32,9 +32,6 @@ const { getProceduralMapProfile } = require("../../config/mapProceduralProfiles"
 const bootstrap = async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log(`\n${"=".repeat(80)}`);
-    console.log(`[BOOTSTRAP] iniciando para userId=${userId}`);
-    console.log(`${"=".repeat(80)}`);
 
     const runtime = await GaUserRuntime.findOne({
       where: { user_id: userId },
@@ -58,10 +55,6 @@ const bootstrap = async (req, res) => {
       return res.status(500).json({ message: "Runtime ausente (inconsistencia)" });
     }
 
-    console.log(
-      `[BOOTSTRAP] Runtime carregado: instanceId=${runtime.instance_id} pos=(${runtime.pos_x}, ${runtime.pos_y}, ${runtime.pos_z})`
-    );
-
     const combatStats = await loadPlayerCombatStats(userId);
     const hpCurrent = combatStats.hpCurrent;
     const hpMax = combatStats.hpMax;
@@ -71,6 +64,13 @@ const bootstrap = async (req, res) => {
     const hungerMax = combatStats.hungerMax;
     const thirstCurrent = combatStats.thirstCurrent;
     const thirstMax = combatStats.thirstMax;
+    const immunityCurrent = combatStats.immunityCurrent;
+    const immunityMax = combatStats.immunityMax;
+    const immunityPercent = combatStats.immunityPercent;
+    const diseaseLevel = combatStats.diseaseLevel;
+    const diseaseSeverity = combatStats.diseaseSeverity;
+    const sleepCurrent = combatStats.sleepCurrent;
+    const sleepMax = combatStats.sleepMax;
 
     const instance = await GaInstance.findByPk(runtime.instance_id, {
       attributes: ["id", "local_id", "instance_type", "status"],
@@ -171,8 +171,6 @@ const bootstrap = async (req, res) => {
     const groundRenderMaterial = local.visual?.groundRenderMaterial ?? null;
     const groundColor = groundRenderMaterial?.base_color ?? DEFAULT_GROUND_COLOR;
 
-    console.log(`[BOOTSTRAP] Local: id=${local.id} code=${local.code} size=(${sizeX}, ${sizeZ})`);
-
     const research = await ensureResearchLoaded(userId);
     const invRt = await ensureInventoryLoaded(userId);
     invRt.research = research;
@@ -186,11 +184,7 @@ const bootstrap = async (req, res) => {
       ),
     };
     const equipment = inventory.equipment;
-    console.log(`[BOOTSTRAP] Inventory: ${inventory?.containers?.length ?? 0} containers`);
-
-    console.log(`[BOOTSTRAP] Carregando ACTORS para instanceId=${runtime.instance_id}`);
     const actors = await loadActorsForInstance(runtime.instance_id);
-    console.log(`[BOOTSTRAP] ACTORS carregados: ${actors?.length ?? 0} atores`);
 
     clearActorsInstance(runtime.instance_id);
     for (const a of actors) {
@@ -222,11 +216,9 @@ const bootstrap = async (req, res) => {
     const cachedEnemies = getEnemiesForInstance(runtime.instance_id);
     if (cachedEnemies.length > 0) {
       enemyCount = cachedEnemies.length;
-      console.log(`[BOOTSTRAP] ENEMIES ja estavam carregados em memoria: ${cachedEnemies.length} inimigos`);
     } else {
       const enemies = await loadEnemiesForInstance(runtime.instance_id);
       enemyCount = enemies?.length ?? 0;
-      console.log(`[BOOTSTRAP] ENEMIES carregados: ${enemies?.length ?? 0} inimigos`);
 
       for (const enemy of enemies) {
         addEnemy(enemy);
@@ -267,6 +259,22 @@ const bootstrap = async (req, res) => {
               max: thirstMax,
             },
           },
+          status: {
+            immunity: {
+              current: immunityCurrent,
+              max: immunityMax,
+              percent: immunityPercent,
+            },
+            fever: {
+              current: diseaseLevel,
+              severity: diseaseSeverity,
+            },
+            debuffs: combatStats.debuffs ?? null,
+            sleep: {
+              current: sleepCurrent,
+              max: sleepMax,
+            },
+          },
           connection_state: runtime.connection_state,
           disconnected_at: runtime.disconnected_at,
           offline_allowed_at: runtime.offline_allowed_at,
@@ -289,6 +297,22 @@ const bootstrap = async (req, res) => {
               thirst: {
                 current: thirstCurrent,
                 max: thirstMax,
+              },
+            },
+            status: {
+              immunity: {
+                current: immunityCurrent,
+                max: immunityMax,
+                percent: immunityPercent,
+              },
+              fever: {
+                current: diseaseLevel,
+                severity: diseaseSeverity,
+              },
+              debuffs: combatStats.debuffs ?? null,
+              sleep: {
+                current: sleepCurrent,
+                max: sleepMax,
               },
             },
           },
@@ -360,10 +384,6 @@ const bootstrap = async (req, res) => {
       inventory,
       equipment,
     };
-
-    console.log(`[BOOTSTRAP] COMPLETO para userId=${userId}`);
-    console.log(`[BOOTSTRAP] Resposta: ${actors.length} actors, ${enemyCount} enemies`);
-    console.log(`${"=".repeat(80)}\n`);
 
     return res.json(responsePayload);
   } catch (error) {

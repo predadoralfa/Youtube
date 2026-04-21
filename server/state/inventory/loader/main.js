@@ -8,6 +8,10 @@ const {
   getGrantedContainerSlotRole,
 } = require("../../../service/equipmentService/grantsContainer");
 const {
+  ensurePrimitiveShelterMaterialsContainer,
+  getPrimitiveShelterMaterialsSlotRole,
+} = require("../../../service/buildMaterialsService");
+const {
   loadOwnersForPlayer,
   loadContainersByIds,
   loadContainerDefsByIds,
@@ -128,6 +132,59 @@ async function loadInventoryRuntime(userIdRaw, options = {}) {
 
   await ensureStarterInventory(userId);
   const equipmentRt = await ensureEquipmentLoaded(userId);
+
+  const [shelterRows] = await db.sequelize.query(
+    `
+    SELECT a.id, a.state_json
+    FROM ga_actor_runtime a
+    INNER JOIN ga_actor_def ad ON ad.id = a.actor_def_id
+    WHERE ad.code = 'PRIMITIVE_SHELTER'
+      AND a.status = 'ACTIVE'
+      AND CAST(JSON_UNQUOTE(JSON_EXTRACT(a.state_json, '$.ownerUserId')) AS UNSIGNED) = :userId
+    `,
+    {
+      replacements: { userId: Number(userId) },
+    }
+  );
+
+  for (const row of shelterRows ?? []) {
+    const actorId = Number(row?.id ?? 0);
+    if (!Number.isInteger(actorId) || actorId <= 0) continue;
+
+    let state = null;
+    try {
+      state = typeof row?.state_json === "string" ? JSON.parse(row.state_json) : row?.state_json ?? null;
+    } catch {
+      state = null;
+    }
+
+    const constructionState = String(state?.constructionState ?? state?.construction_state ?? "PLANNED")
+      .trim()
+      .toUpperCase();
+    if (constructionState === "COMPLETED" || constructionState === "DISABLED") continue;
+
+    const buildRequirements = Array.isArray(state?.buildRequirements) && state.buildRequirements.length
+      ? state.buildRequirements
+      : [];
+    const slotRole =
+      String(state?.buildMaterialsSlotRole ?? state?.build_materials_slot_role ?? getPrimitiveShelterMaterialsSlotRole(actorId)).trim() ||
+      getPrimitiveShelterMaterialsSlotRole(actorId);
+
+    const existingOwner = await db.GaContainerOwner.findOne({
+      where: {
+        owner_kind: "PLAYER",
+        owner_id: Number(userId),
+        slot_role: slotRole,
+      },
+    });
+    if (existingOwner) continue;
+
+    await ensurePrimitiveShelterMaterialsContainer({
+      userId: Number(userId),
+      actorId,
+      slotCount: Math.max(1, Array.isArray(buildRequirements) ? buildRequirements.length : 1),
+    });
+  }
 
   for (const equipped of Object.values(equipmentRt?.equipmentBySlotCode ?? {})) {
     if (!equipped?.itemDef?.components?.length) continue;

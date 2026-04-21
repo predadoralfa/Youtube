@@ -65,7 +65,7 @@ Regra atual:
 - a severidade deve refletir o pico do evento
 - o valor deve ficar entre `0` e `1`
 - a severidade ajuda a decidir ganho de max imunidade ao curar
-- quando `fever.current` cai, HP e stamina caem proporcionalmente na mesma taxa
+- quando `fever.current` cai, a doenca apenas avanca ou regrede; HP e stamina nao sao drenados diretamente por fever
 - o tratamento medico de base ainda e limitado ao item `HERBS`
 
 ---

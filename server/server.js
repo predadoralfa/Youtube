@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config({ quiet: true });
 
 const express = require("express");
 const cors = require("cors");
@@ -35,11 +35,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use((req, res, next) => {
-  console.log(`[HTTP] ${req.method} ${req.originalUrl}`);
-  next();
-});
-
 app.use("/auth", authRouter);
 app.use("/world", worldRouter);
 
@@ -48,7 +43,6 @@ async function bootstrap() {
 
   try {
     await db.sequelize.authenticate();
-    console.log("Conexao com o banco estabelecida!");
 
     await ensureUserStatsModelSchema();
     await ensureItemDefModelSchema();
@@ -74,12 +68,9 @@ async function bootstrap() {
     startResourceRegenLoop(io);
 
     httpServer.listen(5100, () => {
-      console.log("[SERVER] Servidor rodando na porta 5100");
-      console.log("[SOCKET] Rodando");
     });
 
     const shutdown = async (signal) => {
-      console.log(`[SERVER] shutdown signal=${signal}`);
       try {
         for (const invRt of getAllInventories()) {
           if (!invRt?.heldState) continue;
@@ -89,9 +80,6 @@ async function bootstrap() {
             try {
               await cancel(invRt, tx);
               await tx.commit();
-              console.log(
-                `[SERVER] restored held inventory item user=${invRt.userId} before shutdown`
-              );
             } catch (err) {
               await tx.rollback().catch(() => {});
               console.warn(
@@ -128,7 +116,6 @@ async function bootstrap() {
     process.on("SIGTERM", () => shutdown("SIGTERM"));
     process.on("SIGUSR2", () => shutdown("SIGUSR2"));
   } catch (error) {
-    console.error("Erro ao iniciar servidor:");
     console.error(error);
     process.exit(1);
   }

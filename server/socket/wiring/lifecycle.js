@@ -67,9 +67,6 @@ function installDisconnectHandler({ socket, userId, clearIfCurrentSession }) {
       await flushUserStatsImmediate(userId);
       await persistDirtyResearch(userId).catch(() => false);
 
-      console.log(
-        `[SOCKET] disconnect pending user=${userId} reason=${reason} offlineAt=${offlineAt}`
-      );
     } catch (e) {
       console.error("[SOCKET] disconnect handler error:", e);
     }

@@ -15,7 +15,6 @@ const {
   applyFeverTick,
   applySleepTick,
   resolveClimateStressFactor,
-  resolveFeverDebuffProfile,
 } = require("../status");
 const { emitDeltaToInterest } = require("../emit");
 const { ensureInventoryLoaded } = require("../../inventory/loader");
@@ -29,30 +28,33 @@ async function processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor) {
     if (!rt) continue;
     if (rt.connectionState === "DISCONNECTED_PENDING" || rt.connectionState === "OFFLINE") continue;
 
-    const hungerResult = applyHungerTick(rt, t, { timeFactor: worldTimeFactor });
+    const sleepDrainFactor = rt?.sleepLock?.active === true ? 0.25 : 1;
+    const hungerResult = applyHungerTick(rt, t, { timeFactor: worldTimeFactor * sleepDrainFactor });
     const thirstResult = rt?.thirstSupported
-      ? applyThirstTick(rt, t, { timeFactor: worldTimeFactor })
+      ? applyThirstTick(rt, t, { timeFactor: worldTimeFactor * sleepDrainFactor })
       : { changed: false };
+    const climateStressFactor = resolveClimateStressFactor(rt.instanceId);
+    const hungerRatio =
+      (rt?.hungerCurrent ?? rt?.stats?.hungerCurrent ?? 100) /
+      Math.max(1, rt?.hungerMax ?? rt?.stats?.hungerMax ?? 100);
+    const thirstRatio = rt?.thirstSupported
+      ? (rt?.thirstCurrent ?? rt?.stats?.thirstCurrent ?? 100) /
+        Math.max(1, rt?.thirstMax ?? rt?.stats?.thirstMax ?? 100)
+      : 1;
+    const hpRatio =
+      (rt?.hpCurrent ?? rt?.stats?.hpCurrent ?? 100) / Math.max(1, rt?.hpMax ?? rt?.stats?.hpMax ?? 100);
     const immunityResult = applyImmunityTick(rt, t, {
       timeFactor: worldTimeFactor,
-      climateStressFactor: resolveClimateStressFactor(rt.instanceId),
-      hungerRatio: (rt?.hungerCurrent ?? rt?.stats?.hungerCurrent ?? 100) /
-        Math.max(1, rt?.hungerMax ?? rt?.stats?.hungerMax ?? 100),
-      thirstRatio: rt?.thirstSupported
-        ? (rt?.thirstCurrent ?? rt?.stats?.thirstCurrent ?? 100) /
-          Math.max(1, rt?.thirstMax ?? rt?.stats?.thirstMax ?? 100)
-        : 1,
-      hpRatio: (rt?.hpCurrent ?? rt?.stats?.hpCurrent ?? 100) /
-        Math.max(1, rt?.hpMax ?? rt?.stats?.hpMax ?? 100),
+      climateStressFactor,
+      hungerRatio,
+      thirstRatio,
+      hpRatio,
     });
-    const feverDebuff = resolveFeverDebuffProfile(
-      rt?.status?.fever?.current ?? rt?.diseaseLevel ?? rt?.stats?.diseaseLevel ?? 100,
-      rt?.status?.fever?.severity ?? rt?.diseaseSeverity ?? rt?.stats?.diseaseSeverity ?? 0
-    );
     const feverResult = applyFeverTick(rt, t, {
       timeFactor: worldTimeFactor,
       immunityCurrent: immunityResult.immunityCurrent,
       immunityMax: immunityResult.immunityMax,
+      sleeping: rt?.sleepLock?.active === true,
     });
     const sleepResult = applySleepTick(rt, t, {
       timeFactor: worldTimeFactor,
@@ -60,8 +62,8 @@ async function processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor) {
     });
     const staminaResult = applyStaminaTick(rt, t, {
       movedReal: false,
-      regenMultiplier: feverDebuff.staminaRegenMultiplier,
-      hpRegenMultiplier: feverDebuff.staminaRegenMultiplier,
+      regenMultiplier: 1,
+      hpRegenMultiplier: 1,
     });
     const autoFoodResult = await processAutoFoodTick(rt, t);
     const researchResult = await processResearchTick(rt, t, 50);

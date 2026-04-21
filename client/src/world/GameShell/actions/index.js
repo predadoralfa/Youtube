@@ -11,7 +11,7 @@ export function useGameShellActions(state) {
   const inventoryActions = useGameShellInventoryActions(requestActions);
   const targetingActions = useGameShellTargetingActions(state);
   const buildActions = useGameShellBuildActions(state);
-  const sleepActions = useGameShellSleepActions(state);
+  const sleepActions = useGameShellSleepActions(state, targetingActions.emitInteractStart);
   const handleInputIntent = useGameShellIntentAction(state, {
     requestInventoryFull: requestActions.requestInventoryFull,
     requestResearchFull: requestActions.requestResearchFull,
@@ -26,6 +26,7 @@ export function useGameShellActions(state) {
     emitBuildCancel: buildActions.emitBuildCancel,
     emitBuildPause: buildActions.emitBuildPause,
     emitBuildResume: buildActions.emitBuildResume,
+    emitBuildDepositMaterial: buildActions.emitBuildDepositMaterial,
     emitSleepStop: sleepActions.emitSleepStop,
   });
 
@@ -69,6 +70,7 @@ export function useGameShellActions(state) {
       buildActions.emitBuildCancel,
       buildActions.emitBuildPause,
       buildActions.emitBuildResume,
+      buildActions.emitBuildDepositMaterial,
       buildActions.beginBuildPlacement,
       sleepActions.emitSleepStart,
       sleepActions.emitSleepStop,

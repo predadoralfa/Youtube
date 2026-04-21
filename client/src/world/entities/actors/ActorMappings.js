@@ -8,6 +8,7 @@
 import { ChestActor } from "./ChestActor";
 import { TreeActor } from "./TreeActor";
 import { TwigActor } from "./TwigActor";
+import { RiverActor } from "./RiverActor";
 import { PrimitiveShelterActor } from "./PrimitiveShelterActor";
 import { NPCActor } from "./NPCActor";
 import { DefaultActor } from "./DefaultActor";
@@ -26,6 +27,7 @@ export function getActorComponent(actorType) {
     APPLE_TREE: TreeActor,
     TREE: TreeActor,
     TWIG_PATCH: TwigActor,
+    RIVER_PATCH: RiverActor,
     PRIMITIVE_SHELTER: PrimitiveShelterActor,
     NPC: NPCActor,
     // Adicione mais tipos aqui conforme necessário
@@ -79,6 +81,12 @@ export const ACTOR_CONFIG = {
     interactive: true,
     label: "Galho",
     color: 0x8b5a2b,
+  },
+  RIVER_PATCH: {
+    scale: 1,
+    interactive: true,
+    label: "River",
+    color: 0x1d8fe3,
   },
   PRIMITIVE_SHELTER: {
     scale: 1,

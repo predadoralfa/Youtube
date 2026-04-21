@@ -135,6 +135,7 @@ export function readEntityStatus(entity) {
     100;
 
   const debuffs = status?.debuffs ?? null;
+  const feverActive = Boolean(debuffs?.active) || Number(feverCurrent) < feverMax;
   const resolvedFeverTier =
     debuffs?.tier ??
     (Number(feverCurrent) >= feverMax
@@ -159,6 +160,7 @@ export function readEntityStatus(entity) {
     feverStaminaRegenMultiplier:
       debuffs?.staminaRegenMultiplier ??
       (resolvedFeverTier > 0 ? 1 / (Number.isFinite(Number(tempoMultiplier)) ? Number(tempoMultiplier) : 1) : 1),
+    feverActive,
     sleepCurrent: toDisplayInt(sleepCurrent, 100),
     sleepMax: toDisplayInt(sleepMax, 100),
     debuffs,

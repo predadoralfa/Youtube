@@ -99,6 +99,7 @@ export function normalizeEntity(raw) {
     : { x: 0, y: undefined, z: 0 };
 
   const vitals = normalizeVitals(raw);
+  const status = raw?.status ?? raw?.runtime?.status ?? null;
 
   return {
     entityId,
@@ -113,6 +114,7 @@ export function normalizeEntity(raw) {
     yaw: Number(raw.yaw ?? 0),
     hp: toNum(raw.hp ?? vitals.hp.current, 0),
     vitals,
+    status,
     action: raw.action ?? "idle",
     rev: Number(raw.rev ?? 0),
   };

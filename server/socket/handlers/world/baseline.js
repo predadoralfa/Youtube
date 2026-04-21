@@ -13,66 +13,42 @@ function buildBaseline(rt) {
   const userId = String(rt.userId ?? rt.user_id ?? "?");
   const instanceId = String(rt.instanceId ?? rt.instance_id ?? "?");
   
-  console.log(`\n${'='.repeat(80)}`);
-  console.log(`[BASELINE] 🔍 Construindo para userId=${userId} instanceId=${instanceId}`);
-  console.log(`${'='.repeat(80)}`);
-
   const { cx, cz } = computeInterestFromRuntime(rt);
-  console.log(`[BASELINE] Interest chunk: (${cx}, ${cz})`);
 
   const you = toEntity(rt);
-  console.log(`[BASELINE] Self: ${you.entityId} pos=(${you.pos.x}, ${you.pos.z})`);
 
   const visibleUserIds = getUsersInChunks(rt.instanceId, cx, cz);
-  console.log(`[BASELINE] Visible players in chunk: ${visibleUserIds.length}`);
 
   const others = [];
 
   for (const uid of visibleUserIds) {
     const other = getRuntime(uid);
     if (!other) {
-      console.log(`[BASELINE] ⚠️ Player ${uid} não encontrado no runtime store`);
       continue;
     }
 
     if (other.connectionState === "OFFLINE") {
-      console.log(`[BASELINE] ⏸️ Player ${uid} está OFFLINE`);
       continue;
     }
 
     const e = toEntity(other);
     if (e.entityId === you.entityId) {
-      console.log(`[BASELINE] 🚫 Ignorando self (${you.entityId})`);
       continue;
     }
-    
-    console.log(`[BASELINE] ✅ Player: ${e.entityId} pos=(${e.pos.x}, ${e.pos.z})`);
+
     others.push(e);
   }
 
-  console.log(`[BASELINE] 🔍 Buscando inimigos para instanceId=${instanceId}`);
   const enemies = getEnemiesForInstance(rt.instanceId);
-  console.log(`[BASELINE] Total de inimigos no store: ${enemies.length}`);
 
   for (const enemy of enemies) {
     if (enemy.status === "ALIVE") {
       const enemyEntity = enemyToEntity(enemy);
-      
-      console.log(`[BASELINE] ✅ Enemy: ${enemyEntity.entityId} `
-        + `displayName=${enemyEntity.displayName} `
-        + `pos=(${enemyEntity.pos.x}, ${enemyEntity.pos.z}) `
-        + `status=${enemy.status} `
-        + `visualScale=${enemyEntity.visualScale ?? "n/a"}`);
-      
+
       others.push(enemyEntity);
-    } else {
-      console.log(`[BASELINE] ⏸️ Enemy ${enemy.id} status=${enemy.status} (ignorado)`);
     }
   }
 
-  console.log(`[BASELINE] 📊 TOTAL others (players + enemies): ${others.length}`);
-
-  // ✨ CORRIGIDO: Usar pos?.x, pos?.z para obter posição corretamente
   const runtimePayload = {
     userId: String(rt.userId ?? rt.user_id ?? ""),
     entityId: String(rt.entityId ?? rt.userId ?? rt.user_id ?? ""),
@@ -102,10 +78,25 @@ function buildBaseline(rt) {
         max: Number(rt.vitals.thirst?.max ?? rt.thirstMax ?? 0),
       },
     } : undefined,
+    status: rt.status
+      ? {
+          immunity: {
+            current: Number(rt.status.immunity?.current ?? rt.immunityCurrent ?? 0),
+            max: Number(rt.status.immunity?.max ?? rt.immunityMax ?? 0),
+            percent: Number(rt.status.immunity?.percent ?? rt.immunityPercent ?? 0),
+          },
+          fever: {
+            current: Number(rt.status.fever?.current ?? rt.diseaseLevel ?? 0),
+            severity: Number(rt.status.fever?.severity ?? rt.diseaseSeverity ?? 0),
+          },
+          debuffs: rt.status.debuffs ?? null,
+          sleep: {
+            current: Number(rt.status.sleep?.current ?? rt.sleepCurrent ?? 0),
+            max: Number(rt.status.sleep?.max ?? rt.sleepMax ?? 0),
+          },
+        }
+      : undefined,
   };
-
-  console.log(`[BASELINE] ✅ Runtime payload: userId=${runtimePayload.userId} pos=(${runtimePayload.pos_x}, ${runtimePayload.pos_z})`);
-  console.log(`${'='.repeat(80)}\n`);
 
   return {
     instanceId: String(rt.instanceId),

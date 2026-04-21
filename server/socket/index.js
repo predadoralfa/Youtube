@@ -38,7 +38,6 @@ function registerSocket(io) {
       });
 
       socket.emit("socket:ready", { ok: true });
-      console.log(`[SOCKET] connected user=${userId}`);
     } catch (e) {
       console.error("[SOCKET] connection error:", e);
       socket.disconnect(true);

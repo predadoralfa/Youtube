@@ -34,6 +34,10 @@ export function InventoryGridSection({
       return "Granted Storage";
     }
 
+    if (rawRole.startsWith("BUILD_MATERIALS:")) {
+      return "Build Materials";
+    }
+
     return rawRole.toUpperCase();
   }
 

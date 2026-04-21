@@ -23,6 +23,7 @@ export function GameShellView({ state, actions }) {
         snapshot={state.snapshot}
         worldClock={state.snapshot?.worldClock}
         worldStoreRef={state.worldStoreRef}
+        setSnapshot={state.setSnapshot}
         buildPlacement={state.buildPlacement}
         inventorySnapshot={state.inventorySnapshot}
         onInputIntent={actions.handleInputIntent}
@@ -30,9 +31,12 @@ export function GameShellView({ state, actions }) {
         onTargetClear={actions.onTargetClear}
         onCancelBuild={actions.emitBuildCancel}
         onStartBuild={actions.emitBuildStart}
+        onDepositBuildMaterial={actions.emitBuildDepositMaterial}
         onStartSleep={actions.emitSleepStart}
         onStopSleep={actions.emitSleepStop}
         onClearBuildPlacement={actions.clearBuildPlacement}
+        onPauseBuild={actions.emitBuildPause}
+        onResumeBuild={actions.emitBuildResume}
         lootNotifications={state.lootNotifications}
         worldNotifications={state.worldNotifications}
       />
@@ -43,9 +47,7 @@ export function GameShellView({ state, actions }) {
         researchSnapshot={state.snapshot?.research}
         inventorySnapshot={state.inventorySnapshot}
         equipmentSnapshot={state.equipmentSnapshot}
-        onCancelBuild={actions.emitBuildCancel}
-        onPauseBuild={actions.emitBuildPause}
-        onResumeBuild={actions.emitBuildResume}
+        onStopSleep={actions.emitSleepStop}
       />
 
       <InventoryModal

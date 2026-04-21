@@ -15,6 +15,8 @@ async function emitPlayerState(io, rt) {
       pos: rt.pos,
       yaw: rt.yaw,
       rev: rt.rev ?? 0,
+      buildLock: rt.buildLock ?? null,
+      sleepLock: rt.sleepLock ?? null,
       vitals: delta.vitals,
       chunk: rt.chunk ?? computeChunkFromPos(rt.pos),
     });

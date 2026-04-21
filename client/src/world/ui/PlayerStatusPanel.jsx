@@ -122,11 +122,10 @@ function resolveActiveSleep(snapshot) {
   if (!sleepLock?.active && !sleepLock?.pending) return null;
 
   return {
-    title: "Primitive Shelter",
+    pending: Boolean(sleepLock?.pending),
+    title: "Sleep",
     subtitle: sleepLock?.pending ? "Approaching shelter" : "Sleeping",
-    remainingText: sleepLock?.pending ? "ESC to cancel" : "ESC to wake",
-    progressRatio: 1,
-    progressText: sleepLock?.pending ? "Approaching" : "Sleeping",
+    remainingText: sleepLock?.pending ? "Cancel with ESC" : "Wake with ESC",
   };
 }
 
@@ -146,8 +145,13 @@ function resolveSleepXpMultiplierBasisPoints(sleepCurrent, sleepMax = 100) {
 
 function resolveStatusSnapshot(snapshot) {
   const status = snapshot?.runtime?.status ?? snapshot?.status ?? null;
-  const immunityCurrent = Number(status?.immunity?.current ?? snapshot?.runtime?.immunityCurrent ?? 100);
-  const immunityMax = Math.max(1, Number(status?.immunity?.max ?? snapshot?.runtime?.immunityMax ?? 100));
+  const immunityCurrentRaw = Number(status?.immunity?.current ?? snapshot?.runtime?.immunityCurrent ?? 100);
+  const immunityMaxRaw = Number(status?.immunity?.max ?? snapshot?.runtime?.immunityMax ?? 100);
+  const immunityPercentRaw = Number(
+    status?.immunity?.percent ?? snapshot?.runtime?.immunityPercent ?? snapshot?.runtime?.status?.immunity?.percent ?? 0
+  );
+  const immunityCurrent = Math.max(0, Number.isFinite(immunityCurrentRaw) ? immunityCurrentRaw : 100);
+  const immunityMax = Math.max(1, Number.isFinite(immunityMaxRaw) ? immunityMaxRaw : 100);
   const hungerCurrent = Number(
     status?.hunger?.current ??
       snapshot?.runtime?.hungerCurrent ??
@@ -191,7 +195,11 @@ function resolveStatusSnapshot(snapshot) {
       Number(status?.fever?.severity ?? snapshot?.runtime?.feverSeverity ?? Math.max(0, 1 - feverCurrent / 100))
     )
   );
-  const feverTier = Number(status?.debuffs?.tier ?? snapshot?.runtime?.feverTier ?? (feverCurrent >= 100 ? 0 : Math.max(1, Math.min(10, Math.ceil(feverSeverity * 10)))));
+  const feverTier = Number(
+    status?.debuffs?.tier ??
+      snapshot?.runtime?.feverTier ??
+      (feverCurrent >= 100 ? 0 : Math.max(1, Math.min(10, Math.ceil(feverSeverity * 10))))
+  );
   const sleepCurrent = Number(status?.sleep?.current ?? snapshot?.runtime?.sleepCurrent ?? 100);
   const sleepMax = Math.max(1, Number(status?.sleep?.max ?? snapshot?.runtime?.sleepMax ?? 100));
   const sleepMultiplierBps = resolveSleepXpMultiplierBasisPoints(sleepCurrent, sleepMax);
@@ -207,7 +215,7 @@ function resolveStatusSnapshot(snapshot) {
     thirstPercent: Math.round((thirstCurrent / thirstMax) * 100),
     immunityCurrent,
     immunityMax,
-    immunityPercent: Math.round((immunityCurrent / immunityMax) * 100),
+    immunityPercent: Number.isFinite(immunityPercentRaw) ? immunityPercentRaw : 0,
     feverCurrent,
     feverDisplayCurrent,
     feverDisplayPercent: Math.round((feverDisplayCurrent / 100) * 100),
@@ -221,10 +229,17 @@ function resolveStatusSnapshot(snapshot) {
   };
 }
 
-function MiniVitalRow({ label, current, max, color, trackColor = "rgba(15, 23, 42, 0.92)" }) {
+function MiniVitalRow({
+  label,
+  current,
+  max,
+  color,
+  trackColor = "rgba(15, 23, 42, 0.92)",
+}) {
   const safeCurrent = Math.max(0, Number(current ?? 0));
   const safeMax = Math.max(1, Number(max ?? 1));
   const ratio = clamp01(safeCurrent / safeMax);
+  const percentLabel = Math.round(ratio * 100);
 
   return (
     <div style={{ display: "grid", gap: 6 }}>
@@ -248,7 +263,7 @@ function MiniVitalRow({ label, current, max, color, trackColor = "rgba(15, 23, 4
           {label}
         </span>
         <span style={{ color: "rgba(248, 250, 252, 0.82)", fontSize: 11 }}>
-          {Math.round(ratio * 100)}%
+          {percentLabel}%
         </span>
       </div>
 
@@ -275,7 +290,17 @@ function MiniVitalRow({ label, current, max, color, trackColor = "rgba(15, 23, 4
   );
 }
 
-function JobRow({ label, title, subtitle, remainingText, progressRatio, emptyText, extra = null }) {
+function JobRow({
+  label,
+  title,
+  subtitle,
+  remainingText,
+  progressRatio,
+  emptyText,
+  extra = null,
+  hideTitle = false,
+  hideRemaining = false,
+}) {
   const hasJob = Boolean(title);
 
   return (
@@ -299,14 +324,18 @@ function JobRow({ label, title, subtitle, remainingText, progressRatio, emptyTex
         >
           {label}
         </span>
-        <span style={{ color: "rgba(248, 250, 252, 0.82)", fontSize: 11 }}>
-          {hasJob ? remainingText : "idle"}
-        </span>
+        {!hideRemaining ? (
+          <span style={{ color: "rgba(248, 250, 252, 0.82)", fontSize: 11 }}>
+            {hasJob ? remainingText : "idle"}
+          </span>
+        ) : null}
       </div>
 
-      <div style={{ color: "#f8fafc", fontSize: 13, fontWeight: 700, lineHeight: 1.15 }}>
-        {hasJob ? title : emptyText}
-      </div>
+      {!hideTitle ? (
+        <div style={{ color: "#f8fafc", fontSize: 13, fontWeight: 700, lineHeight: 1.15 }}>
+          {hasJob ? title : emptyText}
+        </div>
+      ) : null}
 
       {hasJob && subtitle ? (
         <div style={{ color: "rgba(226, 232, 240, 0.68)", fontSize: 11, lineHeight: 1.25 }}>
@@ -341,6 +370,112 @@ function JobRow({ label, title, subtitle, remainingText, progressRatio, emptyTex
   );
 }
 
+function SleepOverlayCard({ sleepSummary, sleepCurrent, sleepMax, onStopSleep }) {
+  if (!sleepSummary) return null;
+
+  const safeCurrent = Math.max(0, Number(sleepCurrent ?? 0));
+  const safeMax = Math.max(1, Number(sleepMax ?? 1));
+  const ratio = clamp01(safeCurrent / safeMax);
+  const progressPercent = ratio * 100;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 16,
+        left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 1130,
+        width: "min(420px, calc(100vw - 32px))",
+        pointerEvents: "auto",
+      }}
+    >
+      <div
+        style={{
+          borderRadius: 16,
+          padding: "14px 16px",
+          border: "1px solid rgba(56, 189, 248, 0.35)",
+          background: "linear-gradient(180deg, rgba(10, 16, 28, 0.96), rgba(5, 10, 18, 0.94))",
+          boxShadow: "0 18px 40px rgba(0, 0, 0, 0.42)",
+          color: "#f8fafc",
+          backdropFilter: "blur(8px)",
+          display: "grid",
+          gap: 12,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div
+              style={{
+                fontSize: 12,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                color: "rgba(191, 219, 254, 0.85)",
+              }}
+            >
+              {sleepSummary.title}
+            </div>
+            <div style={{ color: "rgba(226, 232, 240, 0.76)", fontSize: 12 }}>
+              {sleepSummary.subtitle}
+            </div>
+          </div>
+
+          <div style={{ color: "rgba(226, 232, 240, 0.78)", fontSize: 12, fontWeight: 700 }}>
+            {sleepSummary.remainingText}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 8 }}>
+          <div
+            style={{
+              height: 14,
+              overflow: "hidden",
+              border: "1px solid rgba(56, 189, 248, 0.24)",
+              borderRadius: 999,
+              background: "rgba(5, 10, 18, 0.72)",
+            }}
+          >
+            <div
+              style={{
+                width: `${progressPercent}%`,
+                height: "100%",
+                borderRadius: 999,
+                background: "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(34,197,94,0.9))",
+                transition: "width 240ms ease",
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ color: "rgba(248, 250, 252, 0.82)", fontSize: 12 }}>
+              {Math.round(safeCurrent)} / {Math.round(safeMax)} ({Math.round(progressPercent)}%)
+            </div>
+
+            {typeof onStopSleep === "function" ? (
+              <button
+                type="button"
+                onClick={onStopSleep}
+                style={{
+                  borderRadius: 10,
+                  border: "1px solid rgba(239, 68, 68, 0.45)",
+                  background: "rgba(127, 29, 29, 0.32)",
+                  color: "#fecaca",
+                  padding: "8px 14px",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PlayerStatusPanel({
   snapshot,
   researchSnapshot,
@@ -349,6 +484,7 @@ export function PlayerStatusPanel({
   onCancelBuild = null,
   onPauseBuild = null,
   onResumeBuild = null,
+  onStopSleep = null,
 }) {
   const [open, setOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -373,294 +509,242 @@ export function PlayerStatusPanel({
   );
   const activeSleep = useMemo(() => resolveActiveSleep(snapshot), [snapshot]);
   const statusSummary = useMemo(() => resolveStatusSnapshot(snapshot), [snapshot]);
-  const activeJobs = [activeResearch, activeCraft, activeBuild, activeSleep].filter(Boolean);
+  const activeJobs = [activeResearch, activeCraft].filter(Boolean);
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: 58,
-        right: 16,
-        zIndex: 1099,
-        width: open ? 270 : 28,
-        pointerEvents: "none",
-        display: "flex",
-        justifyContent: "flex-end",
-        transition: "width 0.32s ease",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "stretch", pointerEvents: "auto" }}>
-        <div
-          style={{
-            width: open ? 22 : 28,
-            minWidth: open ? 22 : 28,
-            borderRadius: 14,
-            borderTopRightRadius: open ? 0 : 14,
-            borderBottomRightRadius: open ? 0 : 14,
-            background: "linear-gradient(180deg, #22c55e 0%, #0f766e 55%, #052e2b 100%)",
-            border: "1px solid rgba(45, 212, 191, 0.95)",
-            boxShadow: "0 0 10px rgba(45,212,191,0.72), 0 0 22px rgba(34,197,94,0.42)",
-            color: "#ecfeff",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            userSelect: "none",
-            fontSize: open ? 13 : 15,
-            fontWeight: 700,
-            transition: "width 0.32s ease, min-width 0.32s ease, box-shadow 0.32s ease",
-          }}
-          onClick={() => setOpen((value) => !value)}
-          title={open ? "Close player jobs" : "Open player jobs"}
-        >
-          {open ? "<" : "📋"}
-        </div>
+    <>
+      <SleepOverlayCard
+        sleepSummary={activeSleep}
+        sleepCurrent={statusSummary.sleepCurrent}
+        sleepMax={statusSummary.sleepMax}
+        onStopSleep={onStopSleep}
+      />
 
-        {open ? (
+      <div
+        style={{
+          position: "fixed",
+          top: 58,
+          right: 16,
+          zIndex: 1099,
+          width: open ? 270 : 28,
+          pointerEvents: "none",
+          display: "flex",
+          justifyContent: "flex-end",
+          transition: "width 0.32s ease",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "stretch", pointerEvents: "auto" }}>
           <div
             style={{
-              width: 248,
-              background: "linear-gradient(180deg, rgba(14,22,34,0.92), rgba(8,12,20,0.9))",
-              borderTop: "1px solid rgba(148, 163, 184, 0.35)",
-              borderRight: "1px solid rgba(148, 163, 184, 0.35)",
-              borderBottom: "1px solid rgba(148, 163, 184, 0.35)",
-              borderTopRightRadius: 14,
-              borderBottomRightRadius: 14,
-              boxShadow: "0 14px 30px rgba(0,0,0,0.35)",
-              color: "#f8fafc",
-              padding: "12px 14px",
-              backdropFilter: "blur(6px)",
-              transformOrigin: "right center",
-              animation: "playerStatusSlideOpen 340ms cubic-bezier(0.22, 1, 0.36, 1)",
+              width: open ? 22 : 28,
+              minWidth: open ? 22 : 28,
+              borderRadius: 14,
+              borderTopRightRadius: open ? 0 : 14,
+              borderBottomRightRadius: open ? 0 : 14,
+              background: "linear-gradient(180deg, #22c55e 0%, #0f766e 55%, #052e2b 100%)",
+              border: "1px solid rgba(45, 212, 191, 0.95)",
+              boxShadow: "0 0 10px rgba(45,212,191,0.72), 0 0 22px rgba(34,197,94,0.42)",
+              color: "#ecfeff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              userSelect: "none",
+              fontSize: open ? 13 : 15,
+              fontWeight: 700,
+              transition: "width 0.32s ease, min-width 0.32s ease, box-shadow 0.32s ease",
             }}
-          >
-            <style>
-              {`
-                @keyframes playerStatusSlideOpen {
-                  0% {
-                    opacity: 0;
-                    transform: translateX(18px) scaleX(0.78) scaleY(0.92);
-                  }
-                  100% {
-                    opacity: 1;
-                    transform: translateX(0) scaleX(1) scaleY(1);
-                  }
-                }
-              `}
-            </style>
-            <div
-              style={{
-                display: "grid",
-                gap: 12,
-                marginBottom: 18,
-                padding: 12,
-                borderRadius: 14,
-                border: "1px solid rgba(59, 130, 246, 0.18)",
-                background: "linear-gradient(180deg, rgba(8, 15, 26, 0.94), rgba(5, 10, 18, 0.9))",
-              }}
+            onClick={() => setOpen((value) => !value)}
+            title={open ? "Close player jobs" : "Open player jobs"}
             >
-              <div
-                style={{
-                  fontSize: 12,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color: "rgba(191, 219, 254, 0.85)",
-                }}
-              >
-                Status
-              </div>
-
-              <div style={{ display: "grid", gap: 10 }}>
-                <MiniVitalRow
-                  label="Hunger"
-                  current={statusSummary.hungerCurrent}
-                  max={statusSummary.hungerMax}
-                  color="linear-gradient(90deg, rgba(56,189,248,0.95), rgba(14,165,233,0.9))"
-                />
-
-                <MiniVitalRow
-                  label="Thirst"
-                  current={statusSummary.thirstCurrent}
-                  max={statusSummary.thirstMax}
-                  color="linear-gradient(90deg, rgba(34,211,238,0.95), rgba(6,182,212,0.9))"
-                />
-              </div>
-
-              <div style={{ display: "grid", gap: 12 }}>
-                <JobRow
-                  label="Immunity"
-                  title={`${statusSummary.immunityCurrent} / ${statusSummary.immunityMax}`}
-                  subtitle="Resistance to fever"
-                  remainingText={`${statusSummary.immunityPercent}%`}
-                  progressRatio={statusSummary.immunityPercent / 100}
-                  emptyText="No immunity data"
-                />
-
-                {statusSummary.feverDisplayCurrent > 0 ? (
-                  <JobRow
-                    label="Fever"
-                    title={`${statusSummary.feverDisplayCurrent} / 100`}
-                    subtitle={`Severity ${Math.round(statusSummary.feverSeverity * 100)}%`}
-                    remainingText={
-                      statusSummary.feverTier > 0 ? `Tier ${statusSummary.feverTier}` : "Clear"
-                    }
-                    progressRatio={statusSummary.feverDisplayCurrent / 100}
-                    emptyText="No fever data"
-                  />
-                ) : null}
-
-                <JobRow
-                  label="Sleep"
-                  title={`${statusSummary.sleepCurrent} / ${statusSummary.sleepMax}`}
-                  subtitle={
-                    statusSummary.sleepMultiplier >= 1
-                      ? `XP bonus +${Math.round((statusSummary.sleepMultiplier - 1) * 100)}%`
-                      : `XP penalty ${Math.round((statusSummary.sleepMultiplier - 1) * 100)}%`
-                  }
-                  remainingText={`${Math.round(statusSummary.sleepMultiplier * 100)}%`}
-                  progressRatio={Math.min(1, Math.max(0, statusSummary.sleepCurrent / statusSummary.sleepMax))}
-                  emptyText="No sleep data"
-                />
-              </div>
+             {open ? "<" : "▦"}
             </div>
 
-            {activeJobs.length > 0 ? (
-              <>
+          {open ? (
+            <div
+              style={{
+                width: 248,
+                background: "linear-gradient(180deg, rgba(14,22,34,0.92), rgba(8,12,20,0.9))",
+                borderTop: "1px solid rgba(148, 163, 184, 0.35)",
+                borderRight: "1px solid rgba(148, 163, 184, 0.35)",
+                borderBottom: "1px solid rgba(148, 163, 184, 0.35)",
+                borderTopRightRadius: 14,
+                borderBottomRightRadius: 14,
+                boxShadow: "0 14px 30px rgba(0,0,0,0.35)",
+                color: "#f8fafc",
+                padding: "12px 14px",
+                backdropFilter: "blur(6px)",
+                transformOrigin: "right center",
+                animation: "playerStatusSlideOpen 340ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
+            >
+              <style>
+                {`
+                  @keyframes playerStatusSlideOpen {
+                    0% {
+                      opacity: 0;
+                      transform: translateX(18px) scaleX(0.78) scaleY(0.92);
+                    }
+                    100% {
+                      opacity: 1;
+                      transform: translateX(0) scaleX(1) scaleY(1);
+                    }
+                  }
+                `}
+              </style>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: 12,
+                  marginBottom: 18,
+                  padding: 12,
+                  borderRadius: 14,
+                  border: "1px solid rgba(59, 130, 246, 0.18)",
+                  background: "linear-gradient(180deg, rgba(8, 15, 26, 0.94), rgba(5, 10, 18, 0.9))",
+                }}
+              >
                 <div
                   style={{
                     fontSize: 12,
                     letterSpacing: "0.14em",
                     textTransform: "uppercase",
                     color: "rgba(191, 219, 254, 0.85)",
-                    marginBottom: 12,
                   }}
                 >
-                  Tasks / Jobs
+                  Status
                 </div>
 
-                <div style={{ display: "grid", gap: 14 }}>
-                  {activeResearch ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  <MiniVitalRow
+                    label="Hunger"
+                    current={statusSummary.hungerCurrent}
+                    max={statusSummary.hungerMax}
+                    color="linear-gradient(90deg, rgba(56,189,248,0.95), rgba(14,165,233,0.9))"
+                  />
+
+                  <MiniVitalRow
+                    label="Thirst"
+                    current={statusSummary.thirstCurrent}
+                    max={statusSummary.thirstMax}
+                    color="linear-gradient(90deg, rgba(34,211,238,0.95), rgba(6,182,212,0.9))"
+                  />
+
+                  <MiniVitalRow
+                    label="Sleep"
+                    current={statusSummary.sleepCurrent}
+                    max={statusSummary.sleepMax}
+                    color="linear-gradient(90deg, rgba(52,211,153,0.95), rgba(34,197,94,0.9))"
+                  />
+                </div>
+
+                <div style={{ display: "grid", gap: 12 }}>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        alignItems: "baseline",
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: "rgba(191, 219, 254, 0.86)",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          letterSpacing: "0.11em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Immunity
+                      </span>
+                      <span style={{ color: "rgba(248, 250, 252, 0.82)", fontSize: 11 }}>
+                        {statusSummary.immunityPercent.toFixed(3)}%
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        height: 14,
+                        overflow: "hidden",
+                        border: "1px solid rgba(96, 165, 250, 0.24)",
+                        borderRadius: 999,
+                        background: "rgba(5, 10, 18, 0.72)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${statusSummary.immunityPercent}%`,
+                          height: "100%",
+                          borderRadius: 999,
+                          background: "linear-gradient(90deg, rgba(96,165,250,0.95), rgba(34,197,94,0.9))",
+                          transition: "width 240ms ease",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {statusSummary.feverActive && statusSummary.feverDisplayCurrent > 0 ? (
                     <JobRow
-                      label="Research"
-                      title={activeResearch?.title}
-                      subtitle={activeResearch?.subtitle}
-                      remainingText={activeResearch?.remainingText}
-                      progressRatio={activeResearch?.progressRatio ?? 0}
-                      emptyText="No active research"
-                    />
-                  ) : null}
-
-                  {activeCraft ? (
-                    <JobRow
-                      label="Craft"
-                      title={activeCraft?.title}
-                      subtitle={activeCraft?.subtitle}
-                      remainingText={activeCraft?.remainingText}
-                      progressRatio={activeCraft?.progressRatio ?? 0}
-                      emptyText="No active hand craft"
-                    />
-                  ) : null}
-
-                  {activeBuild ? (
-                    <JobRow
-                      label="Builder"
-                      title={activeBuild?.title}
-                      subtitle={activeBuild?.subtitle}
-                      remainingText={activeBuild?.remainingText}
-                      progressRatio={activeBuild?.progressRatio ?? 0}
-                      emptyText="No active construction"
-                      extra={
-                        <div style={{ display: "grid", gap: 8 }}>
-                          <div style={{ color: "rgba(226, 232, 240, 0.78)", fontSize: 11 }}>
-                            {activeBuild.progressText}
-                          </div>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            {activeBuild.canPause ? (
-                              <button
-                                type="button"
-                                style={{
-                                  flex: 1,
-                                  borderRadius: 8,
-                                  border: "1px solid rgba(59, 130, 246, 0.45)",
-                                  background: "rgba(37, 99, 235, 0.22)",
-                                  color: "#dbeafe",
-                                  padding: "8px 10px",
-                                  fontSize: 11,
-                                  fontWeight: 800,
-                                  cursor: "pointer",
-                                }}
-                                onClick={() => onPauseBuild?.(activeBuild.actorId)}
-                              >
-                                Pause
-                              </button>
-                            ) : null}
-
-                            {activeBuild.canResume ? (
-                              <button
-                                type="button"
-                                style={{
-                                  flex: 1,
-                                  borderRadius: 8,
-                                  border: "1px solid rgba(34, 197, 94, 0.45)",
-                                  background: "rgba(22, 163, 74, 0.22)",
-                                  color: "#dcfce7",
-                                  padding: "8px 10px",
-                                  fontSize: 11,
-                                  fontWeight: 800,
-                                  cursor: "pointer",
-                                }}
-                                onClick={() => onResumeBuild?.(activeBuild.actorId)}
-                              >
-                                Resume
-                              </button>
-                            ) : null}
-
-                            {activeBuild.canCancel ? (
-                              <button
-                                type="button"
-                                style={{
-                                  flex: 1,
-                                  borderRadius: 8,
-                                  border: "1px solid rgba(239, 68, 68, 0.45)",
-                                  background: "rgba(127, 29, 29, 0.35)",
-                                  color: "#fecaca",
-                                  padding: "8px 10px",
-                                  fontSize: 11,
-                                  fontWeight: 800,
-                                  cursor: "pointer",
-                                }}
-                                onClick={() => onCancelBuild?.(activeBuild.actorId)}
-                              >
-                                Cancel
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
+                      label="Fever"
+                      title={`${statusSummary.feverDisplayCurrent} / 100`}
+                      subtitle={`Severity ${Math.round(statusSummary.feverSeverity * 100)}%`}
+                      remainingText={
+                        statusSummary.feverTier > 0 ? `Tier ${statusSummary.feverTier}` : "Clear"
                       }
-                    />
-                  ) : null}
-
-                  {activeSleep ? (
-                    <JobRow
-                      label="Sleep"
-                      title={activeSleep?.title}
-                      subtitle={activeSleep?.subtitle}
-                      remainingText={activeSleep?.remainingText}
-                      progressRatio={activeSleep?.progressRatio ?? 0}
-                      emptyText="No active sleep"
-                      extra={
-                        <div style={{ color: "rgba(220, 252, 231, 0.8)", fontSize: 11 }}>
-                          {activeSleep.progressText}
-                        </div>
-                      }
+                      progressRatio={statusSummary.feverDisplayCurrent / 100}
+                      emptyText="No fever data"
                     />
                   ) : null}
                 </div>
-              </>
-            ) : null}
-          </div>
-        ) : null}
+              </div>
+
+              {activeJobs.length > 0 ? (
+                <>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      letterSpacing: "0.14em",
+                      textTransform: "uppercase",
+                      color: "rgba(191, 219, 254, 0.85)",
+                      marginBottom: 12,
+                    }}
+                  >
+                    Tasks / Jobs
+                  </div>
+
+                  <div style={{ display: "grid", gap: 14 }}>
+                    {activeResearch ? (
+                      <JobRow
+                        label="Research"
+                        title={activeResearch.title}
+                        subtitle={activeResearch.subtitle}
+                        remainingText={activeResearch.remainingText}
+                        progressRatio={activeResearch.progressRatio ?? 0}
+                        emptyText="No active research"
+                      />
+                    ) : null}
+
+                    {activeCraft ? (
+                      <JobRow
+                        label="Craft"
+                        title={activeCraft.title}
+                        subtitle={activeCraft.subtitle}
+                        remainingText={activeCraft.remainingText}
+                        progressRatio={activeCraft.progressRatio ?? 0}
+                        emptyText="No active hand craft"
+                      />
+                    ) : null}
+
+                    {/* Builder controls moved to the shelter card */}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

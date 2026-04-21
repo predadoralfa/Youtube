@@ -1,12 +1,16 @@
 import { useCallback } from "react";
 
-export function useGameShellSleepActions(state) {
+export function useGameShellSleepActions(state, emitInteractStart = null) {
   const emitSleepStart = useCallback((actorId) => {
     const s = state.socketRef.current;
     if (!s || !state.joinedRef.current) return false;
 
     const id = String(actorId ?? "");
     if (!id) return false;
+
+    if (typeof emitInteractStart === "function") {
+      emitInteractStart({ kind: "ACTOR", id });
+    }
 
     s.emit("sleep:start", { actorId: id }, (ack) => {
       if (ack?.ok === true) {
@@ -27,7 +31,7 @@ export function useGameShellSleepActions(state) {
     });
 
     return true;
-  }, [state]);
+  }, [emitInteractStart, state]);
 
   const emitSleepStop = useCallback(() => {
     const s = state.socketRef.current;

@@ -98,20 +98,25 @@ function ensureStatus(runtime) {
   return runtime.status;
 }
 
-function syncRuntimeImmunity(rt, current, max) {
+function syncRuntimeImmunity(rt, current, max, percent = null) {
   const nextCurrent = toFiniteNumber(current, 100);
   const nextMax = toFiniteNumber(max, 100);
+  const nextPercent =
+    percent != null ? toFiniteNumber(percent, 0) : Math.round((nextCurrent / Math.max(1, nextMax)) * 100000) / 1000;
 
   rt.immunityCurrent = nextCurrent;
   rt.immunityMax = nextMax;
+  rt.immunityPercent = nextPercent;
 
   const status = ensureStatus(rt);
   status.immunity.current = nextCurrent;
   status.immunity.max = nextMax;
+  status.immunity.percent = nextPercent;
 
   if (!rt.stats) rt.stats = {};
   rt.stats.immunityCurrent = nextCurrent;
   rt.stats.immunityMax = nextMax;
+  rt.stats.immunityPercent = nextPercent;
 }
 
 function syncRuntimeDisease(rt, level, severity) {

@@ -1,4 +1,4 @@
-import { mergePos, mergeVitals } from "./mergers";
+import { mergePos, mergeStatus, mergeVitals } from "./mergers";
 import { normalizeEntity, toId } from "./normalizers";
 
 export function applyBaseline(state, emitChange, payload) {
@@ -105,6 +105,7 @@ export function applyDelta(state, emitChange, delta) {
 
   const nextHpCompat = delta.hp != null ? Number(delta.hp) : base.hp;
   const nextVitals = mergeVitals(base.vitals, delta, nextHpCompat);
+  const nextStatus = mergeStatus(base.status, delta);
 
   const next = {
     ...base,
@@ -120,6 +121,7 @@ export function applyDelta(state, emitChange, delta) {
     yaw: delta.yaw != null ? Number(delta.yaw) : base.yaw,
     hp: nextHpCompat,
     vitals: nextVitals,
+    status: nextStatus ?? base.status ?? null,
     action: delta.action != null ? delta.action : base.action,
     enemyDefCode:
       delta.enemyDefCode != null ? delta.enemyDefCode : base.enemyDefCode,
