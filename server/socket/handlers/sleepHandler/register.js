@@ -89,7 +89,7 @@ function registerSleepHandler(io, socket) {
         return safeAck(ack, {
           ok: false,
           code: "SLEEP_TOO_HIGH",
-          message: "Sleep must be 50% or less to start sleeping",
+          message: "I'm not sleepy right now.",
           sleepPercent,
         });
       }

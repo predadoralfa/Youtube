@@ -7,11 +7,20 @@ export function useGameShellTargetingActions(state) {
 
     const target = targetOverride ?? state.selectedTargetRef.current;
     if (target?.kind && target?.id) {
-      s.emit("interact:start", {
+      const stopRadius = Number(target?.stopRadius);
+      const payload = {
         target: {
           kind: String(target.kind),
           id: String(target.id),
         },
+      };
+
+      if (Number.isFinite(stopRadius) && stopRadius > 0) {
+        payload.stopRadius = stopRadius;
+      }
+
+      s.emit("interact:start", {
+        ...payload,
       });
     } else {
       s.emit("interact:start", {});

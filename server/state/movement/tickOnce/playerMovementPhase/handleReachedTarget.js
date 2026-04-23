@@ -149,15 +149,31 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
         const completed = Boolean(drinkResult?.ok && thirstMax > 0 && thirstCurrent >= thirstMax);
 
         if (changed) {
+          const restored = Math.max(0, Math.trunc(Number(drinkResult?.restored ?? 0)));
           console.log("[WATER][SERVER] drink", {
             userId: rt.userId,
             actorId: interactActorId,
             thirstCurrent,
             thirstMax,
-            restored: drinkResult?.restored ?? null,
+            restored,
             cooldownUntilMs: drinkResult?.cooldownUntilMs ?? null,
           });
           markStatsDirty(rt.userId);
+
+          const activeSocket = getActiveSocket(rt.userId);
+          if (activeSocket) {
+            activeSocket.emit("actor:collected", {
+              actorId: String(interactActorId),
+              actorDisabled: false,
+              inventory: null,
+              loot: null,
+              water: {
+                points: restored,
+                label: "Water",
+              },
+              message: null,
+            });
+          }
         }
 
         if (completed) {

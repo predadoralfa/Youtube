@@ -266,11 +266,8 @@ export function updateOverlayState({
           onSleep: canSleep
             ? () => {
                 const startSleep = state.startSleep ?? null;
-                state.clearTargetBuildCard?.();
                 if (typeof startSleep !== "function") return;
-                window.setTimeout(() => {
-                  startSleep(actorId);
-                }, 0);
+                return startSleep(actorId);
               }
             : null,
           onBuild: canBuild

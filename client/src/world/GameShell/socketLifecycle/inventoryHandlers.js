@@ -57,6 +57,7 @@ export function createInventoryHandlers(state) {
     const actorDisabled = Boolean(payload?.actorDisabled);
     const inventoryFull = payload?.inventory ?? payload?.inventoryFull ?? null;
     const lootInfo = payload?.loot ?? null;
+    const waterInfo = payload?.water ?? null;
     const xpInfo = payload?.xp ?? null;
     const actorMessage = payload?.message ?? null;
     const actorUpdate = payload?.actorUpdate ?? null;
@@ -81,9 +82,17 @@ export function createInventoryHandlers(state) {
           startedAt: Date.now(),
           ttlMs: 1400,
         }]
-      : hasInventorySnapshot
-        ? buildLootNotifications(state.inventorySnapshotRef.current, inventoryFull)
-        : [];
+      : waterInfo?.points > 0
+        ? [{
+            id: `water:${actorId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+            text: `+${Math.max(0, Math.trunc(Number(waterInfo.points ?? 0)))} ${waterInfo.label ?? "Water"}`,
+            subtext: `+${Math.max(0, Math.trunc(Number(waterInfo.points ?? 0)))} points`,
+            startedAt: Date.now(),
+            ttlMs: 1400,
+          }]
+        : hasInventorySnapshot
+          ? buildLootNotifications(state.inventorySnapshotRef.current, inventoryFull)
+          : [];
 
     if (lootMessages.length > 0) {
       state.setLootNotifications((current) => [...current, ...lootMessages].slice(-8));

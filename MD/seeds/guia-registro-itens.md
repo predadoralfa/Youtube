@@ -58,7 +58,7 @@ Exemplos:
 - maca: `FOOD`
 - espada: `EQUIP`
 - pedra bruta de coleta: `MATERIAL`
-- remedio: `CONSUMABLE`
+- remedio: `MEDICINE`
 - mochila: `CONTAINER`
 
 Observacao importante sobre era:
@@ -84,6 +84,7 @@ Regra pratica:
 Exemplos:
 
 - item equipavel: componente `EQUIPPABLE`
+- comida canonica: componente `EDIBLE`
 - item que cura ou restaura recurso: componente `CONSUMABLE`
 - item que concede slots: componente `GRANTS_CONTAINER`
 - arma: componente `WEAPON`
@@ -91,14 +92,16 @@ Exemplos:
 
 Observacao importante:
 
-- `FOOD` deve existir em `ga_item_def.category`
-- comida consumivel continua podendo usar componente `CONSUMABLE`
+- `FOOD` e `MEDICINE` devem existir em `ga_item_def.category`
+- o backend atual ainda aceita `EDIBLE` e `CONSUMABLE` na leitura de efeitos alimentares/medicinais
+- comida nova deve preferir componente `EDIBLE`
+- item medicinal novo deve preferir categoria `MEDICINE` com componente `CONSUMABLE`
 - isso nao e contradicao: categoria e dominio; componente e comportamento
 
 Exemplo para maca:
 
 - `ga_item_def.category = FOOD`
-- `ga_item_def_component.component_type = CONSUMABLE`
+- `ga_item_def_component.component_type = EDIBLE`
 - `data_json` recomendado para a primeira versao:
 
 ```json
@@ -188,7 +191,7 @@ Criar:
 
 Adicionar:
 
-- `ga_item_def_component` com `component_type = CONSUMABLE`
+- `ga_item_def_component` com `component_type = EDIBLE`
 
 JSON base sugerido:
 
@@ -255,7 +258,7 @@ Observacao importante:
 - a durabilidade corrente continua pertencendo a `ga_item_instance.durability`
 - se a arma for criada no inventario por seed, a instancia deve nascer com `durability = durabilityMax`
 
-### Caso E: item usavel nao alimentar
+### Caso E: item usavel generico
 
 Criar:
 
@@ -268,6 +271,19 @@ Exemplos:
 - remedio
 - antidoto
 
+### Caso F: item medicinal
+
+Criar:
+
+- `ga_item_def` com `category = MEDICINE`
+- `ga_item_def_component` com `component_type = CONSUMABLE`
+
+Exemplos:
+
+- ervas medicinais
+- remedio de uso medico
+- antitoxina
+
 ## 6. Correcao conceitual importante
 
 Hoje, usar `CONSUMABLE` como categoria para comida e amplo demais para a macro de autoalimentacao.
@@ -275,7 +291,8 @@ Hoje, usar `CONSUMABLE` como categoria para comida e amplo demais para a macro d
 Por isso:
 
 - comida deve ser `FOOD`
-- itens como curativos e remedios devem continuar em `CONSUMABLE`
+- itens como curativos e itens medicinais devem usar `MEDICINE`
+- itens usaveis genericos e nao alimentares podem continuar em `CONSUMABLE`
 
 Assim a macro de fome pode filtrar apenas `FOOD`, sem misturar itens medicos ou outros consumiveis.
 
@@ -292,7 +309,8 @@ O seed criado para a maca fez o seguinte:
 
 Pontos de atencao:
 
-- a categoria inicial `CONSUMABLE` foi apenas uma adaptacao ao enum existente e deve ser corrigida para `FOOD`
+- a categoria atual da maca e `FOOD`
+- o componente atual da maca e `EDIBLE`
 - `bind_state` foi preenchido como `NONE`
 - `props_json` foi usado so como metadado de origem da maca, nao como regra de jogo
 - se houver varios registros parecidos no banco, isso precisa ser validado no ambiente, porque a migration em si nao foi escrita para criar varias instancias iguais na mesma execucao

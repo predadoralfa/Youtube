@@ -11,7 +11,7 @@ export function useGameShellActions(state) {
   const inventoryActions = useGameShellInventoryActions(requestActions);
   const targetingActions = useGameShellTargetingActions(state);
   const buildActions = useGameShellBuildActions(state);
-  const sleepActions = useGameShellSleepActions(state, targetingActions.emitInteractStart);
+  const sleepActions = useGameShellSleepActions(state);
   const handleInputIntent = useGameShellIntentAction(state, {
     requestInventoryFull: requestActions.requestInventoryFull,
     requestResearchFull: requestActions.requestResearchFull,

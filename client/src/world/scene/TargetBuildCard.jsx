@@ -72,6 +72,18 @@ export function TargetBuildCard({
     setInlineNotice(message);
   };
 
+  const handleSleep = async () => {
+    setInlineNotice("");
+    const result = await onSleep?.();
+    if (result?.ok === true) return;
+
+    const message =
+      result?.code === "SLEEP_TOO_HIGH"
+        ? "I'm not sleepy right now."
+        : result?.message || result?.code || "I can't sleep right now.";
+    setInlineNotice(message);
+  };
+
   const handlePause = async () => {
     setInlineNotice("");
     await onPause?.();
@@ -360,7 +372,7 @@ export function TargetBuildCard({
                 type="button"
                 className="research-action"
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => onSleep?.()}
+                onClick={() => handleSleep()}
               >
                 Sleep
               </button>

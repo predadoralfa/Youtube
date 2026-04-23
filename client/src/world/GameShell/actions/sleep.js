@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-export function useGameShellSleepActions(state, emitInteractStart = null) {
+export function useGameShellSleepActions(state) {
   const emitSleepStart = useCallback((actorId) => {
     const s = state.socketRef.current;
     if (!s || !state.joinedRef.current) return false;
@@ -8,30 +8,18 @@ export function useGameShellSleepActions(state, emitInteractStart = null) {
     const id = String(actorId ?? "");
     if (!id) return false;
 
-    if (typeof emitInteractStart === "function") {
-      emitInteractStart({ kind: "ACTOR", id });
-    }
+    return new Promise((resolve) => {
+      s.emit("sleep:start", { actorId: id }, (ack) => {
+        if (ack?.ok === true) {
+          state.clearTargetBuildCard?.();
+          resolve(ack);
+          return;
+        }
 
-    s.emit("sleep:start", { actorId: id }, (ack) => {
-      if (ack?.ok === true) {
-        state.clearTargetBuildCard?.();
-        return;
-      }
-
-      state.setWorldNotifications((current) => [
-        ...current,
-        {
-          id: `sleep-start-err:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
-          text: ack?.message || ack?.code || "Falha ao iniciar o descanso",
-          tone: "warn",
-          startedAt: Date.now(),
-          ttlMs: 2200,
-        },
-      ].slice(-8));
+        resolve(ack ?? { ok: false, code: "SLEEP_ERR", message: "I'm not sleepy right now." });
+      });
     });
-
-    return true;
-  }, [emitInteractStart, state]);
+  }, [state]);
 
   const emitSleepStop = useCallback(() => {
     const s = state.socketRef.current;

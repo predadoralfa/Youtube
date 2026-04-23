@@ -2,6 +2,56 @@ import { useCallback } from "react";
 import { IntentType } from "../../input/intents";
 import { isInteractDown, isInteractUp } from "../helpers";
 
+const RIVER_INTERACT_HALF_WIDTH = 3.25;
+const RIVER_INTERACT_HALF_DEPTH = 1.2;
+const RIVER_INTERACT_STOP_RADIUS = Math.hypot(RIVER_INTERACT_HALF_WIDTH, RIVER_INTERACT_HALF_DEPTH) + 0.15;
+
+function isRiverSourceActor(actor) {
+  const actorType = String(actor?.actorType ?? actor?.actorDefCode ?? "").trim().toUpperCase();
+  const actorKind = String(actor?.actorKind ?? "").trim().toUpperCase();
+  const visualHint = String(actor?.visualHint ?? "").trim().toUpperCase();
+
+  return (
+    actorType === "RIVER_PATCH" ||
+    actorKind === "WATER_SOURCE" ||
+    visualHint === "WATER"
+  );
+}
+
+function isInsideRiverBox(actor, px, pz) {
+  const ax = Number(actor?.pos?.x);
+  const az = Number(actor?.pos?.z);
+  if (!Number.isFinite(ax) || !Number.isFinite(az)) return false;
+
+  return (
+    Math.abs(px - ax) <= RIVER_INTERACT_HALF_WIDTH &&
+    Math.abs(pz - az) <= RIVER_INTERACT_HALF_DEPTH
+  );
+}
+
+function resolveSelectedActorInteractTarget(snapshot, target) {
+  if (target?.kind !== "ACTOR" || target?.id == null) return null;
+
+  const actors = Array.isArray(snapshot?.actors) ? snapshot.actors : [];
+  const actor = actors.find((entry) => String(entry?.id) === String(target.id)) ?? null;
+  if (!actor) {
+    return { kind: "ACTOR", id: String(target.id) };
+  }
+
+  if (isRiverSourceActor(actor)) {
+    return {
+      kind: "ACTOR",
+      id: String(target.id),
+      stopRadius: RIVER_INTERACT_STOP_RADIUS,
+    };
+  }
+
+  return {
+    kind: "ACTOR",
+    id: String(target.id),
+  };
+}
+
 function findNearestCollectableActor(snapshot, maxRadius = 2.4) {
   const playerPos = snapshot?.runtime?.pos ?? null;
   const px = Number(playerPos?.x);
@@ -15,6 +65,21 @@ function findNearestCollectableActor(snapshot, maxRadius = 2.4) {
 
   for (const actor of actors) {
     if (!actor || String(actor.status ?? "ACTIVE") !== "ACTIVE") continue;
+
+    if (isRiverSourceActor(actor)) {
+      if (!isInsideRiverBox(actor, px, pz)) continue;
+
+      const ax = Number(actor.pos?.x ?? NaN);
+      const az = Number(actor.pos?.z ?? NaN);
+      const dx = ax - px;
+      const dz = az - pz;
+      const distSq = dx * dx + dz * dz;
+      if (!Number.isFinite(distSq) || distSq >= bestDistSq) continue;
+
+      best = actor;
+      bestDistSq = distSq;
+      continue;
+    }
 
     const hasLootContainer = Array.isArray(actor.containers)
       ? actor.containers.some((container) => String(container?.slotRole ?? "").toUpperCase() === "LOOT")
@@ -37,6 +102,7 @@ function findNearestCollectableActor(snapshot, maxRadius = 2.4) {
   return {
     kind: "ACTOR",
     id: String(best.id),
+    stopRadius: isRiverSourceActor(best) ? RIVER_INTERACT_STOP_RADIUS : maxRadius,
   };
 }
 
@@ -174,7 +240,7 @@ export function useGameShellIntentAction(state, handlers) {
 
         const actorTarget =
           target?.kind === "ACTOR" && target?.id != null
-            ? { kind: "ACTOR", id: String(target.id) }
+            ? resolveSelectedActorInteractTarget(state.snapshot, target)
             : findNearestCollectableActor(state.snapshot, 2.4);
 
         emitInteractStart(actorTarget);
