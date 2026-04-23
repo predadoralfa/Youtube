@@ -66,9 +66,13 @@ export function createWorldHandlers(state, requestInventoryFull, socket, store, 
 
     const selfId = toId(store.selfId);
     debugIds("baseline: selfId", selfId);
+    const self = selfId ? store.entities.get(String(selfId)) ?? null : null;
+    console.log(
+      `[CLIENT_BASELINE] selfId=${String(selfId ?? "null")} ` +
+        `you=(${Number(payload?.you?.pos?.x ?? NaN)}, ${Number(payload?.you?.pos?.z ?? NaN)}) ` +
+        `self=(${Number(self?.pos?.x ?? NaN)}, ${Number(self?.pos?.z ?? NaN)})`
+    );
     if (!selfId) return;
-
-    const self = store.entities.get(String(selfId));
     if (!self) return;
 
     state.setSnapshot((prev) => patchSelfFromBaseline(prev, payload, self));

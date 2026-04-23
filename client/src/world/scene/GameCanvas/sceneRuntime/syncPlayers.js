@@ -215,12 +215,11 @@ function resolveSelfVisualTarget(mesh, entity, state, sampleGroundHeight, predic
   const transitionAgeMs =
     transitionStartedAt > 0 ? Math.max(0, now - transitionStartedAt) : Number.POSITIVE_INFINITY;
   const stopRequestedAt = Number(movementVisual?.stopRequestedAt ?? 0);
+  const hasPendingLocalStop = stopRequestedAt > 0;
   const stopAcked =
-    stopRequestedAt > 0 &&
-    Number(movementVisual?.lastAuthorityChangeAt ?? 0) >= stopRequestedAt;
+    hasPendingLocalStop &&
+    String(entity?.action ?? "idle") !== "move";
   const frameStepSeconds = readFrameStepSeconds(movementVisual, now);
-  const stopGraceSeconds =
-    stopRequestedAt > 0 ? clamp((now - stopRequestedAt) / 1000, 0, 0.12) : 0;
   let target = { x: authorityPos.x, z: authorityPos.z };
   let yaw = Number(entity?.yaw ?? mesh.rotation.y ?? 0);
   let followAlpha = mode === "STOP" ? 0.35 : 1;
@@ -251,18 +250,13 @@ function resolveSelfVisualTarget(mesh, entity, state, sampleGroundHeight, predic
       yaw = Math.atan2(dir.x, dir.z);
     }
   } else if (mode === "STOP") {
-    if (!stopAcked && stopGraceSeconds > 0) {
-      const dir = movementVisual.lastActiveDir ?? { x: 0, z: 0 };
-      target = {
-        x: current.x + Number(dir.x ?? 0) * speed * Math.min(frameStepSeconds, stopGraceSeconds),
-        z: current.z + Number(dir.z ?? 0) * speed * Math.min(frameStepSeconds, stopGraceSeconds),
-      };
-      if (dir.x !== 0 || dir.z !== 0) {
-        yaw = Math.atan2(dir.x, dir.z);
-      }
+    if (!hasPendingLocalStop) {
+      target = { x: authorityPos.x, z: authorityPos.z };
+    } else if (!stopAcked) {
+      target = { x: current.x, z: current.z };
       followAlpha = 1;
     } else {
-      target = stopAcked ? { x: authorityPos.x, z: authorityPos.z } : { x: current.x, z: current.z };
+      target = { x: authorityPos.x, z: authorityPos.z };
     }
   } else if (mode === "CLICK" && (movementVisual?.clickTarget || authorityClickTarget)) {
     const targetPos = shouldUseAuthorityClick
@@ -336,6 +330,7 @@ export function syncPlayerMeshes({
   sampleGroundHeight,
   update,
 }) {
+  const loggedSelfMeshRef = state.loggedSelfMeshRef ?? null;
   if (state.lastSelfIdRef.current !== selfKey) {
     for (const [id, mesh] of state.meshByEntityIdRef.current.entries()) {
       applySelfColor(mesh, selfKey != null && id === selfKey);
@@ -441,6 +436,15 @@ export function syncPlayerMeshes({
       mesh = createPlayerMesh({ isSelf: selfKey != null && entityId === selfKey });
       mesh.userData.kind = "PLAYER";
       mesh.userData.entityId = entityId;
+      const spawnX = Number(entity?.pos?.x ?? 0);
+      const spawnZ = Number(entity?.pos?.z ?? 0);
+      const spawnGroundY = Number(
+        typeof sampleGroundHeight === "function" ? sampleGroundHeight(spawnX, spawnZ) : 0
+      );
+      const spawnAnchor = Number(
+        mesh.userData?.groundAnchor ?? mesh.geometry?.parameters?.height / 2 ?? 0.875
+      );
+      mesh.position.set(spawnX, spawnGroundY + spawnAnchor, spawnZ);
       state.meshByEntityIdRef.current.set(entityId, mesh);
       scene.add(mesh);
     }
@@ -473,6 +477,19 @@ export function syncPlayerMeshes({
     );
     mesh.rotation.x = groundTilt.pitch;
     mesh.rotation.z = groundTilt.roll;
+
+    if (
+      isSelfNow &&
+      state.debugSelfMeshLoggedRef?.current !== true
+    ) {
+      state.debugSelfMeshLoggedRef.current = true;
+      console.log(
+        `[CLIENT_SELF_MESH] entity=(${Number(entity?.pos?.x ?? NaN)}, ${Number(
+          entity?.pos?.z ?? NaN
+        )}) visual=(${Number(nextX ?? NaN)}, ${Number(nextZ ?? NaN)}) ` +
+          `mesh=(${Number(mesh.position.x ?? NaN)}, ${Number(mesh.position.z ?? NaN)})`
+      );
+    }
 
     entityPositions.set(entityId, {
       x: nextX,

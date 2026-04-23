@@ -103,6 +103,14 @@ function buildBaseline(rt) {
       : undefined,
   };
 
+  console.log(
+    `[BASELINE_POS] user=${String(rt.userId)} ` +
+      `you=(${Number(you?.pos?.x ?? NaN)}, ${Number(you?.pos?.z ?? NaN)}) ` +
+      `runtime=(${Number(runtimePayload?.pos_x ?? NaN)}, ${Number(runtimePayload?.pos_z ?? NaN)}) ` +
+      `instance=${String(rt.instanceId ?? rt.instance_id ?? "?")} ` +
+      `rev=${Number(rt.rev ?? 0)}`
+  );
+
   return {
     instanceId: String(rt.instanceId),
     runtime: runtimePayload,

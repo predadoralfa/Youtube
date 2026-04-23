@@ -13,6 +13,7 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
   fallbackTarget.position.set(0, 0, 0);
   const tmpWorld = new THREE.Vector3();
   let markerAccum = 0;
+  let loggedInitialState = false;
 
   const tick = () => {
     if (!alive) return;
@@ -68,6 +69,17 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
               z: Number(state.runtimeRef.current.pos?.z ?? 0),
             }
           : null);
+      if (!loggedInitialState) {
+        loggedInitialState = true;
+        console.log(
+          `[CLIENT_TICK] entities=${Number(entities.length)} ` +
+            `selfKey=${String(selfKey ?? "null")} ` +
+            `focus=(${Number(focusPos?.x ?? NaN)}, ${Number(focusPos?.z ?? NaN)}) ` +
+            `runtime=(${Number(state.runtimeRef.current?.pos?.x ?? NaN)}, ${Number(
+              state.runtimeRef.current?.pos?.z ?? NaN
+            )})`
+        );
+      }
       if (focusPos) {
         runtime.proceduralFocus = {
           x: Number(focusPos.x ?? 0),
@@ -77,6 +89,13 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
       syncProceduralWorld(runtime, state.proceduralMapRef.current ?? null, focusPos?.x ?? 0, focusPos?.z ?? 0);
     } else {
       const rt = state.runtimeRef.current;
+      if (!loggedInitialState) {
+        loggedInitialState = true;
+        console.log(
+          `[CLIENT_TICK] entities=0 selfKey=${String(selfKey ?? "null")} ` +
+            `runtime=(${Number(rt?.pos?.x ?? NaN)}, ${Number(rt?.pos?.z ?? NaN)})`
+        );
+      }
       if (rt?.pos) {
         const x = Number(rt.pos?.x ?? 0);
         const z = Number(rt.pos?.z ?? 0);

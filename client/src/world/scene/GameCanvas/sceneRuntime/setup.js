@@ -166,5 +166,14 @@ export function setupSceneRuntime({
 
   applySceneTemplate(runtime, tpl, proceduralMapRef?.current ?? null);
 
+  if (initialRuntime?.pos) {
+    const initialTarget = new THREE.Object3D();
+    const initialX = Number(initialRuntime.pos?.x ?? 0);
+    const initialZ = Number(initialRuntime.pos?.z ?? 0);
+    const initialY = Number(runtime.sampleGroundHeight(initialX, initialZ) ?? 0);
+    initialTarget.position.set(initialX, initialY, initialZ);
+    cameraApi.update(initialTarget, 0);
+  }
+
   return runtime;
 }

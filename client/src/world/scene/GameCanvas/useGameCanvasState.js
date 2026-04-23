@@ -38,6 +38,7 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
     predictedStaminaMax: null,
     lastVisualStepAt: 0,
   });
+  const debugSelfMeshLoggedRef = useRef(false);
 
   const [marker, setMarker] = useState({ visible: false, x: 0, y: 0 });
   const [floatingDamages, setFloatingDamages] = useState([]);
@@ -72,6 +73,7 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
       inventorySnapshotRef,
       buildPlacementRef,
       movementVisualRef,
+      debugSelfMeshLoggedRef,
       setMarker,
       setFloatingDamages,
       setTargetHpBar,

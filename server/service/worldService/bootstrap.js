@@ -518,6 +518,18 @@ const bootstrap = async (req, res) => {
       );
     }
 
+    console.log(
+      `[BOOTSTRAP_POS] user=${userId} ` +
+        `db=(${Number(readRuntimeField(runtime, "pos_x", 0) ?? 0)}, ${Number(
+          readRuntimeField(runtime, "pos_z", 0) ?? 0
+        )}) ` +
+        `live=(${Number(liveRuntime?.pos?.x ?? NaN)}, ${Number(liveRuntime?.pos?.z ?? NaN)}) ` +
+        `final=(${Number(responsePayload.snapshot.runtime.pos?.x ?? NaN)}, ${Number(
+          responsePayload.snapshot.runtime.pos?.z ?? NaN
+        )}) ` +
+        `instance=${Number(responsePayload.snapshot.runtime.instance_id ?? 0)}`
+    );
+
     return res.json(responsePayload);
   } catch (error) {
     console.error("[BOOTSTRAP] Erro critico:", error);
