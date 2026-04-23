@@ -20,6 +20,9 @@ const { startEnemyCombat } = require("./combat");
 const { resolveActorCollectCooldownMs } = require("../../../service/actorCollectService");
 const { DEFAULT_COLLECT_COOLDOWN_MS } = require("../../../config/interactionConstants");
 const { stopMovement } = require("../../../state/movement/input");
+const { bumpRev } = require("../../../state/movement/entity");
+const { markRuntimeDirty } = require("../../../state/runtimeStore");
+const { emitPlayerState } = require("../../../state/movement/tickOnce/playerMovementPhase/emitPlayerState");
 
 function registerInteractHandler(io, socket) {
   socket.on("interact:start", async (payload = {}) => {
@@ -105,6 +108,16 @@ function registerInteractHandler(io, socket) {
         startedAtMs: nowMs,
         timeoutMs,
       };
+
+      if (targetKind !== "ENEMY") {
+        bumpRev(rt);
+        markRuntimeDirty(userId, nowMs);
+        await emitPlayerState(io, rt, {
+          nowMs,
+          force: true,
+          includeInterest: false,
+        });
+      }
     } catch (e) {
       console.error("[INTERACT_DEBUG] start error:", e);
     }

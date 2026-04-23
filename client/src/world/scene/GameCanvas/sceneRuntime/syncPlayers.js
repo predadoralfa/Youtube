@@ -178,6 +178,10 @@ function resolveSelfVisualTarget(mesh, entity, state, sampleGroundHeight, predic
     authorityMode === "CLICK" &&
     authorityClickTarget != null &&
     localMode !== "WASD";
+  const hasAuthorityWASD =
+    authorityMode === "WASD" &&
+    String(entity?.action ?? "idle") === "move" &&
+    (Number(movement?.dir?.x ?? 0) !== 0 || Number(movement?.dir?.z ?? 0) !== 0);
   const mode = shouldUseAuthorityClick ? "CLICK" : localMode;
   const isAuthorityMoving = String(entity?.action ?? "idle") === "move";
   const isPredictingMove =
@@ -223,7 +227,7 @@ function resolveSelfVisualTarget(mesh, entity, state, sampleGroundHeight, predic
   let target = { x: authorityPos.x, z: authorityPos.z };
   let yaw = Number(entity?.yaw ?? mesh.rotation.y ?? 0);
   let followAlpha = mode === "STOP" ? 0.35 : 1;
-  if (transitionAgeMs < 90) {
+  if (mode !== "WASD" && transitionAgeMs < 90) {
     followAlpha = Math.min(followAlpha, 0.25);
   }
 
@@ -241,7 +245,15 @@ function resolveSelfVisualTarget(mesh, entity, state, sampleGroundHeight, predic
   }
 
   if (mode === "WASD" && String(entity?.action ?? "idle") === "move") {
-    const dir = movementVisual.dir ?? movement?.dir ?? { x: 0, z: 0 };
+    const dir = hasAuthorityWASD
+      ? movement?.dir ?? movementVisual.dir ?? { x: 0, z: 0 }
+      : movementVisual.dir ?? movement?.dir ?? { x: 0, z: 0 };
+    if (movementVisual && hasAuthorityWASD) {
+      movementVisual.dir = {
+        x: Number(dir.x ?? 0),
+        z: Number(dir.z ?? 0),
+      };
+    }
     target = {
       x: current.x + Number(dir.x ?? 0) * speed * frameStepSeconds,
       z: current.z + Number(dir.z ?? 0) * speed * frameStepSeconds,
