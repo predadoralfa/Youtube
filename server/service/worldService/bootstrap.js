@@ -330,6 +330,8 @@ const bootstrap = async (req, res) => {
           instance_id: Number(liveRuntime?.instanceId ?? readRuntimeField(runtime, "instance_id") ?? 0),
           rev: Number(liveRuntime?.rev ?? readRuntimeField(runtime, "rev", 0) ?? 0),
           speed,
+          buildLock: liveRuntime?.buildLock ?? null,
+          sleepLock: liveRuntime?.sleepLock ?? null,
           pos: {
             x: Number(liveRuntime?.pos?.x ?? readRuntimeField(runtime, "pos_x", 0) ?? 0),
             y: Number(liveRuntime?.pos?.y ?? readRuntimeField(runtime, "pos_y", 0) ?? 0),

@@ -356,12 +356,13 @@ export function syncPlayerMeshes({
       : null;
   const selfMovementVisual = state.movementVisualRef?.current ?? null;
   const selfMovementMode = String(selfMovementVisual?.mode ?? "STOP").toUpperCase();
+  const selfIsMoving = String(selfEntityForVisual?.action ?? "idle") === "move";
   const selfMovementPrediction = selfEntityForVisual
     ? readPredictedMovementState(
         selfEntityForVisual,
         state,
         performance.now(),
-        selfMovementMode === "WASD" || selfMovementMode === "CLICK"
+        selfIsMoving && (selfMovementMode === "WASD" || selfMovementMode === "CLICK")
       )
     : null;
 
@@ -374,11 +375,11 @@ export function syncPlayerMeshes({
         hpCurrent: vitals.hpCurrent,
         hpMax: vitals.hpMax,
         staminaCurrent:
-          selfMovementMode === "WASD" || selfMovementMode === "CLICK"
+          selfIsMoving && (selfMovementMode === "WASD" || selfMovementMode === "CLICK")
             ? selfMovementPrediction?.staminaCurrent ?? vitals.staminaCurrent
             : vitals.staminaCurrent,
         staminaMax:
-          selfMovementMode === "WASD" || selfMovementMode === "CLICK"
+          selfIsMoving && (selfMovementMode === "WASD" || selfMovementMode === "CLICK")
             ? selfMovementPrediction?.staminaMax ?? vitals.staminaMax
             : vitals.staminaMax,
         hungerCurrent: vitals.hungerCurrent,

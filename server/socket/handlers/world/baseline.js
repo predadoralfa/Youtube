@@ -55,6 +55,8 @@ function buildBaseline(rt) {
     instanceId: String(rt.instanceId ?? rt.instance_id ?? ""),
     rev: Number(rt.rev ?? 0),
     speed: rt.speed ?? null,
+    buildLock: rt.buildLock ?? null,
+    sleepLock: rt.sleepLock ?? null,
     pos_x: Number(rt.pos?.x ?? rt.pos_x ?? 0),
     pos_y: Number(rt.pos?.y ?? rt.pos_y ?? 0),
     pos_z: Number(rt.pos?.z ?? rt.pos_z ?? 0),

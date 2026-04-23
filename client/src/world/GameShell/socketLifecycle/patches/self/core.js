@@ -46,8 +46,24 @@ export function patchSelfFromBaseline(prev, payload, self) {
     runtime: {
       ...prev.runtime,
       yaw: self.yaw ?? prev.runtime.yaw,
-      buildLock: pickOptional(payload?.runtime, "buildLock", pickOptional(payload, "buildLock", prev.runtime.buildLock ?? null)),
-      sleepLock: pickOptional(payload?.runtime, "sleepLock", pickOptional(payload, "sleepLock", prev.runtime.sleepLock ?? null)),
+      buildLock: pickOptional(
+        payload?.runtime,
+        "buildLock",
+        pickOptional(
+          payload,
+          "buildLock",
+          pickOptional(self, "buildLock", prev.runtime.buildLock ?? null)
+        )
+      ),
+      sleepLock: pickOptional(
+        payload?.runtime,
+        "sleepLock",
+        pickOptional(
+          payload,
+          "sleepLock",
+          pickOptional(self, "sleepLock", prev.runtime.sleepLock ?? null)
+        )
+      ),
       cameraPitch:
         payload?.runtime?.cameraPitch ??
         payload?.runtime?.camera_pitch ??
