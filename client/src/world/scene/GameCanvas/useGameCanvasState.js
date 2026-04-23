@@ -32,6 +32,11 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
     directionChangedAt: 0,
     lastAuthorityPos: null,
     lastAuthorityChangeAt: 0,
+    predictedVitalsKey: "",
+    predictedVitalsAt: 0,
+    predictedStaminaCurrent: null,
+    predictedStaminaMax: null,
+    lastVisualStepAt: 0,
   });
 
   const [marker, setMarker] = useState({ visible: false, x: 0, y: 0 });

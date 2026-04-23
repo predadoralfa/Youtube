@@ -25,7 +25,7 @@ function registerClickMoveHandler(socket) {
   socket.on("move:click", async (payload) => {
     try {
       const userId = socket.data.userId;
-      const nowMs = Date.now();
+      const receivedAtMs = Date.now();
 
       await ensureRuntimeLoaded(userId);
       const rt = getRuntime(userId);
@@ -44,10 +44,10 @@ function registerClickMoveHandler(socket) {
         return;
       }
 
-      if (rt.lastClickAtMs && (nowMs - rt.lastClickAtMs) < CLICK_MOVE_SPAM_MS) {
+      if (rt.lastClickAtMs && (receivedAtMs - rt.lastClickAtMs) < CLICK_MOVE_SPAM_MS) {
         return;
       }
-      rt.lastClickAtMs = nowMs;
+      rt.lastClickAtMs = receivedAtMs;
 
       if (isWASDActive(rt)) {
         return;
@@ -75,27 +75,29 @@ function registerClickMoveHandler(socket) {
         if (wasCancelled) {
           socket.emit("combat:cancelled", {
             reason: "CLICK",
-            atMs: nowMs,
+            atMs: Date.now(),
           });
         }
       }
 
       applyClickInput(rt, {
-        nowMs,
+        nowMs: Date.now(),
         target: { x: tx, z: tz },
       });
       rt.action = "move";
 
+      const advanceAtMs = Date.now();
       await advanceRuntimeMovementPhase(
         socket.server,
         rt,
-        nowMs,
+        advanceAtMs,
         resolveCarryWeightContext,
         processAutomaticCombat
       );
 
+      const emitAtMs = Date.now();
       await emitPlayerState(socket.server, rt, {
-        nowMs,
+        nowMs: emitAtMs,
         force: true,
         includeInterest: false,
       });

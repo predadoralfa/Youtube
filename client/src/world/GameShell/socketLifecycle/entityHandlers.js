@@ -66,19 +66,30 @@ export function createEntityHandlers(state, store) {
       yaw: payload?.yaw,
       movement: payload?.movement,
       hp: payload?.hp,
-      vitals: payload?.vitals,
-      status: payload?.status,
       action: payload?.action,
     });
+  };
+
+  const onSelfVitals = (payload) => {
+    const selfId = toId(payload?.entityId ?? store.selfId);
+    if (!selfId) return;
 
     const self = store.entities.get(String(selfId));
-    if (!self) return;
-
     const nextVitals = payload?.vitals
       ? normalizeVitals({ vitals: payload.vitals })
       : normalizeVitals(self);
 
-    state.setSnapshot((prev) => patchSelfVitalsOnly(prev, nextVitals));
+    const nextStatus = payload?.status ?? self?.status ?? null;
+
+    if (self) {
+      store.applyVitalsDelta({
+        entityId: String(selfId),
+        vitals: payload?.vitals ?? undefined,
+        status: payload?.status ?? undefined,
+      });
+    }
+
+    state.setSnapshot((prev) => patchSelfVitalsOnly(prev, { vitals: nextVitals, status: nextStatus }));
   };
 
   const onSessionReplaced = (payload) => {
@@ -107,6 +118,7 @@ export function createEntityHandlers(state, store) {
     onEntityDespawn,
     onEntityDelta,
     onMoveState,
+    onSelfVitals,
     onSessionReplaced,
     onConnectError,
     onEnemyAttack,

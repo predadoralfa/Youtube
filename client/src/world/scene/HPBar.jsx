@@ -14,7 +14,7 @@
  * - texto numérico opcional
  */
 
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 function clamp01(value) {
   const n = Number(value);
@@ -27,6 +27,46 @@ function clamp01(value) {
 function toNum(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function useAnimatedNumber(target, durationMs = 180) {
+  const numericTarget = Number(target);
+  const safeTarget = Number.isFinite(numericTarget) ? numericTarget : 0;
+  const [displayValue, setDisplayValue] = useState(safeTarget);
+  const displayValueRef = useRef(safeTarget);
+
+  useEffect(() => {
+    const from = displayValueRef.current;
+    const to = safeTarget;
+    if (Math.abs(from - to) < 0.0001) {
+      displayValueRef.current = to;
+      setDisplayValue(to);
+      return;
+    }
+
+    let rafId = 0;
+    const start = performance.now();
+
+    const tick = () => {
+      const elapsed = performance.now() - start;
+      const progress = clamp01(elapsed / Math.max(1, durationMs));
+      const next = from + (to - from) * progress;
+      displayValueRef.current = next;
+      setDisplayValue(next);
+
+      if (progress < 1) {
+        rafId = window.requestAnimationFrame(tick);
+      }
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [safeTarget, durationMs]);
+
+  return displayValue;
 }
 
 function VitalRow({
@@ -50,10 +90,12 @@ function VitalRow({
   const safeMax = Math.max(0, toNum(max, 0));
   const rawOverride = percentOverride != null ? toNum(percentOverride, Number.NaN) : Number.NaN;
   const hasOverride = Number.isFinite(rawOverride) && rawOverride > 0;
+  const animatedCurrent = useAnimatedNumber(safeCurrent, 200);
+  const animatedMax = useAnimatedNumber(safeMax, 200);
   const percent = hasOverride
     ? clamp01(rawOverride > 1 ? rawOverride / 100 : rawOverride)
-    : safeMax > 0
-      ? clamp01(safeCurrent / safeMax)
+    : animatedMax > 0
+      ? clamp01(animatedCurrent / animatedMax)
       : 0;
   const outerRadius = 6;
   const innerRadius = 4;
@@ -134,7 +176,9 @@ function VitalRow({
               userSelect: "none",
             }}
           >
-            {valueMode === "current" ? Math.floor(safeCurrent) : `${Math.floor(safeCurrent)} / ${Math.floor(safeMax)}`}
+            {valueMode === "current"
+              ? Math.floor(animatedCurrent)
+              : `${Math.floor(animatedCurrent)} / ${Math.floor(animatedMax)}`}
           </div>
         ) : null}
       </div>

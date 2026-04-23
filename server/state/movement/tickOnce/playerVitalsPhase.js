@@ -26,6 +26,7 @@ const { ensureEquipmentLoaded } = require("../../equipment/loader");
 const { buildInventoryFull } = require("../../inventory/fullPayload");
 const { processAutoFoodTick, buildAutoFoodPayload } = require("../../../service/autoFoodService");
 const { processResearchTick, buildResearchPayload } = require("../../../service/researchService");
+const { emitSelfVitals } = require("./playerMovementPhase/emitPlayerState");
 
 async function processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor) {
   for (const rt of allRuntimes) {
@@ -103,15 +104,7 @@ async function processPlayerVitalsPhase(io, allRuntimes, t, worldTimeFactor) {
     emitDeltaToInterest(io, socket, rt.userId, delta);
 
     if (socket) {
-      socket.emit("move:state", {
-        entityId: String(rt.userId),
-        pos: rt.pos,
-        yaw: rt.yaw,
-        rev: rt.rev ?? 0,
-        chunk: rt.chunk ?? computeChunkFromPos(rt.pos),
-        vitals: delta.vitals,
-        status: delta.status,
-      });
+      emitSelfVitals(socket, rt, delta);
 
       if (autoFoodResult.inventoryChanged) {
         const invRt = await ensureInventoryLoaded(rt.userId);

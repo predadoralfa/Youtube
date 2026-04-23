@@ -3,6 +3,7 @@ import {
   applySpawn,
   applyDespawn,
   applyDelta,
+  applyVitalsDelta,
 } from "./mutations";
 
 export function createEntitiesStore() {
@@ -78,6 +79,9 @@ export function createEntitiesStore() {
     },
     applyDelta(delta) {
       return applyDelta(state, emitChange, delta);
+    },
+    applyVitalsDelta(delta) {
+      return applyVitalsDelta(state, emitChange, delta);
     },
     subscribe,
     getSnapshot,

@@ -139,3 +139,38 @@ export function applyDelta(state, emitChange, delta) {
   state.entities.set(entityId, next);
   emitChange();
 }
+
+export function applyVitalsDelta(state, emitChange, delta) {
+  if (!delta) return;
+
+  const entityId = toId(delta.entityId ?? delta.id ?? delta.entity_id ?? null);
+  if (!entityId) return;
+
+  const current = state.entities.get(entityId);
+  if (!current) return;
+
+  const nextHpCompat = delta.hp != null ? Number(delta.hp) : current.hp;
+  const nextVitals = mergeVitals(current.vitals, delta, nextHpCompat);
+  const nextStatus = mergeStatus(current.status, delta);
+
+  const sameVitals =
+    current.vitals?.hp?.current === nextVitals.hp.current &&
+    current.vitals?.hp?.max === nextVitals.hp.max &&
+    current.vitals?.stamina?.current === nextVitals.stamina.current &&
+    current.vitals?.stamina?.max === nextVitals.stamina.max &&
+    current.vitals?.hunger?.current === nextVitals.hunger.current &&
+    current.vitals?.hunger?.max === nextVitals.hunger.max &&
+    current.vitals?.thirst?.current === nextVitals.thirst.current &&
+    current.vitals?.thirst?.max === nextVitals.thirst.max;
+
+  const sameStatus = JSON.stringify(current.status ?? null) === JSON.stringify(nextStatus ?? null);
+  if (sameVitals && sameStatus) return;
+
+  state.entities.set(entityId, {
+    ...current,
+    hp: nextHpCompat,
+    vitals: nextVitals,
+    status: nextStatus ?? current.status ?? null,
+  });
+  emitChange();
+}

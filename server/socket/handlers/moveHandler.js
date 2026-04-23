@@ -18,7 +18,7 @@ function registerMoveHandler(socket) {
   socket.on("move:intent", async (payload) => {
     try {
       const userId = socket.data.userId;
-      const nowMs = Date.now();
+      const receivedAtMs = Date.now();
 
       await ensureRuntimeLoaded(userId);
 
@@ -40,17 +40,18 @@ function registerMoveHandler(socket) {
       const isStoppingIntent = parsed.dir.x === 0 && parsed.dir.z === 0;
 
       if (isStoppingIntent) {
+        const advanceAtMs = Date.now();
         await advanceRuntimeMovementPhase(
           socket.server,
           runtime,
-          nowMs,
+          advanceAtMs,
           resolveCarryWeightContext,
           processAutomaticCombat
         );
       }
 
       const result = applyWASDInput(runtime, {
-        nowMs,
+        nowMs: Date.now(),
         seq: parsed.seq,
         dir: parsed.dir,
         yaw: parsed.yawDesired,
@@ -69,7 +70,7 @@ function registerMoveHandler(socket) {
           changed = true;
           socket.emit("combat:cancelled", {
             reason: "WASD",
-            atMs: nowMs,
+            atMs: Date.now(),
           });
         }
       }
@@ -83,10 +84,11 @@ function registerMoveHandler(socket) {
       }
 
       if (!isStoppingIntent) {
+        const advanceAtMs = Date.now();
         await advanceRuntimeMovementPhase(
           socket.server,
           runtime,
-          nowMs,
+          advanceAtMs,
           resolveCarryWeightContext,
           processAutomaticCombat
         );
@@ -95,11 +97,12 @@ function registerMoveHandler(socket) {
       if (!changed && !actionChanged) return;
 
       bumpRev(runtime);
-      markRuntimeDirty(userId, nowMs);
+      markRuntimeDirty(userId, receivedAtMs);
 
       if (result.dirChanged || result.modeChanged || result.lookChanged || actionChanged) {
+        const emitAtMs = Date.now();
         await emitPlayerState(socket.server, runtime, {
-          nowMs,
+          nowMs: emitAtMs,
           force: true,
           includeInterest: false,
         });

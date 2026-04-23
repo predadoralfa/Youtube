@@ -1,13 +1,10 @@
 import * as THREE from "three";
 import { applyDayNightCycle } from "../../../light/dayNightCycle";
-import { createPlayerMesh } from "../../../../entities/character/player";
-import { readPosYawFromRuntime } from "../../helpers";
 import { syncActorMeshes } from "../syncActors";
 import { syncEnemyMeshes } from "../syncEnemies";
 import { syncPlayerMeshes } from "../syncPlayers";
 import { syncProceduralWorld } from "../procedural";
 import { updateOverlayState } from "../overlay";
-import { sampleGroundTilt } from "../terrain";
 
 export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
   let alive = true;
@@ -80,30 +77,13 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
       syncProceduralWorld(runtime, state.proceduralMapRef.current ?? null, focusPos?.x ?? 0, focusPos?.z ?? 0);
     } else {
       const rt = state.runtimeRef.current;
-      if (rt) {
-        const { x, y, z, yaw } = readPosYawFromRuntime(rt);
-        const legacyId = "__legacy_self__";
-        let mesh = state.meshByEntityIdRef.current.get(legacyId);
-        if (!mesh) {
-          mesh = createPlayerMesh({ isSelf: true });
-          mesh.userData.kind = "PLAYER";
-          mesh.userData.entityId = legacyId;
-          state.meshByEntityIdRef.current.set(legacyId, mesh);
-          runtime.scene.add(mesh);
-        }
-        const groundY = Number(runtime.sampleGroundHeight?.(x, z) ?? 0);
-        const groundTilt = sampleGroundTilt(runtime.sampleGroundHeight, x, z);
-        const groundAnchor = Number(mesh.userData?.groundAnchor ?? mesh.geometry?.parameters?.height / 2 ?? 0.875);
-        mesh.position.set(x, groundY + groundAnchor, z);
-        mesh.rotation.y = yaw;
-        mesh.rotation.x = groundTilt.pitch;
-        mesh.rotation.z = groundTilt.roll;
-        runtime.cameraApi.update(mesh, dt);
+      if (rt?.pos) {
+        const x = Number(rt.pos?.x ?? 0);
+        const z = Number(rt.pos?.z ?? 0);
         runtime.proceduralFocus = { x, z };
         syncProceduralWorld(runtime, state.proceduralMapRef.current ?? null, x, z);
-      } else {
-        runtime.cameraApi.update(fallbackTarget, dt);
       }
+      runtime.cameraApi.update(fallbackTarget, dt);
     }
 
     if (markerAccum >= 0.05) {

@@ -6,7 +6,7 @@ const { getActiveSocket } = require("../../../../socket/sessionIndex");
 const { DT_MAX } = require("../../config");
 const { computeDtSeconds, readRuntimeSpeedStrict } = require("../../math");
 const { moveEntityByDirection, moveEntityTowardTarget } = require("../../entityMotion");
-const { bumpRev } = require("../../entity");
+const { bumpRev, toDelta } = require("../../entity");
 const { ensureMovementInputState, stopMovement } = require("../../input");
 const {
   applyStaminaTick,
@@ -15,7 +15,7 @@ const {
   shouldQueueStaminaPersist,
 } = require("../../stamina");
 const { handleChunkTransition } = require("../../chunkTransition");
-const { emitPlayerState } = require("./emitPlayerState");
+const { emitPlayerState, emitSelfVitals } = require("./emitPlayerState");
 const { handleReachedTarget } = require("./handleReachedTarget");
 
 function hasDir(dir) {
@@ -107,6 +107,10 @@ async function processWASDMovement(io, rt, t, dt, resolveCarryWeightContext, pro
 
   bumpRev(rt);
   markRuntimeDirty(rt.userId, t);
+
+  if (staminaState.changed) {
+    emitSelfVitals(getActiveSocket(rt.userId), rt, toDelta(rt));
+  }
 
   const { chunkChanged } = await applyChunkTransition(io, rt);
   if (chunkChanged) {

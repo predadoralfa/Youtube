@@ -5,6 +5,17 @@ const { computeChunkFromPos } = require("../../../presenceIndex");
 const { toDelta } = require("../../entity");
 const { emitDeltaToInterest } = require("../../emit");
 
+function emitSelfVitals(socket, rt, delta) {
+  if (!socket) return;
+
+  socket.emit("self:vitals", {
+    entityId: String(rt.userId),
+    rev: rt.rev ?? 0,
+    vitals: delta?.vitals ?? null,
+    status: delta?.status ?? null,
+  });
+}
+
 async function emitPlayerState(io, rt, options = {}) {
   const socket = getActiveSocket(rt.userId);
   const delta = toDelta(rt);
@@ -31,7 +42,6 @@ async function emitPlayerState(io, rt, options = {}) {
         cameraDistance: rt.cameraDistance ?? null,
         buildLock: rt.buildLock ?? null,
         sleepLock: rt.sleepLock ?? null,
-        vitals: delta.vitals,
         chunk: rt.chunk ?? computeChunkFromPos(rt.pos),
       });
     }
@@ -41,4 +51,5 @@ async function emitPlayerState(io, rt, options = {}) {
 
 module.exports = {
   emitPlayerState,
+  emitSelfVitals,
 };

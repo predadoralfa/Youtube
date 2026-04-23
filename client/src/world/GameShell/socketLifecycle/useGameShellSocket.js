@@ -80,6 +80,7 @@ export function useGameShellSocket(state, requestInventoryFull) {
         socket.on("entity:despawn", handlers.onEntityDespawn);
         socket.on("entity:delta", handlers.onEntityDelta);
         socket.on("move:state", handlers.onMoveState);
+        socket.on("self:vitals", handlers.onSelfVitals);
         socket.on("session:replaced", handlers.onSessionReplaced);
         socket.on("connect_error", handlers.onConnectError);
         socket.on("inv:full", handlers.onInvFull);
@@ -116,6 +117,7 @@ export function useGameShellSocket(state, requestInventoryFull) {
         socket.off("entity:despawn", handlers.onEntityDespawn);
         socket.off("entity:delta", handlers.onEntityDelta);
         socket.off("move:state", handlers.onMoveState);
+        socket.off("self:vitals", handlers.onSelfVitals);
         socket.off("session:replaced", handlers.onSessionReplaced);
         socket.off("connect_error", handlers.onConnectError);
         socket.off("inv:full", handlers.onInvFull);

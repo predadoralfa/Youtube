@@ -157,33 +157,33 @@ export function patchSelfFromMoveState(prev, payload) {
       effectiveMoveSpeed: payload?.effectiveMoveSpeed ?? prev.runtime.effectiveMoveSpeed ?? null,
       movement: payload?.movement ?? prev.runtime.movement ?? null,
       action: payload?.action ?? prev.runtime.action ?? "idle",
-      status: payload?.status
-        ? {
-            ...(prev.runtime.status ?? {}),
-            ...payload.status,
-          }
-        : prev.runtime.status,
-      vitals: payload?.vitals
-        ? normalizeVitals({ vitals: payload.vitals })
-        : prev.runtime.vitals,
+      status: prev.runtime.status,
+      vitals: prev.runtime.vitals,
     },
   };
 }
 
-export function patchSelfVitalsOnly(prev, nextVitals) {
+export function patchSelfVitalsOnly(prev, payload) {
   if (!prev || !prev.runtime) return prev;
+
+  const nextVitals = payload?.vitals ? normalizeVitals({ vitals: payload.vitals }) : payload ?? prev.runtime.vitals;
+  const nextStatus = payload?.status
+    ? mergeStatusLike(prev.runtime.status, payload.status)
+    : prev.runtime.status;
 
   return {
     ...prev,
     runtime: {
       ...prev.runtime,
       vitals: nextVitals,
+      status: nextStatus,
     },
     ui: {
       ...(prev.ui ?? {}),
       self: {
         ...((prev.ui && prev.ui.self) ?? {}),
         vitals: nextVitals,
+        status: nextStatus,
       },
     },
   };

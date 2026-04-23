@@ -28,6 +28,7 @@ const {
   getEnemiesForInstance,
 } = require("./dependencies");
 const { loadSpeedFromStats } = require("../../state/runtime/loader/queries");
+const { getRuntime, ensureRuntimeLoaded } = require("../../state/runtimeStore");
 const { getProceduralMapProfile } = require("../../config/mapProceduralProfiles");
 
 function safePretty(value) {
@@ -36,6 +37,17 @@ function safePretty(value) {
   } catch {
     return "[unserializable]";
   }
+}
+
+function readRuntimeField(runtime, key, fallback = null) {
+  if (!runtime || typeof runtime !== "object") return fallback;
+  if (runtime[key] != null) return runtime[key];
+  if (runtime.dataValues && runtime.dataValues[key] != null) return runtime.dataValues[key];
+  if (typeof runtime.get === "function") {
+    const value = runtime.get(key);
+    if (value != null) return value;
+  }
+  return fallback;
 }
 
 function logBootstrapPlayer({
@@ -94,6 +106,7 @@ const bootstrap = async (req, res) => {
   try {
     const userId = req.user.id;
     const displayName = req.user.display_name?.trim() || `User ${userId}`;
+    const liveRuntime = await ensureRuntimeLoaded(userId);
 
     const runtime = await GaUserRuntime.findOne({
       where: { user_id: userId },
@@ -139,7 +152,12 @@ const bootstrap = async (req, res) => {
     const sleepCurrent = combatStats.sleepCurrent;
     const sleepMax = combatStats.sleepMax;
 
-    const instance = await GaInstance.findByPk(runtime.instance_id, {
+    const resolvedInstanceId = Number(
+      liveRuntime?.instanceId ??
+        runtime.instance_id
+    );
+
+    const instance = await GaInstance.findByPk(resolvedInstanceId, {
       attributes: ["id", "local_id", "instance_type", "status"],
       include: [
         {
@@ -251,9 +269,9 @@ const bootstrap = async (req, res) => {
       ),
     };
     const equipment = inventory.equipment;
-    const actors = await loadActorsForInstance(runtime.instance_id);
+    const actors = await loadActorsForInstance(resolvedInstanceId);
 
-    clearActorsInstance(runtime.instance_id);
+    clearActorsInstance(resolvedInstanceId);
     for (const a of actors) {
       const aPos = {
         x: a.pos?.x ?? a.pos_x ?? 0,
@@ -268,7 +286,7 @@ const bootstrap = async (req, res) => {
         displayName: a.displayName ?? null,
         visualHint: a.visualHint ?? null,
         spawnId: a.spawnId ?? null,
-        instanceId: runtime.instance_id,
+        instanceId: resolvedInstanceId,
         pos: aPos,
         status: a.status ?? "ACTIVE",
         rev: a.rev ?? 0,
@@ -278,13 +296,13 @@ const bootstrap = async (req, res) => {
       });
     }
 
-    console.log(`[BOOTSTRAP] Carregando ENEMIES para instanceId=${runtime.instance_id}`);
+    console.log(`[BOOTSTRAP] Carregando ENEMIES para instanceId=${resolvedInstanceId}`);
     let enemyCount = 0;
-    const cachedEnemies = getEnemiesForInstance(runtime.instance_id);
+    const cachedEnemies = getEnemiesForInstance(resolvedInstanceId);
     if (cachedEnemies.length > 0) {
       enemyCount = cachedEnemies.length;
     } else {
-      const enemies = await loadEnemiesForInstance(runtime.instance_id);
+      const enemies = await loadEnemiesForInstance(resolvedInstanceId);
       enemyCount = enemies?.length ?? 0;
 
       for (const enemy of enemies) {
@@ -308,18 +326,26 @@ const bootstrap = async (req, res) => {
       ok: true,
       snapshot: {
         runtime: {
-          user_id: runtime.user_id,
-          instance_id: runtime.instance_id,
-          rev: Number(runtime.rev ?? 0),
+          user_id: readRuntimeField(runtime, "user_id"),
+          instance_id: Number(liveRuntime?.instanceId ?? readRuntimeField(runtime, "instance_id") ?? 0),
+          rev: Number(liveRuntime?.rev ?? readRuntimeField(runtime, "rev", 0) ?? 0),
           speed,
           pos: {
-            x: runtime.pos_x,
-            y: runtime.pos_y,
-            z: runtime.pos_z,
+            x: Number(liveRuntime?.pos?.x ?? readRuntimeField(runtime, "pos_x", 0) ?? 0),
+            y: Number(liveRuntime?.pos?.y ?? readRuntimeField(runtime, "pos_y", 0) ?? 0),
+            z: Number(liveRuntime?.pos?.z ?? readRuntimeField(runtime, "pos_z", 0) ?? 0),
           },
-          yaw: runtime.yaw,
-          cameraPitch: Number(runtime.camera_pitch ?? Math.PI / 4),
-          cameraDistance: Number(runtime.camera_distance ?? 26),
+          yaw: Number(liveRuntime?.yaw ?? readRuntimeField(runtime, "yaw", 0) ?? 0),
+          cameraPitch: Number(
+            liveRuntime?.cameraPitch ??
+              readRuntimeField(runtime, "camera_pitch", Math.PI / 4) ??
+              Math.PI / 4
+          ),
+          cameraDistance: Number(
+            liveRuntime?.cameraDistance ??
+              readRuntimeField(runtime, "camera_distance", 26) ??
+              26
+          ),
           vitals: {
             hp: {
               current: hpCurrent,
@@ -357,9 +383,13 @@ const bootstrap = async (req, res) => {
               max: sleepMax,
             },
           },
-          connection_state: runtime.connection_state,
-          disconnected_at: runtime.disconnected_at,
-          offline_allowed_at: runtime.offline_allowed_at,
+          connection_state: String(
+            liveRuntime?.connectionState ??
+              readRuntimeField(runtime, "connection_state") ??
+              "ONLINE"
+          ),
+          disconnected_at: liveRuntime?.disconnectedAtMs ?? readRuntimeField(runtime, "disconnected_at"),
+          offline_allowed_at: liveRuntime?.offlineAllowedAtMs ?? readRuntimeField(runtime, "offline_allowed_at"),
         },
         ui: {
           self: {
@@ -404,7 +434,7 @@ const bootstrap = async (req, res) => {
         },
         research: buildResearchPayload({ research }),
         instance: {
-          id: instance.id,
+          id: resolvedInstanceId,
           local_id: instance.local_id,
           instance_type: instance.instance_type,
           status: instance.status,
@@ -469,6 +499,24 @@ const bootstrap = async (req, res) => {
       inventory,
       equipment,
     };
+
+    const refreshedRuntime = getRuntime(String(userId)) ?? liveRuntime ?? null;
+    if (refreshedRuntime?.pos) {
+      responsePayload.snapshot.runtime.pos = {
+        x: Number(refreshedRuntime.pos.x ?? responsePayload.snapshot.runtime.pos.x ?? 0),
+        y: Number(refreshedRuntime.pos.y ?? responsePayload.snapshot.runtime.pos.y ?? 0),
+        z: Number(refreshedRuntime.pos.z ?? responsePayload.snapshot.runtime.pos.z ?? 0),
+      };
+      responsePayload.snapshot.runtime.yaw = Number(
+        refreshedRuntime.yaw ?? responsePayload.snapshot.runtime.yaw ?? 0
+      );
+      responsePayload.snapshot.runtime.cameraPitch = Number(
+        refreshedRuntime.cameraPitch ?? responsePayload.snapshot.runtime.cameraPitch ?? Math.PI / 4
+      );
+      responsePayload.snapshot.runtime.cameraDistance = Number(
+        refreshedRuntime.cameraDistance ?? responsePayload.snapshot.runtime.cameraDistance ?? 26
+      );
+    }
 
     return res.json(responsePayload);
   } catch (error) {

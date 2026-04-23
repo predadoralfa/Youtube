@@ -20,6 +20,10 @@ const { startEnemyCombat } = require("./combat");
 const { resolveActorCollectCooldownMs } = require("../../../service/actorCollectService");
 const { DEFAULT_COLLECT_COOLDOWN_MS } = require("../../../config/interactionConstants");
 const { stopMovement } = require("../../../state/movement/input");
+const { emitPlayerState } = require("../../../state/movement/tickOnce/playerMovementPhase/emitPlayerState");
+const { resolveCarryWeightContext } = require("../../../state/movement/tickOnce/carryWeight");
+const { processAutomaticCombat } = require("../../../state/movement/tickOnce/playerCombat");
+const { advanceRuntimeMovementPhase } = require("../../../state/movement/tickOnce/playerMovementPhase/processPhase");
 
 function registerInteractHandler(io, socket) {
   socket.on("interact:start", async (payload = {}) => {
@@ -27,7 +31,7 @@ function registerInteractHandler(io, socket) {
       if (socket.data?._worldJoined !== true) return;
 
       const userId = socket.data.userId;
-      const nowMs = Date.now();
+      const receivedAtMs = Date.now();
 
       await ensureRuntimeLoaded(userId);
       const rt = getRuntime(userId);
@@ -47,7 +51,7 @@ function registerInteractHandler(io, socket) {
 
       if (rt.buildLock?.active || rt.sleepLock?.active) return;
 
-      if (isWASDActive(rt, nowMs)) return;
+      if (isWASDActive(rt, receivedAtMs)) return;
 
       const autoCollectTarget = payload?.target ? null : resolveNearbyCollectTarget(rt);
       const target = payload?.target ?? autoCollectTarget ?? null;
@@ -93,8 +97,25 @@ function registerInteractHandler(io, socket) {
         if (!enemy || String(enemy.status) !== "ALIVE") return;
         startEnemyCombat({ enemy, attackerUserId: userId, rt });
       } else {
-        const moveOk = applyApproach({ rt, nowMs, targetPos, stopRadius });
+        const inputAtMs = Date.now();
+        const moveOk = applyApproach({ rt, nowMs: inputAtMs, targetPos, stopRadius });
         if (!moveOk) return;
+
+        const advanceAtMs = Date.now();
+        await advanceRuntimeMovementPhase(
+          socket.server,
+          rt,
+          advanceAtMs,
+          resolveCarryWeightContext,
+          processAutomaticCombat
+        );
+
+        const emitAtMs = Date.now();
+        await emitPlayerState(socket.server, rt, {
+          nowMs: emitAtMs,
+          force: true,
+          includeInterest: false,
+        });
       }
 
       rt.interact = {
@@ -102,7 +123,7 @@ function registerInteractHandler(io, socket) {
         kind: targetKind,
         id: String(target.id),
         stopRadius,
-        startedAtMs: nowMs,
+        startedAtMs: receivedAtMs,
         timeoutMs,
       };
     } catch (e) {
