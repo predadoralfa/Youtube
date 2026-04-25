@@ -6,7 +6,7 @@ const { removeActor } = require("../state/actorsRuntimeStore");
 const { createRuntimeActor } = require("./actorService/runtime");
 const { resolveActorDef } = require("./actorService/defs");
 const { toFiniteNumber } = require("./actorService/shared");
-const { awardSkillXp } = require("./skillProgressionService");
+const { awardSkillXp, loadUserSkillSummary } = require("./skillProgressionService");
 const { ensureInventoryLoaded } = require("../state/inventory/loader");
 const { ensureEquipmentLoaded } = require("../state/equipment/loader");
 const { clearInventory } = require("../state/inventory/store");
@@ -38,6 +38,7 @@ const PRIMITIVE_SHELTER_BUILD_DURATION_MS = 180000;
 const PRIMITIVE_SHELTER_BUILD_XP = 50;
 const PRIMITIVE_SHELTER_BUILD_SKILL = "SKILL_BUILDING";
 const PRIMITIVE_SHELTER_APPROACH_RADIUS = 1.5;
+const BUILD_TIME_REDUCTION_PER_LEVEL_MS = 30000;
 
 function buildPrimitiveShelterConfig(state = null) {
   const current = parseMaybeJsonObject(state) || {};
@@ -62,6 +63,13 @@ function buildPrimitiveShelterConfig(state = null) {
       String(current.buildSkillCode ?? current.build_skill_code ?? PRIMITIVE_SHELTER_BUILD_SKILL).trim() ||
       PRIMITIVE_SHELTER_BUILD_SKILL,
   };
+}
+
+function resolveBuildDurationMs(baseDurationMs, buildSkillLevel) {
+  const base = Math.max(1000, toFiniteNumber(baseDurationMs, PRIMITIVE_SHELTER_BUILD_DURATION_MS));
+  const level = Math.max(1, toFiniteNumber(buildSkillLevel, 1));
+  const reductionMs = level * BUILD_TIME_REDUCTION_PER_LEVEL_MS;
+  return Math.max(1000, base - reductionMs);
 }
 
 function buildPrimitiveShelterState(ownerUserId, ownerName, worldPos) {
@@ -379,6 +387,8 @@ async function startPrimitiveShelterConstruction({ userId, actorId, tx, inventor
   const inventoryRt = inventoryRuntime ?? (await ensureInventoryLoaded(ownerUserId));
   const equipmentRt = equipmentRuntime ?? (await ensureEquipmentLoaded(ownerUserId));
   void equipmentRt;
+  const buildSkillSummary = await loadUserSkillSummary(ownerUserId, buildConfig.buildSkillCode, tx);
+  const buildSkillLevel = Math.max(1, Number(buildSkillSummary?.currentLevel ?? 1));
 
   const buildMaterialsSlotRole =
     String(state?.buildMaterialsSlotRole ?? state?.build_materials_slot_role ?? getPrimitiveShelterMaterialsSlotRole(runtimeActorId)).trim() ||
@@ -429,7 +439,7 @@ async function startPrimitiveShelterConstruction({ userId, actorId, tx, inventor
     constructionStartedAtMs: startedAtMs,
     constructionCompletedAtMs: null,
     constructionProgressMs: 0,
-    constructionDurationMs: buildConfig.buildDurationMs,
+    constructionDurationMs: resolveBuildDurationMs(buildConfig.buildDurationMs, buildSkillLevel),
     buildRequirements: requirements.length ? requirements : buildConfig.buildRequirements,
     buildSkillCode: buildConfig.buildSkillCode,
     buildXpReward: buildConfig.buildXpReward,

@@ -95,10 +95,15 @@ O sistema legado foi reorganizado para seguir o mesmo contrato de nivel.
 - `RESEARCH_APPLE` nivel 1 ancora coleta de `APPLE_TREE`
 - `RESEARCH_STONE` nivel 1 ancora coleta de `ROCK_NODE_SMALL`
 - `RESEARCH_TWIG` nivel 1 ancora coleta de `TWIG`
+- `RESEARCH_FIBER` nivel 1 ancora coleta de `FIBER_PATCH`
+- `RESEARCH_HERBS` nivel 1 ancora coleta de `HERBS_PATCH`
+- `RESEARCH_APPLE`, `RESEARCH_STONE`, `RESEARCH_TWIG`, `RESEARCH_FIBER` e `RESEARCH_HERBS` agora seguem o mesmo contrato de tempo e custo
+- nivel 2 exige `20` unidades do proprio item
+- nivel 3 exige `30` unidades do proprio item
+- nivel 4 exige `40` unidades do proprio item
+- nivel 5 exige `50` unidades do proprio item
 - `RESEARCH_PRIMITIVE_SHELTER` nivel 1 ancora a construcao da estrutura
-- `RESEARCH_BASKET` agora segue o mesmo contrato, mesmo sendo uma arvore de tecnologia
-- `RESEARCH_FIBER` segue o mesmo contrato
-- `RESEARCH_HERBS` segue o mesmo contrato
+- `RESEARCH_BASKET` continua como arvore de tecnologia separada, mas pode reutilizar o mesmo contrato quando fizer sentido de design
 
 ### Pontos que merecem cuidado de design
 
@@ -137,6 +142,12 @@ O sistema legado foi reorganizado para seguir o mesmo contrato de nivel.
 ### Herbs
 
 - segue o mesmo padrao e ja vira insumo medico no nivel 3
+- os niveis 4 e 5 completam a mesma arvore com refinamento e maestria
+
+### Fiber
+
+- segue o mesmo padrao e usa os mesmos custos e tempos dos demais itens iniciais
+- os niveis 4 e 5 completam a mesma arvore sem mudar o unlock principal atual
 
 ---
 

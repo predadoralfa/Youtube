@@ -34,6 +34,7 @@ async function emitPlayerState(io, rt, options = {}) {
         speed: rt.speed ?? null,
         effectiveMoveSpeed: rt.effectiveMoveSpeed ?? rt.speed ?? null,
         movement: delta.movement ?? null,
+        interact: delta.interact ?? null,
         pos: rt.pos,
         yaw: rt.yaw,
         rev: rt.rev ?? 0,

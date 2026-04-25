@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useWorldClock } from "@/world/hooks/useWorldClock";
 
 function pad2(value) {
@@ -7,7 +7,21 @@ function pad2(value) {
 
 export function WorldClockPanel({ worldClock }) {
   const [open, setOpen] = useState(false);
+  const [showCloseBar, setShowCloseBar] = useState(false);
   const currentTime = useWorldClock(worldClock);
+
+  useEffect(() => {
+    if (!open) {
+      setShowCloseBar(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowCloseBar(true);
+    }, 260);
+
+    return () => window.clearTimeout(timer);
+  }, [open]);
 
   if (!currentTime) return null;
 
@@ -15,9 +29,9 @@ export function WorldClockPanel({ worldClock }) {
     <div
       style={{
         position: "fixed",
-        top: 16,
+        top: 34,
         right: 16,
-        zIndex: 1100,
+        zIndex: 1103,
         width: open ? 252 : 28,
         pointerEvents: "none",
         display: "flex",
@@ -34,11 +48,11 @@ export function WorldClockPanel({ worldClock }) {
       >
         <div
           style={{
-            width: open ? 22 : 28,
-            minWidth: open ? 22 : 28,
+            width: open ? (showCloseBar ? 22 : 0) : 28,
+            minWidth: open ? (showCloseBar ? 22 : 0) : 28,
             borderRadius: 14,
-            borderTopRightRadius: open ? 0 : 14,
-            borderBottomRightRadius: open ? 0 : 14,
+            borderTopRightRadius: open && showCloseBar ? 0 : 14,
+            borderBottomRightRadius: open && showCloseBar ? 0 : 14,
             background: "linear-gradient(180deg, #38bdf8 0%, #2563eb 55%, #172554 100%)",
             border: "1px solid rgba(56, 189, 248, 0.95)",
             boxShadow: "0 0 10px rgba(56,189,248,0.75), 0 0 22px rgba(37,99,235,0.55)",
@@ -48,14 +62,17 @@ export function WorldClockPanel({ worldClock }) {
             justifyContent: "center",
             cursor: "pointer",
             userSelect: "none",
+            opacity: open && !showCloseBar ? 0 : 1,
+            visibility: open && !showCloseBar ? "hidden" : "visible",
+            overflow: "hidden",
             fontSize: open ? 13 : 16,
             fontWeight: 700,
-            transition: "width 0.32s ease, min-width 0.32s ease, box-shadow 0.32s ease",
+            transition: "width 0.32s ease, min-width 0.32s ease, opacity 0.18s ease, box-shadow 0.32s ease",
           }}
           onClick={() => setOpen((value) => !value)}
-          title={open ? "Fechar relógio" : "Abrir relógio"}
+          title={open ? "Close world clock" : "Open world clock"}
         >
-          {open ? "<" : "🕒"}
+          {open ? (showCloseBar ? "<" : "") : "🕒"}
         </div>
 
         {open ? (

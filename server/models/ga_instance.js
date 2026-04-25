@@ -76,6 +76,13 @@ module.exports = (sequelize, DataTypes) => {
       onDelete: "CASCADE",
     });
 
+    GaInstance.hasOne(models.GaInstanceResourceConfig, {
+      foreignKey: "instance_id",
+      as: "resourceConfig",
+      onUpdate: "CASCADE",
+      onDelete: "CASCADE",
+    });
+
     GaInstance.hasMany(models.GaSpawnInstance, {
       foreignKey: "instance_id",
       as: "spawnInstances",

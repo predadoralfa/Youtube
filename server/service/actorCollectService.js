@@ -39,6 +39,10 @@ function resolveCollectUnlockCode(actorDefCode, actorState) {
     return "actor.collect:ROCK_NODE_SMALL";
   }
 
+  if (actorDefCode === "ROCK_NODE_LARGE" && resourceType === "ROCK_NODE_LARGE") {
+    return "actor.collect:ROCK_NODE_SMALL";
+  }
+
   if (actorDefCode === "FIBER_PATCH" && resourceType === "FIBER_PATCH") {
     return "actor.collect:FIBER_PATCH";
   }
@@ -57,6 +61,7 @@ function resolveCollectUnlockCode(actorDefCode, actorState) {
 function resolveCollectResearchCode(actorDefCode) {
   if (actorDefCode === "TREE_APPLE") return "RESEARCH_APPLE";
   if (actorDefCode === "ROCK_NODE_SMALL") return "RESEARCH_STONE";
+  if (actorDefCode === "ROCK_NODE_LARGE") return "RESEARCH_STONE";
   if (actorDefCode === "FIBER_PATCH") return "RESEARCH_FIBER";
   if (actorDefCode === "TWIG_PATCH") return "RESEARCH_TWIG";
   return null;
@@ -65,6 +70,7 @@ function resolveCollectResearchCode(actorDefCode) {
 function resolveCollectItemCode(actorDefCode) {
   if (actorDefCode === "TREE_APPLE") return "FOOD-APPLE";
   if (actorDefCode === "ROCK_NODE_SMALL") return "SMALL_STONE";
+  if (actorDefCode === "ROCK_NODE_LARGE") return "SMALL_STONE";
   if (actorDefCode === "FIBER_PATCH") return "FIBER";
   if (actorDefCode === "TWIG_PATCH") return "GRAVETO";
   if (actorDefCode === "HERBS_PATCH") return "HERBS";

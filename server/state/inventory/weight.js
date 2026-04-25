@@ -1,7 +1,10 @@
 "use strict";
 
 const db = require("../../models");
-const { resolveResearchItemWeightDelta } = require("../../service/researchService");
+const {
+  resolveResearchItemWeightDelta,
+  resolveResearchContainerMaxWeightDelta,
+} = require("../../service/researchService");
 const { INV_ERR, invError } = require("./validate/errors");
 
 function toNum(value, fallback = 0) {
@@ -15,19 +18,21 @@ function getDefWeight(def) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-function getContainerEffectiveMaxWeight(container) {
+function getContainerEffectiveMaxWeight(container, research = null) {
   const base = Math.max(0, toNum(container?.def?.maxWeight, 0));
-  if (base > 0) return base;
-
   const code = String(container?.def?.code ?? "").trim().toUpperCase();
-  if (code === "BASKET") return 2.5;
-  if (code === "BASKET_T2") return 5;
-  if (code === "BASKET_T3") return 5;
+  const researchBonus = resolveResearchContainerMaxWeightDelta(research, code);
+  const total = base + researchBonus;
+  if (total > 0) return total;
+
+  if (code === "BASKET") return 2.5 + researchBonus;
+  if (code === "BASKET_T2") return 5 + researchBonus;
+  if (code === "BASKET_T3") return 5 + researchBonus;
 
   return 0;
 }
 
-function getInventoryMaxWeight(invRt) {
+function getInventoryMaxWeight(invRt, research = null) {
   return (invRt?.containers ?? [])
     .filter((container) => {
       const state = String(container?.state ?? "ACTIVE");
@@ -35,11 +40,11 @@ function getInventoryMaxWeight(invRt) {
       const role = String(container?.slotRole ?? "").trim().toUpperCase();
       return !role.startsWith("GRANTED:");
     })
-    .reduce((sum, container) => sum + getContainerEffectiveMaxWeight(container), 0);
+    .reduce((sum, container) => sum + getContainerEffectiveMaxWeight(container, research), 0);
 }
 
-function resolveCarryWeightMax(invRt, fallback = 20) {
-  const total = getInventoryMaxWeight(invRt);
+function resolveCarryWeightMax(invRt, research = null, fallback = 20) {
+  const total = getInventoryMaxWeight(invRt, research);
   if (total > 0) return total;
 
   const legacy = Number(invRt?.carryWeight);
@@ -76,7 +81,7 @@ function computeAdditionalItemWeight(research, def, qty = 1) {
   return getEffectiveUnitWeight(research, def) * Math.max(1, toNum(qty, 1));
 }
 
-function getGrantedContainerFallbackWeight(itemDef, component) {
+function getGrantedContainerFallbackWeight(itemDef, component, research = null) {
   const data = component?.dataJson ?? component?.data_json ?? null;
   const containerCode = String(
     data?.containerDefCode ?? data?.container_def_code ?? itemDef?.code ?? ""
@@ -84,21 +89,25 @@ function getGrantedContainerFallbackWeight(itemDef, component) {
     .trim()
     .toUpperCase();
 
-  if (containerCode === "BASKET") return 2.5;
-  if (containerCode === "BASKET_T2") return 5;
-  if (containerCode === "BASKET_T3") return 5;
-  return 0;
+  const researchBonus = resolveResearchContainerMaxWeightDelta(research, containerCode);
+
+  if (containerCode === "BASKET") return 2.5 + researchBonus;
+  if (containerCode === "BASKET_T2") return 5 + researchBonus;
+  if (containerCode === "BASKET_T3") return 5 + researchBonus;
+  return researchBonus;
 }
 
-function getEquippedGrantedContainerBonus(itemDef, component) {
+function getEquippedGrantedContainerBonus(itemDef, component, research = null) {
   const code = String(itemDef?.code ?? "").trim().toUpperCase();
-  if (code === "BASKET") return 2.5;
-  if (code === "BASKET_T2") return 5;
-  if (code === "BASKET_T3") return 5;
-  return getGrantedContainerFallbackWeight(itemDef, component);
+  const researchBonus = resolveResearchContainerMaxWeightDelta(research, code);
+
+  if (code === "BASKET") return 2.5 + researchBonus;
+  if (code === "BASKET_T2") return 5 + researchBonus;
+  if (code === "BASKET_T3") return 5 + researchBonus;
+  return getGrantedContainerFallbackWeight(itemDef, component, research);
 }
 
-function getGrantedContainerBonusFromItemDef(itemDef) {
+function getGrantedContainerBonusFromItemDef(itemDef, research = null) {
   if (!itemDef) return 0;
 
   const components = Array.isArray(itemDef?.components) ? itemDef.components : [];
@@ -108,10 +117,10 @@ function getGrantedContainerBonusFromItemDef(itemDef) {
   });
   if (!component) return 0;
 
-  return getEquippedGrantedContainerBonus(itemDef, component);
+  return getEquippedGrantedContainerBonus(itemDef, component, research);
 }
 
-function computeGrantedContainerBonus(invRt, eqRt = null) {
+function computeGrantedContainerBonus(invRt, eqRt = null, research = null) {
   let bonus = 0;
   const seen = new Set();
 
@@ -131,7 +140,7 @@ function computeGrantedContainerBonus(invRt, eqRt = null) {
         invRt?.itemDefsById?.get?.(String(itemInstance.itemDefId)) ||
         eqRt?.itemDefsById?.get?.(String(itemInstance.itemDefId)) ||
         null;
-      bonus += getGrantedContainerBonusFromItemDef(itemDef);
+      bonus += getGrantedContainerBonusFromItemDef(itemDef, research);
     }
   }
 
@@ -145,7 +154,7 @@ function computeGrantedContainerBonus(invRt, eqRt = null) {
       return type === "GRANTS_CONTAINER";
     });
 
-    const bonusWeight = getEquippedGrantedContainerBonus(itemDef, component);
+    const bonusWeight = getEquippedGrantedContainerBonus(itemDef, component, research);
     if (bonusWeight <= 0) continue;
     bonus += bonusWeight;
   }
@@ -195,8 +204,8 @@ function computeCarryWeight(invRt, eqRt = null, research = null) {
     }
   }
 
-  const baseMax = resolveCarryWeightMax(invRt);
-  const grantedBonus = computeGrantedContainerBonus(invRt, eqRt);
+  const baseMax = resolveCarryWeightMax(invRt, research);
+  const grantedBonus = computeGrantedContainerBonus(invRt, eqRt, research);
   const max = baseMax + grantedBonus;
   const ratio = max > 0 ? state.current / max : 0;
   const percent = max > 0 ? Math.min(100, Math.max(0, ratio * 100)) : 0;

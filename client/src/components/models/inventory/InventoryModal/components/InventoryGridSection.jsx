@@ -1,5 +1,11 @@
 import { InventoryItemIcon } from "../InventoryItemIconBridge";
-import { getAllowedSlotsForDef, getDefIdFromInstance, getItemLabel, isFoodItem } from "../helpers";
+import {
+  formatBasketFamilyLabel,
+  getAllowedSlotsForDef,
+  getDefIdFromInstance,
+  getItemLabel,
+  isFoodItem,
+} from "../helpers";
 
 export function InventoryGridSection({
   containers,
@@ -22,7 +28,7 @@ export function InventoryGridSection({
 }) {
   function formatContainerTitle(container, role) {
     const name = String(container?.def?.name ?? "").trim();
-    if (name) return name;
+    if (name) return formatBasketFamilyLabel(name, container?.def?.code);
 
     const rawRole = String(role ?? "").trim();
     if (!rawRole) return "CONTAINER";
@@ -30,7 +36,7 @@ export function InventoryGridSection({
     if (rawRole.startsWith("GRANTED:")) {
       const parts = rawRole.split(":");
       const itemCode = String(parts[1] ?? "").trim();
-      if (itemCode) return itemCode.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+      if (itemCode) return formatBasketFamilyLabel(itemCode.replace(/_/g, " "), itemCode);
       return "Granted Storage";
     }
 

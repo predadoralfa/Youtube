@@ -28,6 +28,7 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
     clickTarget: null,
     clickRequestedAt: 0,
     lastActiveDir: { x: 0, z: 0 },
+    lastFacingYaw: null,
     stopRequestedAt: 0,
     directionChangedAt: 0,
     lastAuthorityPos: null,

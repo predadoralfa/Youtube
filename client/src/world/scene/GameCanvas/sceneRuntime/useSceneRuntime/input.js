@@ -16,6 +16,12 @@ export function setupSceneInput(renderer, cameraApi, tools, onInputIntent, state
     const movementVisual = state?.movementVisualRef?.current ?? null;
 
     if (movementVisual) {
+      const localDir = {
+        x: Number(dir.x ?? 0),
+        z: Number(dir.z ?? 0),
+      };
+      movementVisual.inputDir = localDir;
+      movementVisual.localDir = localDir;
       if (bumpSeq) {
         movementVisual.seq += 1;
       }
@@ -23,8 +29,18 @@ export function setupSceneInput(renderer, cameraApi, tools, onInputIntent, state
         movementVisual.lastActiveDir = worldDir;
         movementVisual.stopRequestedAt = 0;
         movementVisual.directionChangedAt = performance.now();
+        if (localDir.z > 0) {
+          if (movementVisual.lastFacingYaw == null) {
+            movementVisual.lastFacingYaw = camState.yaw + Math.PI;
+          }
+          movementVisual.backpedalYaw = movementVisual.lastFacingYaw;
+        } else {
+          movementVisual.lastFacingYaw = Math.atan2(worldDir.x, worldDir.z);
+          movementVisual.backpedalYaw = null;
+        }
       } else {
         movementVisual.stopRequestedAt = performance.now();
+        movementVisual.stopFacingYaw = camState.yaw + Math.PI;
       }
       movementVisual.mode = worldDir.x === 0 && worldDir.z === 0 ? "STOP" : "WASD";
       movementVisual.dir = worldDir;

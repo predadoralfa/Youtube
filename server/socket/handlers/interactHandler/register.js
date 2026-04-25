@@ -107,6 +107,8 @@ function registerInteractHandler(io, socket) {
         stopRadius,
         startedAtMs: nowMs,
         timeoutMs,
+        phase: "APPROACH",
+        collectStartedAtMs: 0,
       };
 
       if (targetKind !== "ENEMY") {

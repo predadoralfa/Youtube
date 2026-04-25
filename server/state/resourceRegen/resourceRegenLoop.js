@@ -21,9 +21,9 @@ function clampTickMs(value) {
 async function resolveTickMsFromDb() {
   const [rows] = await db.sequelize.query(
     `
-    SELECT MIN(refill_interval_ms) AS tick_ms
-    FROM ga_actor_resource_rule_def
-    WHERE is_active = 1
+    SELECT MIN(resource_regen_tick_ms) AS tick_ms
+    FROM ga_instance_resource_config
+    WHERE resource_regen_enabled = 1
     `
   );
 

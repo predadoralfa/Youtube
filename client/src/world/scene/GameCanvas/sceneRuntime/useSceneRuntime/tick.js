@@ -86,7 +86,12 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
           z: Number(focusPos.z ?? 0),
         };
       }
-      syncProceduralWorld(runtime, state.proceduralMapRef.current ?? null, focusPos?.x ?? 0, focusPos?.z ?? 0);
+      syncProceduralWorld(
+        runtime,
+        state.proceduralMapRef.current ?? null,
+        focusPos?.x ?? 0,
+        focusPos?.z ?? 0
+      );
     } else {
       const rt = state.runtimeRef.current;
       if (!loggedInitialState) {

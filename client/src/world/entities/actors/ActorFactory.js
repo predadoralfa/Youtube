@@ -55,6 +55,7 @@ function normalizeAssetKey(assetKey) {
     case "GRASS_PATCH":
       return "GRASS";
     case "ROCK_NODE_SMALL":
+    case "ROCK_NODE_LARGE":
     case "ROCK":
       return "ROCK";
     case "APPLE":
@@ -91,6 +92,10 @@ function normalizeActorType(actorType) {
     case "APPLE_TREE":
     case "TREE":
       return "TREE";
+    case "ROCK_NODE_LARGE":
+    case "ROCK_NODE_SMALL":
+    case "ROCK":
+      return "ROCK";
     case "TWIG_PATCH":
     case "TWIG":
       return "TWIG_PATCH";
@@ -112,6 +117,11 @@ function normalizeActorType(actorType) {
 function normalizeActorKind(actorKind) {
   const raw = String(actorKind ?? "").trim().toUpperCase();
   return raw || null;
+}
+
+function resolveActorVisualScale(actor, fallback = 1) {
+  const explicit = Number(actor?.state?.visualScale ?? actor?.visualScale ?? actor?.visual_scale ?? fallback);
+  return Number.isFinite(explicit) && explicit > 0 ? explicit : fallback;
 }
 
 function resolveRenderActorType(actor) {
@@ -541,6 +551,51 @@ export function createDroppedItemMesh(actor) {
   return group;
 }
 
+export function createRockMesh(actor) {
+  const group = new THREE.Group();
+  applyActorUserData(group, actor, true);
+
+  loadRockModelTemplate()
+    .then((template) => {
+      const model = template.clone(true);
+      const visualScale = resolveActorVisualScale(actor, 10);
+      model.scale.setScalar(visualScale);
+      model.position.set(0, 0, 0);
+      model.rotation.set(0, 0, 0);
+
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      alignModelToGround(model);
+      applyActorUserData(model, actor, true);
+      group.add(model);
+    })
+    .catch((error) => {
+      console.error("[ACTOR_FACTORY] Failed to load rock node model:", error);
+
+      const fallback = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.9, 1),
+        new THREE.MeshStandardMaterial({
+          color: 0x7c7c7c,
+          roughness: 0.95,
+          metalness: 0.02,
+        })
+      );
+      fallback.castShadow = true;
+      fallback.receiveShadow = true;
+      fallback.scale.setScalar(resolveActorVisualScale(actor, 10));
+      fallback.position.y = 0.9;
+      applyActorUserData(fallback, actor, true);
+      group.add(fallback);
+    });
+
+  return group;
+}
+
 /**
  * Cria um mesh para TREE (arvore)
  */
@@ -841,6 +896,8 @@ export function createActorMesh(actor) {
       return createChestMesh(actor);
     case "ITEM_DROP":
       return createDroppedItemMesh(actor);
+    case "ROCK":
+      return createRockMesh(actor);
     case "TREE":
       return createTreeMesh(actor);
     case "TWIG_PATCH":

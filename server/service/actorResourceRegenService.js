@@ -2,6 +2,10 @@
 
 const db = require("../models");
 const { ensureActorContainer } = require("./actorService");
+const {
+  resolveInstanceResourceConfig,
+  computeEffectiveResourceRegenIntervalMs,
+} = require("./resourceRegenConfig/shared");
 
 function toFiniteNumber(value, fallback = 0) {
   const n = Number(value);
@@ -175,6 +179,15 @@ async function processActorResourceRule(actor, rule, nowMs, io, tx) {
   const containerDefId = Number(actorDef?.default_container_def_id ?? 0);
   if (!Number.isInteger(containerDefId) || containerDefId <= 0) return { changed: false };
 
+  const instanceResourceConfig = resolveInstanceResourceConfig(actor.instance ?? null);
+  if (!instanceResourceConfig.resourceRegenEnabled) {
+    return { changed: false };
+  }
+  const effectiveRefillIntervalMs = computeEffectiveResourceRegenIntervalMs(
+    Number(rule.refill_interval_ms ?? 300000),
+    instanceResourceConfig
+  );
+
   const slotRole = String(rule.container_slot_role ?? "LOOT").trim() || "LOOT";
 
   await ensureActorContainer(
@@ -243,7 +256,7 @@ async function processActorResourceRule(actor, rule, nowMs, io, tx) {
     ruleId: Number(rule.id),
     currentQty,
     nowMs,
-    intervalMs: Number(rule.refill_interval_ms ?? 300000),
+    intervalMs: effectiveRefillIntervalMs,
     tx,
   });
 
@@ -334,7 +347,7 @@ async function processActorResourceRule(actor, rule, nowMs, io, tx) {
       );
 
       const nextLastRefillAt = new Date(nowMs);
-      const nextNextRefillAt = new Date(nowMs + Number(rule.refill_interval_ms ?? 300000));
+      const nextNextRefillAt = new Date(nowMs + effectiveRefillIntervalMs);
       await resourceState.update(
         {
           current_qty: newQty,
@@ -348,7 +361,7 @@ async function processActorResourceRule(actor, rule, nowMs, io, tx) {
       await resourceState.update(
         {
           current_qty: currentQty,
-          next_refill_at: new Date(nowMs + Number(rule.refill_interval_ms ?? 300000)),
+          next_refill_at: new Date(nowMs + effectiveRefillIntervalMs),
           state: "ACTIVE",
         },
         { transaction: tx }
@@ -454,6 +467,16 @@ async function processActorResourceRegenTick(io, nowMsValue) {
           association: "spawn",
           required: false,
         },
+        {
+          association: "instance",
+          required: true,
+          include: [
+            {
+              association: "resourceConfig",
+              required: false,
+            },
+          ],
+        },
       ],
       order: [["id", "ASC"]],
     });
@@ -471,6 +494,16 @@ async function processActorResourceRegenTick(io, nowMsValue) {
             {
               association: "spawn",
               required: false,
+            },
+            {
+              association: "instance",
+              required: true,
+              include: [
+                {
+                  association: "resourceConfig",
+                  required: false,
+                },
+              ],
             },
           ],
           transaction: tx,

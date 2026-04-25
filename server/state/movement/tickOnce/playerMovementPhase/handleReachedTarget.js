@@ -2,7 +2,7 @@
 
 const { markRuntimeDirty, markStatsDirty } = require("../../../runtimeStore");
 const { getActiveSocket } = require("../../../../socket/sessionIndex");
-const { bumpRev } = require("../../entity");
+const { bumpRev, toDelta } = require("../../entity");
 const { attemptCollectFromActor } = require("../../../../service/actorCollectService");
 const { getActor } = require("../../../actorsRuntimeStore");
 const db = require("../../../../models");
@@ -12,7 +12,7 @@ const { ensureEquipmentLoaded } = require("../../../equipment/loader");
 const { buildInventoryFull } = require("../../../inventory/fullPayload");
 const { startPrimitiveShelterConstruction } = require("../../../../service/buildService");
 const { resolveActorCollectCooldownMs } = require("../../../../service/actorCollectService");
-const { emitPlayerState } = require("./emitPlayerState");
+const { emitPlayerState, emitSelfVitals } = require("./emitPlayerState");
 const { syncRuntimeStamina } = require("../../stamina.js");
 const { drinkFromRiverSource } = require("../../../../service/waterSourceService");
 const {
@@ -142,6 +142,20 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
     ).trim().toUpperCase();
     if (actorDefCode === "RIVER_PATCH") {
       try {
+        const previousPhase = String(rt.interact?.phase ?? "APPROACH").toUpperCase();
+        if (rt.interact) {
+          rt.interact.phase = "COLLECTING";
+          rt.interact.collectStartedAtMs = t;
+        }
+        if (previousPhase !== "COLLECTING") {
+          bumpRev(rt);
+          markRuntimeDirty(rt.userId, t);
+          await emitPlayerState(io, rt, {
+            nowMs: t,
+            force: true,
+          });
+        }
+
         const drinkResult = drinkFromRiverSource(rt, actor, t);
         const thirstCurrent = Number(drinkResult?.thirstCurrent ?? 0);
         const thirstMax = Number(drinkResult?.thirstMax ?? 0);
@@ -162,17 +176,23 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
 
           const activeSocket = getActiveSocket(rt.userId);
           if (activeSocket) {
+            const delta = toDelta(rt);
             activeSocket.emit("actor:collected", {
               actorId: String(interactActorId),
               actorDisabled: false,
               inventory: null,
               loot: null,
+              xp: {
+                xpGained: 1,
+                source: "water",
+              },
               water: {
                 points: restored,
                 label: "Water",
               },
               message: null,
             });
+            emitSelfVitals(activeSocket, rt, delta);
           }
         }
 
@@ -199,6 +219,20 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
 
     const lastCollect = rt.lastActorCollectAtMs ?? 0;
     const collectCooldown = rt.collectCooldownMs ?? 1000;
+
+    const previousPhase = String(rt.interact?.phase ?? "APPROACH").toUpperCase();
+    if (rt.interact) {
+      rt.interact.phase = "COLLECTING";
+      rt.interact.collectStartedAtMs = t;
+    }
+    if (previousPhase !== "COLLECTING") {
+      bumpRev(rt);
+      markRuntimeDirty(rt.userId, t);
+      await emitPlayerState(io, rt, {
+        nowMs: t,
+        force: true,
+      });
+    }
 
     if (t >= lastCollect + collectCooldown) {
       rt.lastActorCollectAtMs = t;

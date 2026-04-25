@@ -86,7 +86,7 @@ export function createInventoryHandlers(state) {
         ? [{
             id: `water:${actorId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
             text: `+${Math.max(0, Math.trunc(Number(waterInfo.points ?? 0)))} ${waterInfo.label ?? "Water"}`,
-            subtext: `+${Math.max(0, Math.trunc(Number(waterInfo.points ?? 0)))} points`,
+            subtext: `+${Math.max(0, Math.trunc(Number(xpInfo?.xpGained ?? 1)))} XP`,
             startedAt: Date.now(),
             ttlMs: 1400,
           }]

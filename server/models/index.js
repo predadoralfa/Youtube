@@ -44,6 +44,7 @@ const defineGaInstance = require("./ga_instance");
 const defineGaWorldClock = require("./ga_world_clock");
 const defineGaWorldMonthDef = require("./ga_world_month_def");
 const defineGaInstanceSpawnConfig = require("./ga_instance_spawn_config");
+const defineGaInstanceResourceConfig = require("./ga_instance_resource_config");
 
 // RENDER (NOVO)
 const defineGaRenderMaterial = require("./ga_render_material");
@@ -113,6 +114,7 @@ const GaInstance = defineGaInstance(sequelize, DataTypes);
 const GaWorldClock = defineGaWorldClock(sequelize, DataTypes);
 const GaWorldMonthDef = defineGaWorldMonthDef(sequelize, DataTypes);
 const GaInstanceSpawnConfig = defineGaInstanceSpawnConfig(sequelize, DataTypes);
+const GaInstanceResourceConfig = defineGaInstanceResourceConfig(sequelize, DataTypes);
 
 // RENDER MODELS (NOVO)
 const GaRenderMaterial = defineGaRenderMaterial(sequelize, DataTypes);
@@ -189,6 +191,7 @@ const models = {
   // INSTANCE
   GaInstance,
   GaInstanceSpawnConfig,
+  GaInstanceResourceConfig,
   GaWorldClock,
   GaWorldMonthDef,
 

@@ -124,6 +124,7 @@ export function applyDelta(state, emitChange, delta) {
     vitals: nextVitals,
     status: nextStatus ?? base.status ?? null,
     movement: delta.movement != null ? delta.movement : base.movement ?? null,
+    interact: delta.interact != null ? delta.interact : base.interact ?? null,
     action: delta.action != null ? delta.action : base.action,
     enemyDefCode:
       delta.enemyDefCode != null ? delta.enemyDefCode : base.enemyDefCode,
@@ -166,11 +167,12 @@ export function applyVitalsDelta(state, emitChange, delta) {
   const sameStatus = JSON.stringify(current.status ?? null) === JSON.stringify(nextStatus ?? null);
   if (sameVitals && sameStatus) return;
 
-  state.entities.set(entityId, {
-    ...current,
-    hp: nextHpCompat,
-    vitals: nextVitals,
-    status: nextStatus ?? current.status ?? null,
-  });
+    state.entities.set(entityId, {
+      ...current,
+      hp: nextHpCompat,
+      vitals: nextVitals,
+      status: nextStatus ?? current.status ?? null,
+      interact: current.interact ?? null,
+    });
   emitChange();
 }

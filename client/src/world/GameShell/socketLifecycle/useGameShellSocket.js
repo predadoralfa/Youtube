@@ -91,6 +91,7 @@ export function useGameShellSocket(state, requestInventoryFull) {
         socket.on("actor:collected", handlers.onActorCollected);
         socket.on("actor:updated", handlers.onActorUpdated);
         socket.on("combat:enemy_attack", handlers.onEnemyAttack);
+        socket.on("combat:attack_result", handlers.onCombatAttackResult);
 
         socket.__gameShellHandlers = handlers;
       } catch (err) {
@@ -128,6 +129,7 @@ export function useGameShellSocket(state, requestInventoryFull) {
         socket.off("actor:collected", handlers.onActorCollected);
         socket.off("actor:updated", handlers.onActorUpdated);
         socket.off("combat:enemy_attack", handlers.onEnemyAttack);
+        socket.off("combat:attack_result", handlers.onCombatAttackResult);
         delete socket.__gameShellHandlers;
       }
 

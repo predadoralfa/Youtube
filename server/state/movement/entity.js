@@ -249,6 +249,18 @@ function toEntity(rt) {
     rev: rt.rev ?? 0,
     buildLock: rt.buildLock ?? null,
     sleepLock: rt.sleepLock ?? null,
+    interact: rt.interact
+      ? {
+          active: Boolean(rt.interact.active),
+          kind: String(rt.interact.kind ?? ""),
+          id: rt.interact.id != null ? String(rt.interact.id) : null,
+          stopRadius: Number(rt.interact.stopRadius ?? 0),
+          startedAtMs: Number(rt.interact.startedAtMs ?? 0),
+          timeoutMs: Number(rt.interact.timeoutMs ?? 0),
+          phase: String(rt.interact.phase ?? "APPROACH"),
+          collectStartedAtMs: Number(rt.interact.collectStartedAtMs ?? 0),
+        }
+      : null,
 
     vitals: {
       hp: {
@@ -319,6 +331,18 @@ function toDelta(rt) {
     rev: rt.rev ?? 0,
     buildLock: rt.buildLock ?? null,
     sleepLock: rt.sleepLock ?? null,
+    interact: rt.interact
+      ? {
+          active: Boolean(rt.interact.active),
+          kind: String(rt.interact.kind ?? ""),
+          id: rt.interact.id != null ? String(rt.interact.id) : null,
+          stopRadius: Number(rt.interact.stopRadius ?? 0),
+          startedAtMs: Number(rt.interact.startedAtMs ?? 0),
+          timeoutMs: Number(rt.interact.timeoutMs ?? 0),
+          phase: String(rt.interact.phase ?? "APPROACH"),
+          collectStartedAtMs: Number(rt.interact.collectStartedAtMs ?? 0),
+        }
+      : null,
 
     vitals: {
       hp: {

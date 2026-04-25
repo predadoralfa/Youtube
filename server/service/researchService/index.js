@@ -6,6 +6,7 @@ const {
   listUnlockedCapabilities,
   resolveResearchModifierDelta,
   resolveResearchItemWeightDelta,
+  resolveResearchContainerMaxWeightDelta,
   resolveResearchItemCollectTimeDelta,
 } = require("./payload");
 const { ensureResearchLoaded } = require("./definitions");
@@ -21,6 +22,7 @@ module.exports = {
   processResearchTick,
   resolveResearchModifierDelta,
   resolveResearchItemWeightDelta,
+  resolveResearchContainerMaxWeightDelta,
   resolveResearchItemCollectTimeDelta,
   startResearch,
 };

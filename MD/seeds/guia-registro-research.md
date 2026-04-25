@@ -77,6 +77,40 @@ Regra pratica:
 - `grants_json` responde "o que este nivel libera?"
 - `requirements_json` responde "o que este nivel consome?"
 
+Para os researches iniciais de item, a regra atual e:
+
+- nivel 1 = `5 min` e sem custo
+- nivel 2 = `15 min` e `20` unidades do proprio item
+- nivel 3 = `45 min` e `30` unidades do proprio item
+- nivel 4 = `135 min` e `40` unidades do proprio item
+- nivel 5 = `405 min` e `50` unidades do proprio item
+
+Exemplo de `requirements_json`:
+
+```json
+{
+  "requiresLevel": 2,
+  "itemCosts": [
+    {
+      "itemCode": "GRAVETO",
+      "qty": 30
+    }
+  ]
+}
+```
+
+Exemplo de grant de modificador de capacidade:
+
+```json
+{
+  "unlock": [
+    "container.max_weight_delta:BASKET:2.5"
+  ]
+}
+```
+
+Quando o alvo e `BASKET`, o bonus vale para a familia inteira de cestas, incluindo `BASKET_T2` e futuras variantes.
+
 ### 3. `ga_user_research`
 
 Guarda o progresso do jogador.
@@ -216,11 +250,16 @@ Entao, em geral, nao precisa criar if novo no codigo para uma research comum.
 
 ## Convencoes recomendadas
 
-- research: `RESEARCH_APPLE`, `RESEARCH_FIBER`, `RESEARCH_PRIMITIVE_SHELTER`
+- research: `RESEARCH_APPLE`, `RESEARCH_STONE`, `RESEARCH_TWIG`, `RESEARCH_FIBER`, `RESEARCH_HERBS`, `RESEARCH_PRIMITIVE_SHELTER`
 - niveis: sempre iniciar em `1`
 - unlocks: usar `grants_json.unlock`
 - custos: usar `requirements_json.itemCosts`
 - arvore: sempre preferir pai-filho no banco
+
+Para pesquisas iniciais de item, manter a progressao padronizada com:
+
+- tempo em `5m`, `15m`, `45m`, `135m`, `405m`
+- custos em `20`, `30`, `40`, `50` unidades do proprio item
 
 ## Observacoes importantes
 

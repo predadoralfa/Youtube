@@ -64,6 +64,11 @@ export function patchSelfFromBaseline(prev, payload, self) {
           pickOptional(self, "sleepLock", prev.runtime.sleepLock ?? null)
         )
       ),
+      interact: pickOptional(
+        payload?.runtime,
+        "interact",
+        pickOptional(payload, "interact", pickOptional(self, "interact", prev.runtime.interact ?? null))
+      ),
       cameraPitch:
         payload?.runtime?.cameraPitch ??
         payload?.runtime?.camera_pitch ??
@@ -111,6 +116,7 @@ export function patchSelfFromEntityDelta(prev, self) {
       yaw: self.yaw ?? prev.runtime.yaw,
       buildLock: pickOptional(self, "buildLock", prev.runtime.buildLock ?? null),
       sleepLock: pickOptional(self, "sleepLock", prev.runtime.sleepLock ?? null),
+      interact: pickOptional(self, "interact", prev.runtime.interact ?? null),
       pos: {
         x: self.pos?.x ?? prev.runtime.pos?.x ?? 0,
         y: self.pos?.y ?? prev.runtime.pos?.y ?? 0,
@@ -120,6 +126,7 @@ export function patchSelfFromEntityDelta(prev, self) {
       speed: prev.runtime.speed ?? null,
       effectiveMoveSpeed: prev.runtime.effectiveMoveSpeed ?? null,
       action: self.action ?? prev.runtime.action ?? "idle",
+      interact: pickOptional(self, "interact", prev.runtime.interact ?? null),
       vitals: nextVitals,
     },
     ui: {
@@ -153,6 +160,7 @@ export function patchSelfFromMoveState(prev, payload) {
       yaw: payload?.yaw ?? prev.runtime.yaw,
       buildLock: pickOptional(payload, "buildLock", prev.runtime.buildLock ?? null),
       sleepLock: pickOptional(payload, "sleepLock", prev.runtime.sleepLock ?? null),
+      interact: pickOptional(payload, "interact", prev.runtime.interact ?? null),
       cameraPitch:
         payload?.cameraPitch ??
         payload?.camera_pitch ??
@@ -173,6 +181,7 @@ export function patchSelfFromMoveState(prev, payload) {
       effectiveMoveSpeed: payload?.effectiveMoveSpeed ?? prev.runtime.effectiveMoveSpeed ?? null,
       movement: payload?.movement ?? prev.runtime.movement ?? null,
       action: payload?.action ?? prev.runtime.action ?? "idle",
+      interact: pickOptional(payload, "interact", prev.runtime.interact ?? null),
       status: prev.runtime.status,
       vitals: prev.runtime.vitals,
     },

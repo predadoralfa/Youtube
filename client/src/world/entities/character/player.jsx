@@ -1,64 +1,10 @@
-// src/world/entities/character/player.jsx
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
-import * as THREE from "three";
-
-/**
- * PLAYER (Placeholder)
- *
- * Papel:
- * Representar visualmente o jogador na cena (placeholder temporário).
- *
- * Fonte da verdade:
- * Snapshot do backend (runtime recebido pelo GameShell/GameCanvas).
- *
- * Faz:
- * - Cria um cilindro em pé (mesh Three.js)
- * - Expõe API mínima para o GameCanvas sincronizar posição/rotação
- *
- * Não faz:
- * - Não lê teclado
- * - Não calcula movimento
- * - Não aplica física
- * - Não faz HTTP
- */
-
-const COLORS = {
-  self: "#ff2d55",
-  other: "#2d7dff",
-};
-
-export function createPlayerMesh(
-  {
-    radius = 0.5,
-    height = 1.75,
-    color,
-    isSelf = true,
-  } = {}
-) {
-  // Se não foi passado color explícito, escolhe por categoria (self vs other)
-  const resolvedColor = color ?? (isSelf ? COLORS.self : COLORS.other);
-
-  const geo = new THREE.CylinderGeometry(radius, radius, height, 16);
-  const mat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(resolvedColor),
-  });
-
-  // Anchora a peça pelos pés para que ela acompanhe melhor rampas e ondulações.
-  geo.translate(0, height / 2, 0);
-
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = true;
-  mesh.receiveShadow = false;
-
-  // A base geométrica agora já nasce no chão.
-  mesh.position.y = 0;
-  mesh.userData.groundAnchor = 0;
-
-  // marcação útil para debug (sem depender de nomeplate ainda)
-  mesh.userData.isSelf = !!isSelf;
-
-  return mesh;
-}
+export {
+  MAN_ANIMATION_CATALOG,
+  createPlayerMesh,
+  disposePlayerMesh,
+  loadManTemplate,
+  updatePlayerMeshAnimation,
+} from "./manModel";
 
 export function syncPlayer(mesh, runtime) {
   const x = runtime?.pos?.x ?? 0;

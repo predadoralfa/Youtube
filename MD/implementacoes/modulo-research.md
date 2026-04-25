@@ -11,7 +11,7 @@ Exemplos iniciais:
 - `APPLE` nivel 2 reduz o peso das macas.
 - `APPLE` nivel 3 libera comer maca.
 - `BASKET` nivel 1 libera o craft da cesta.
-- `BASKET` nivel 2 reduz o peso da cesta.
+- `BASKET` nivel 2 aumenta a capacidade de todas as cestas.
 - `BASKET` nivel 3 libera o craft da cesta reforcada `CRAFT_BASKET_T2`.
 - `STONE` nivel 1 libera coletar pedra.
 - `STONE` nivel 2 reduz o peso da pedra.
@@ -104,6 +104,18 @@ Campos principais:
 }
 ```
 
+Tambem existem grants de modificador, como:
+
+```json
+{
+  "unlock": [
+    "container.max_weight_delta:BASKET:2.5"
+  ]
+}
+```
+
+Esse formato aplica o bonus para a familia `BASKET`, incluindo `BASKET`, `BASKET_T2` e futuras variacoes da mesma linha.
+
 ### `ga_user_research`
 
 Guarda o estado do jogador naquele estudo.
@@ -128,7 +140,7 @@ Estados:
 
 ## Regra de Tempo
 
-Para estudos simples da Era 1, o nivel 1 usa `5 minutos`.
+Para os researches iniciais de item da Era 1, a progressao de tempo segue este padrao:
 
 Progressao inicial:
 
@@ -147,16 +159,24 @@ Isso permite excecoes futuras sem depender da formula.
 
 ## Padrao de Nivel
 
-Para pesquisas de itens, o nivel segue a regra base abaixo:
+Para os researches iniciais de item, o contrato atual do banco e:
 
-- nivel 1: item de interesse e liberacao de coleta
-- nivel 2: bonus passivo, como peso menor ou tempo menor
-- nivel 3: nova habilidade, craft, uso ou ramificacao
-- nivel 4: refinamento da capacidade aberta no nivel 3
-- nivel 5: maestria final da arvore do item
+- nivel 1: libera a coleta do item, sem custo adicional
+- nivel 2: exige `20` unidades do proprio item
+- nivel 3: exige `30` unidades do proprio item
+- nivel 4: exige `40` unidades do proprio item
+- nivel 5: exige `50` unidades do proprio item
 
-Esse padrao e o contrato recomendado para novos itens.
-Itens antigos podem ter excecoes, mas o ideal e convergir para essa leitura.
+Esse padrao vale hoje para:
+
+- `APPLE`
+- `STONE`
+- `TWIG`
+- `FIBER`
+- `HERBS`
+
+O contrato recomendado para novos itens segue a mesma leitura.
+Itens antigos podem ter excecoes documentadas, mas o padrao atual do banco ja foi alinhado para os itens iniciais.
 
 ## Regra de Aparicao de Tecnologia
 
@@ -174,6 +194,7 @@ Em vez de colocar no item antigo uma lista de futuros desbloqueios, a gente cria
 Exemplos práticos:
 
 - `RESEARCH_STONE` no nivel 3 libera a tecnologia `WEAPON-STONE-SLING`
+- `RESEARCH_BASKET` no nivel 2 exige `10 FIBER` + `10 GRAVETO`
 - `RESEARCH_BASKET` no nivel 3 libera a tecnologia `CRAFT_BASKET_T2`
 - quando surgir uma tecnologia nova, ela deve ser cadastrada com os requisitos de aparicao corretos, em vez de ser antecipada em toda a arvore pai
 
@@ -224,7 +245,7 @@ Primeiro bloqueio efetivo do MVP:
 A arvore legada de researches de itens foi reorganizada para seguir o mesmo contrato:
 
 - nivel 1 sempre ancora coleta ou acesso inicial
-- nivel 2 sempre fica para bonus passivo, normalmente peso
+- nivel 2 sempre fica para bonus passivo, normalmente peso ou capacidade
 - nivel 3 sempre fica para a liberacao principal da tecnologia
 - niveis 4 e 5 ficam para refinamento e maestria quando o item ainda usa arvore maior
 

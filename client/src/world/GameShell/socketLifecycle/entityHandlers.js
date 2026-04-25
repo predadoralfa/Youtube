@@ -65,6 +65,7 @@ export function createEntityHandlers(state, store) {
       pos: payload?.pos,
       yaw: payload?.yaw,
       movement: payload?.movement,
+      interact: payload?.interact,
       hp: payload?.hp,
       action: payload?.action,
     });
@@ -111,6 +112,46 @@ export function createEntityHandlers(state, store) {
 
   const onEnemyAttack = (payload) => {
     state.setSnapshot((prev) => patchEnemyAttack(prev, payload));
+
+    if (String(payload?.targetKind ?? "").toUpperCase() !== "PLAYER") {
+      return;
+    }
+
+    const hitAtMs = Number(payload?.timestamp ?? Date.now());
+    state.setSnapshot((prev) => {
+      if (!prev?.runtime) return prev;
+
+      return {
+        ...prev,
+        runtime: {
+          ...prev.runtime,
+          combat: {
+            ...(prev.runtime.combat ?? {}),
+            lastHitAtMs: Number.isFinite(hitAtMs) ? hitAtMs : Date.now(),
+          },
+        },
+      };
+    });
+  };
+
+  const onCombatAttackResult = (payload) => {
+    if (!payload?.ok) return;
+
+    const attackAtMs = Number(payload?.timestamp ?? Date.now());
+    state.setSnapshot((prev) => {
+      if (!prev?.runtime) return prev;
+
+      return {
+        ...prev,
+        runtime: {
+          ...prev.runtime,
+          combat: {
+            ...(prev.runtime.combat ?? {}),
+            lastAttackAtMs: Number.isFinite(attackAtMs) ? attackAtMs : Date.now(),
+          },
+        },
+      };
+    });
   };
 
   return {
@@ -122,5 +163,6 @@ export function createEntityHandlers(state, store) {
     onSessionReplaced,
     onConnectError,
     onEnemyAttack,
+    onCombatAttackResult,
   };
 }

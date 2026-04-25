@@ -2,10 +2,56 @@ import { useEffect, useMemo, useState } from "react";
 
 import { resolvePrimitiveShelterBuildRequirements } from "@/world/build/requirements";
 
+const SKILL_ORDER = ["SKILL_CRAFTING", "SKILL_BUILDING", "SKILL_COOKING", "SKILL_GATHERING"];
+const DEFAULT_GATHERING_COOLDOWN_MS = 4000;
+
 function clamp01(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
   return Math.min(1, Math.max(0, n));
+}
+
+function resolveStatusBarTone(current, max) {
+  const safeMax = Math.max(1, Number(max ?? 1));
+  const ratio = clamp01(Number(current ?? 0) / safeMax);
+
+  if (ratio < 0.05) {
+    return {
+      labelTone: "critical",
+      fill: "linear-gradient(90deg, rgba(220,38,38,0.98), rgba(239,68,68,0.92))",
+      border: "rgba(239, 68, 68, 0.32)",
+      pulse: true,
+      pulseColor: "rgba(239, 68, 68, 0.95)",
+    };
+  }
+
+  if (ratio < 0.15) {
+    return {
+      labelTone: "danger",
+      fill: "linear-gradient(90deg, rgba(244,63,94,0.96), rgba(251,146,60,0.92))",
+      border: "rgba(244, 63, 94, 0.28)",
+      pulse: false,
+      pulseColor: "rgba(244, 63, 94, 0.75)",
+    };
+  }
+
+  if (ratio < 0.3) {
+    return {
+      labelTone: "warning",
+      fill: "linear-gradient(90deg, rgba(251,191,36,0.96), rgba(249,115,22,0.9))",
+      border: "rgba(251, 191, 36, 0.26)",
+      pulse: false,
+      pulseColor: "rgba(251, 191, 36, 0.72)",
+    };
+  }
+
+  return {
+    labelTone: "normal",
+    fill: "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(34,197,94,0.9))",
+    border: "rgba(56, 189, 248, 0.24)",
+    pulse: false,
+    pulseColor: "rgba(56, 189, 248, 0.72)",
+  };
 }
 
 function formatDuration(ms) {
@@ -219,6 +265,94 @@ function resolveStatusSnapshot(snapshot) {
   };
 }
 
+function normalizeSkillLabel(skillName, skillCode) {
+  const raw = String(skillName ?? "").trim();
+  if (raw) return raw;
+  const code = String(skillCode ?? "").trim().toUpperCase();
+  if (!code) return "Skill";
+  return code.replace(/^SKILL_/, "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatXpRemaining(currentXp, requiredXp) {
+  const current = Math.max(0, Number(currentXp ?? 0));
+  const required = Math.max(0, Number(requiredXp ?? 0));
+  if (!Number.isFinite(required) || required <= 0) return "MAX";
+  const remaining = Math.max(0, required - current);
+  return `${Math.round(remaining)} XP to next`;
+}
+
+function formatPercent(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0%";
+  return `${Math.round(n)}%`;
+}
+
+function resolveSkillBonusText(skillCode, currentLevel, maxLevel) {
+  const code = String(skillCode ?? "").toUpperCase();
+  const level = Math.max(1, Number(currentLevel ?? 1));
+  const safeMaxLevel = Math.max(1, Number(maxLevel ?? 1));
+
+  if (code === "SKILL_CRAFTING") {
+    const reducedSeconds = Math.max(0, (level - 1) * 30);
+    return reducedSeconds > 0 ? `-${reducedSeconds}s craft time` : "Base craft speed";
+  }
+
+  if (code === "SKILL_GATHERING") {
+    const baseCooldownMs = DEFAULT_GATHERING_COOLDOWN_MS;
+    const reductionPerLevelMs = Math.max(0, (baseCooldownMs - 30) / safeMaxLevel);
+    const reducedCooldownMs = Math.max(30, Math.round(baseCooldownMs - reductionPerLevelMs * level));
+    const bonusPercent = ((baseCooldownMs - reducedCooldownMs) / baseCooldownMs) * 100;
+    return `-${formatPercent(bonusPercent)} gather cooldown`;
+  }
+
+  if (code === "SKILL_BUILDING") {
+    const reducedMs = level * 30000;
+    return `-${formatDuration(reducedMs)} build time`;
+  }
+
+  if (code === "SKILL_COOKING") {
+    return level > 1 ? "No passive bonus yet" : "Base level";
+  }
+
+  return "No passive bonus yet";
+}
+
+function resolveSkillStatusList(rawSkills) {
+  const list = Array.isArray(rawSkills) ? rawSkills : Object.values(rawSkills ?? {});
+  const order = new Map(SKILL_ORDER.map((code, index) => [code, index]));
+
+  return list
+    .filter(Boolean)
+    .map((skill) => {
+      const skillCode = String(skill?.skillCode ?? skill?.code ?? "").trim().toUpperCase();
+      const currentLevel = Math.max(1, Number(skill?.currentLevel ?? skill?.current_level ?? 1));
+      const currentXp = Number(skill?.currentXp ?? skill?.current_xp ?? 0);
+      const requiredXp = Number(skill?.requiredXp ?? skill?.required_xp ?? 0);
+      const maxLevel = Math.max(1, Number(skill?.maxLevel ?? skill?.max_level ?? 1));
+
+      return {
+        skillCode,
+        skillName: normalizeSkillLabel(skill?.skillName ?? skill?.name ?? null, skillCode),
+        currentLevel,
+        currentXp,
+        requiredXp,
+        maxLevel,
+        progressPercent:
+          requiredXp > 0 ? Math.max(0, Math.min(100, (currentXp / requiredXp) * 100)) : 100,
+        bonusText: resolveSkillBonusText(skillCode, currentLevel, maxLevel),
+        remainingText:
+          currentLevel >= maxLevel
+            ? "MAX"
+            : formatXpRemaining(currentXp, requiredXp),
+        sortIndex: order.has(skillCode) ? order.get(skillCode) : SKILL_ORDER.length + 1,
+      };
+    })
+    .sort((a, b) => {
+      if (a.sortIndex !== b.sortIndex) return a.sortIndex - b.sortIndex;
+      return String(a.skillName).localeCompare(String(b.skillName));
+    });
+}
+
 function MiniVitalRow({
   label,
   current,
@@ -345,7 +479,7 @@ function JobRow({
 
       <div
         style={{
-          height: 10,
+          height: 12,
           overflow: "hidden",
           border: "1px solid rgba(56, 189, 248, 0.24)",
           borderRadius: 4,
@@ -368,6 +502,98 @@ function JobRow({
       </div>
 
       {extra}
+    </div>
+  );
+}
+
+function SkillsStatusBlock({ skillsSnapshot }) {
+  const skills = useMemo(() => resolveSkillStatusList(skillsSnapshot), [skillsSnapshot]);
+
+  if (!skills.length) return null;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 10,
+        marginBottom: 18,
+        padding: 12,
+        borderRadius: 14,
+        border: "1px solid rgba(59, 130, 246, 0.18)",
+        background: "linear-gradient(180deg, rgba(8, 15, 26, 0.94), rgba(5, 10, 18, 0.9))",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 12,
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          color: "rgba(191, 219, 254, 0.85)",
+        }}
+      >
+        Skills
+      </div>
+
+      <div style={{ display: "grid", gap: 10 }}>
+        {skills.map((skill) => (
+          <div
+            key={skill.skillCode || skill.skillName}
+            style={{
+              display: "grid",
+              gap: 6,
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: "1px solid rgba(56, 189, 248, 0.14)",
+              background: "rgba(5, 10, 18, 0.55)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+              <span
+                style={{
+                  color: "#f8fafc",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {skill.skillName}
+              </span>
+              <span style={{ color: "rgba(191, 219, 254, 0.82)", fontSize: 11 }}>
+                Level {skill.currentLevel}
+              </span>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <span style={{ color: "rgba(226, 232, 240, 0.72)", fontSize: 11 }}>
+                {skill.remainingText}
+              </span>
+              <span style={{ color: "rgba(248, 250, 252, 0.82)", fontSize: 11, fontWeight: 700 }}>
+                {skill.bonusText}
+              </span>
+            </div>
+
+              <div
+                style={{
+                  height: 8,
+                  overflow: "hidden",
+                  border: "1px solid rgba(56, 189, 248, 0.18)",
+                  borderRadius: 3,
+                  background: "rgba(5, 10, 18, 0.72)",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${skill.progressPercent}%`,
+                    height: "100%",
+                    borderRadius: 3,
+                    background: "linear-gradient(90deg, rgba(56,189,248,0.95), rgba(34,197,94,0.9))",
+                    transition: "width 240ms ease",
+                  }}
+                />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -510,18 +736,26 @@ export function PlayerStatusPanel({
     [snapshot, inventorySnapshot, equipmentSnapshot, nowMs]
   );
   const activeSleep = useMemo(() => resolveActiveSleep(snapshot), [snapshot]);
+  const [showCloseBar, setShowCloseBar] = useState(false);
   const statusSummary = useMemo(() => resolveStatusSnapshot(snapshot), [snapshot]);
-  const activeJobs = [activeResearch, activeCraft].filter(Boolean);
-  const isLowWarn = (current, max) => Number(max ?? 0) > 0 && Number(current ?? 0) / Number(max ?? 1) <= 0.3;
-  const isCritical = (current, max) => Number(max ?? 0) > 0 && Number(current ?? 0) <= 5;
-  const hungerWarning = isLowWarn(statusSummary.hungerCurrent, statusSummary.hungerMax);
-  const thirstWarning = isLowWarn(statusSummary.thirstCurrent, statusSummary.thirstMax);
-  const sleepWarning = isLowWarn(statusSummary.sleepCurrent, statusSummary.sleepMax);
-  const immunityWarning = isLowWarn(statusSummary.immunityCurrent, statusSummary.immunityMax);
-  const hungerCritical = isCritical(statusSummary.hungerCurrent, statusSummary.hungerMax);
-  const thirstCritical = isCritical(statusSummary.thirstCurrent, statusSummary.thirstMax);
-  const sleepCritical = isCritical(statusSummary.sleepCurrent, statusSummary.sleepMax);
-  const immunityCritical = isCritical(statusSummary.immunityCurrent, statusSummary.immunityMax);
+  const skillsSnapshot = inventorySnapshot?.skills ?? snapshot?.inventory?.skills ?? snapshot?.skills ?? null;
+  const hungerTone = resolveStatusBarTone(statusSummary.hungerCurrent, statusSummary.hungerMax);
+  const thirstTone = resolveStatusBarTone(statusSummary.thirstCurrent, statusSummary.thirstMax);
+  const sleepTone = resolveStatusBarTone(statusSummary.sleepCurrent, statusSummary.sleepMax);
+  const immunityTone = resolveStatusBarTone(statusSummary.immunityCurrent, statusSummary.immunityMax);
+
+  useEffect(() => {
+    if (!open) {
+      setShowCloseBar(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowCloseBar(true);
+    }, 260);
+
+    return () => window.clearTimeout(timer);
+  }, [open]);
 
   return (
     <>
@@ -550,9 +784,9 @@ export function PlayerStatusPanel({
       <div
         style={{
           position: "fixed",
-          top: 58,
+          top: 74,
           right: 16,
-          zIndex: 1099,
+          zIndex: 1100,
           width: open ? 270 : 28,
           pointerEvents: "none",
           display: "flex",
@@ -563,11 +797,11 @@ export function PlayerStatusPanel({
         <div style={{ display: "flex", alignItems: "stretch", pointerEvents: "auto" }}>
           <div
             style={{
-              width: open ? 22 : 28,
-              minWidth: open ? 22 : 28,
+              width: open ? (showCloseBar ? 22 : 0) : 28,
+              minWidth: open ? (showCloseBar ? 22 : 0) : 28,
               borderRadius: 14,
-              borderTopRightRadius: open ? 0 : 14,
-              borderBottomRightRadius: open ? 0 : 14,
+              borderTopRightRadius: open && showCloseBar ? 0 : 14,
+              borderBottomRightRadius: open && showCloseBar ? 0 : 14,
               background: "linear-gradient(180deg, #22c55e 0%, #0f766e 55%, #052e2b 100%)",
               border: "1px solid rgba(45, 212, 191, 0.95)",
               boxShadow: "0 0 10px rgba(45,212,191,0.72), 0 0 22px rgba(34,197,94,0.42)",
@@ -577,15 +811,19 @@ export function PlayerStatusPanel({
               justifyContent: "center",
               cursor: "pointer",
               userSelect: "none",
+              opacity: open && !showCloseBar ? 0 : 1,
+              visibility: open && !showCloseBar ? "hidden" : "visible",
+              overflow: "hidden",
               fontSize: open ? 13 : 15,
               fontWeight: 700,
-              transition: "width 0.32s ease, min-width 0.32s ease, box-shadow 0.32s ease",
+              transition: "width 0.32s ease, min-width 0.32s ease, opacity 0.18s ease, box-shadow 0.32s ease",
             }}
             onClick={() => setOpen((value) => !value)}
             title={open ? "Close player jobs" : "Open player jobs"}
-            >
-             {open ? "<" : "▦"}
-            </div>
+          >
+            {open ? (showCloseBar ? "<" : "") : "📋"}
+          </div>
+
 
           {open ? (
             <div
@@ -624,7 +862,7 @@ export function PlayerStatusPanel({
                 style={{
                   display: "grid",
                   gap: 12,
-                  marginBottom: 18,
+                  marginBottom: 14,
                   padding: 12,
                   borderRadius: 14,
                   border: "1px solid rgba(59, 130, 246, 0.18)",
@@ -639,6 +877,64 @@ export function PlayerStatusPanel({
                     color: "rgba(191, 219, 254, 0.85)",
                   }}
                 >
+                  Timers
+                </div>
+
+                <div style={{ display: "grid", gap: 14 }}>
+                  {activeBuild ? (
+                    <JobRow
+                      label="Build"
+                      title={activeBuild.title}
+                      subtitle={activeBuild.subtitle}
+                      remainingText={activeBuild.remainingText}
+                      progressRatio={activeBuild.progressRatio ?? 0}
+                      emptyText="No active build"
+                    />
+                  ) : null}
+
+                  {activeResearch ? (
+                    <JobRow
+                      label="Research"
+                      title={activeResearch.title}
+                      subtitle={activeResearch.subtitle}
+                      remainingText={activeResearch.remainingText}
+                      progressRatio={activeResearch.progressRatio ?? 0}
+                      emptyText="No active research"
+                    />
+                  ) : null}
+
+                  {activeCraft ? (
+                    <JobRow
+                      label="Craft"
+                      title={activeCraft.title}
+                      subtitle={activeCraft.subtitle}
+                      remainingText={activeCraft.remainingText}
+                      progressRatio={activeCraft.progressRatio ?? 0}
+                      emptyText="No active hand craft"
+                    />
+                  ) : null}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: 12,
+                  marginBottom: 14,
+                  padding: 12,
+                  borderRadius: 14,
+                  border: "1px solid rgba(34, 197, 94, 0.16)",
+                  background: "linear-gradient(180deg, rgba(6, 14, 18, 0.92), rgba(4, 10, 14, 0.9))",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: "rgba(167, 243, 208, 0.9)",
+                  }}
+                >
                   Status
                 </div>
 
@@ -647,101 +943,58 @@ export function PlayerStatusPanel({
                     label="Hunger"
                     current={statusSummary.hungerCurrent}
                     max={statusSummary.hungerMax}
-                    color="linear-gradient(90deg, rgba(56,189,248,0.95), rgba(14,165,233,0.9))"
+                    color={hungerTone.fill}
                     trackColor="rgba(5, 10, 18, 0.72)"
-                    pulse={hungerWarning}
-                    pulseColor={hungerCritical ? "rgba(239, 68, 68, 0.9)" : "rgba(251, 146, 60, 0.9)"}
+                    percentText={formatPercent(statusSummary.hungerPercent)}
+                    radius={4}
+                    trackBorderColor={hungerTone.border}
+                    pulse={hungerTone.pulse}
+                    pulseColor={hungerTone.pulseColor}
                   />
 
                   <MiniVitalRow
                     label="Thirst"
                     current={statusSummary.thirstCurrent}
                     max={statusSummary.thirstMax}
-                    color="linear-gradient(90deg, rgba(34,211,238,0.95), rgba(6,182,212,0.9))"
+                    color={thirstTone.fill}
                     trackColor="rgba(5, 10, 18, 0.72)"
-                    pulse={thirstWarning}
-                    pulseColor={thirstCritical ? "rgba(239, 68, 68, 0.9)" : "rgba(251, 146, 60, 0.9)"}
+                    percentText={formatPercent(statusSummary.thirstPercent)}
+                    radius={4}
+                    trackBorderColor={thirstTone.border}
+                    pulse={thirstTone.pulse}
+                    pulseColor={thirstTone.pulseColor}
                   />
 
                   <MiniVitalRow
                     label="Sleep"
                     current={statusSummary.sleepCurrent}
                     max={statusSummary.sleepMax}
-                    color="linear-gradient(90deg, rgba(52,211,153,0.95), rgba(34,197,94,0.9))"
+                    color={sleepTone.fill}
                     trackColor="rgba(5, 10, 18, 0.72)"
-                    pulse={sleepWarning}
-                    pulseColor={sleepCritical ? "rgba(239, 68, 68, 0.9)" : "rgba(251, 146, 60, 0.9)"}
+                    percentText={`${Math.round(statusSummary.sleepMultiplier * 100)}% XP`}
+                    radius={4}
+                    trackBorderColor={sleepTone.border}
+                    pulse={sleepTone.pulse}
+                    pulseColor={sleepTone.pulseColor}
                   />
-                </div>
 
-                <div style={{ display: "grid", gap: 12 }}>
                   <MiniVitalRow
                     label="Immunity"
                     current={statusSummary.immunityCurrent}
                     max={statusSummary.immunityMax}
-                    color="linear-gradient(90deg, rgba(96,165,250,0.95), rgba(34,197,94,0.9))"
+                    color={immunityTone.fill}
                     trackColor="rgba(5, 10, 18, 0.72)"
-                    percentText={`${statusSummary.immunityPercent.toFixed(1)}%`}
-                    radius={10}
-                    trackBorderColor="rgba(96, 165, 250, 0.24)"
-                    pulse={immunityWarning}
-                    pulseColor={immunityCritical ? "rgba(239, 68, 68, 0.9)" : "rgba(251, 146, 60, 0.9)"}
+                    percentText={formatPercent(statusSummary.immunityPercent)}
+                    radius={4}
+                    trackBorderColor={immunityTone.border}
+                    pulse={immunityTone.pulse}
+                    pulseColor={immunityTone.pulseColor}
                   />
-
-                  {statusSummary.feverActive && statusSummary.feverCurrent > 0 ? (
-                    <JobRow
-                      label="Fever"
-                      title={`${statusSummary.feverCurrent}`}
-                      subtitle={null}
-                      remainingText={statusSummary.feverActive ? "Active" : "Clear"}
-                      progressPercent={statusSummary.feverPercent}
-                      emptyText="No fever data"
-                    />
-                  ) : null}
                 </div>
               </div>
 
-              {activeJobs.length > 0 ? (
-                <>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      letterSpacing: "0.14em",
-                      textTransform: "uppercase",
-                      color: "rgba(191, 219, 254, 0.85)",
-                      marginBottom: 12,
-                    }}
-                  >
-                    Tasks / Jobs
-                  </div>
-
-                  <div style={{ display: "grid", gap: 14 }}>
-                    {activeResearch ? (
-                      <JobRow
-                        label="Research"
-                        title={activeResearch.title}
-                        subtitle={activeResearch.subtitle}
-                        remainingText={activeResearch.remainingText}
-                        progressRatio={activeResearch.progressRatio ?? 0}
-                        emptyText="No active research"
-                      />
-                    ) : null}
-
-                    {activeCraft ? (
-                      <JobRow
-                        label="Craft"
-                        title={activeCraft.title}
-                        subtitle={activeCraft.subtitle}
-                        remainingText={activeCraft.remainingText}
-                        progressRatio={activeCraft.progressRatio ?? 0}
-                        emptyText="No active hand craft"
-                      />
-                    ) : null}
-
-                    {/* Builder controls moved to the shelter card */}
-                  </div>
-                </>
-              ) : null}
+              <SkillsStatusBlock skillsSnapshot={skillsSnapshot} />
+              {/* Builder controls moved to the shelter card */}
             </div>
           ) : null}
         </div>

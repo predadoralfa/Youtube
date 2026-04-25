@@ -118,6 +118,22 @@ function resolveResearchItemWeightDelta(rt, itemCode) {
   return resolveResearchModifierDelta(rt, "item.weight_delta", itemCode);
 }
 
+function canonicalResearchContainerCode(value) {
+  const normalized = normalizeItemCode(value);
+  if (normalized.startsWith("BASKET")) {
+    return "BASKET";
+  }
+  return normalized;
+}
+
+function resolveResearchContainerMaxWeightDelta(rt, containerCode) {
+  return resolveResearchModifierDelta(
+    rt,
+    "container.max_weight_delta",
+    canonicalResearchContainerCode(containerCode)
+  );
+}
+
 function resolveResearchItemCollectTimeDelta(rt, itemCode) {
   return resolveResearchModifierDelta(rt, "item.collect_time_delta", itemCode);
 }
@@ -133,5 +149,6 @@ module.exports = {
   listUnlockedCapabilities,
   resolveResearchModifierDelta,
   resolveResearchItemWeightDelta,
+  resolveResearchContainerMaxWeightDelta,
   resolveResearchItemCollectTimeDelta,
 };

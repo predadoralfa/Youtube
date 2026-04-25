@@ -20,9 +20,30 @@ export function getAllowedSlotsForDef(def) {
 
 export function getItemLabel(inst, def) {
   if (!inst && !def) return "Unknown";
-  if (def?.name) return def.name;
+  if (def?.name) return formatBasketFamilyLabel(def.name, def?.code);
   if (def?.code) return def.code;
   return inst?.id != null ? `Instance ${inst.id}` : "Item";
+}
+
+export function formatBasketFamilyLabel(name, code = null) {
+  const rawName = String(name ?? "").trim();
+  if (!rawName) return rawName;
+
+  const normalizedCode = String(code ?? "").trim().toUpperCase();
+  const looksLikeBasket =
+    normalizedCode.startsWith("BASKET") || /^Basket(\s|$)/i.test(rawName) || /Pouch/i.test(rawName);
+  if (!looksLikeBasket) return rawName;
+
+  let shortName = rawName.replace(/\bPouch\b/gi, "").replace(/\s+/g, " ").trim();
+  shortName = shortName.replace(/\bTier\s*(\d+)\b/gi, "T$1");
+  shortName = shortName.replace(/\bBasket\s+T(?=\d+)/gi, "Basket T");
+  shortName = shortName.replace(/\s+/g, " ").trim();
+
+  if (!/^Basket\b/i.test(shortName)) {
+    shortName = `Basket ${shortName}`.trim();
+  }
+
+  return shortName;
 }
 
 export function buildInventoryIndex(snapshot) {

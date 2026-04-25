@@ -1,10 +1,28 @@
 import { InventoryGridSection } from "../components/InventoryGridSection";
+import { formatBasketFamilyLabel } from "../helpers";
 
 function normalizeKeyPart(value) {
   return String(value ?? "")
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "_");
+}
+
+function shortenGrantedRoleLabel(role) {
+  const raw = String(role ?? "").trim();
+  if (!raw.startsWith("GRANTED:")) return raw;
+
+  const parts = raw.split(":");
+  const itemCode = String(parts[1] ?? "").trim();
+  if (!itemCode) return "Storage";
+
+  const basketMatch = itemCode.match(/^BASKET(?:_T(\d+))?$/i);
+  if (!basketMatch) {
+    return itemCode.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  const tier = basketMatch[1];
+  return tier ? `Basket T${tier}` : "Basket";
 }
 
 function hasGrantedContainerComponent(def) {
@@ -29,9 +47,7 @@ function normalizeRoleLabel(role) {
   const raw = String(role ?? "").trim();
   if (!raw) return "CONTAINER";
   if (raw.startsWith("GRANTED:")) {
-    const parts = raw.split(":");
-    const itemCode = String(parts[1] ?? "").trim();
-    return itemCode ? itemCode.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : "Storage";
+    return shortenGrantedRoleLabel(raw);
   }
   return raw.toUpperCase();
 }
@@ -62,14 +78,14 @@ export function InventoryPanel(props) {
       slotRole: role,
       state: "ACTIVE",
       rev: 1,
-      def: {
-        id: `synthetic:${itemDefId}`,
-        code: itemDef?.code ?? null,
-        name: itemDef?.name ?? itemDef?.code ?? normalizeRoleLabel(role),
-        slotCount: 1,
-        maxWeight: 0,
-        allowedCategoriesMask: null,
-      },
+        def: {
+          id: `synthetic:${itemDefId}`,
+          code: itemDef?.code ?? null,
+          name: formatBasketFamilyLabel(itemDef?.name ?? itemDef?.code ?? normalizeRoleLabel(role), itemDef?.code),
+          slotCount: 1,
+          maxWeight: 0,
+          allowedCategoriesMask: null,
+        },
       slots: [
         {
           slotIndex: 0,

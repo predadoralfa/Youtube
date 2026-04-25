@@ -1,4 +1,4 @@
-import { createPlayerMesh } from "../../../entities/character/player";
+import { createPlayerMesh, disposePlayerMesh, updatePlayerMeshAnimation } from "../../../entities/character/player";
 import {
   applySelfColor,
   isEnemyEntity,
@@ -232,14 +232,30 @@ function resolveSelfVisualTarget(mesh, entity, state, sampleGroundHeight, predic
   }
 
   if (!Number.isFinite(speed) || speed <= 0) {
-    return { x: target.x, z: target.z, yaw, followAlpha };
+    return {
+      x: target.x,
+      z: target.z,
+      yaw: Number(
+          movementVisual?.lastFacingYaw ??
+          entity?.yaw ??
+          mesh.rotation.y ??
+          yaw
+      ),
+      followAlpha,
+    };
   }
 
   if (mode === "WASD" && String(entity?.action ?? "idle") !== "move") {
     return {
       x: current.x,
       z: current.z,
-      yaw,
+      yaw: Number(
+        movementVisual?.stopFacingYaw ??
+        movementVisual?.lastFacingYaw ??
+          entity?.yaw ??
+          mesh.rotation.y ??
+          yaw
+      ),
       followAlpha: 1,
     };
   }
@@ -258,9 +274,13 @@ function resolveSelfVisualTarget(mesh, entity, state, sampleGroundHeight, predic
       x: current.x + Number(dir.x ?? 0) * speed * frameStepSeconds,
       z: current.z + Number(dir.z ?? 0) * speed * frameStepSeconds,
     };
-    if (dir.x !== 0 || dir.z !== 0) {
-      yaw = Math.atan2(dir.x, dir.z);
-    }
+    yaw = Number(
+      movementVisual?.lastFacingYaw ??
+        movementVisual?.stopFacingYaw ??
+        entity?.yaw ??
+        mesh.rotation.y ??
+        yaw
+    );
   } else if (mode === "STOP") {
     if (!hasPendingLocalStop) {
       target = { x: authorityPos.x, z: authorityPos.z };
@@ -270,6 +290,13 @@ function resolveSelfVisualTarget(mesh, entity, state, sampleGroundHeight, predic
     } else {
       target = { x: authorityPos.x, z: authorityPos.z };
     }
+    yaw = Number(
+      movementVisual?.stopFacingYaw ??
+        movementVisual?.lastFacingYaw ??
+        entity?.yaw ??
+        mesh.rotation.y ??
+        yaw
+    );
   } else if (mode === "CLICK" && (movementVisual?.clickTarget || authorityClickTarget)) {
     const targetPos = shouldUseAuthorityClick
       ? authorityClickTarget
@@ -490,19 +517,31 @@ export function syncPlayerMeshes({
     );
     mesh.rotation.x = groundTilt.pitch;
     mesh.rotation.z = groundTilt.roll;
+    updatePlayerMeshAnimation(mesh, {
+      entity,
+      runtime: state.runtimeRef?.current ?? null,
+      movementVisual: state.movementVisualRef?.current ?? null,
+    });
 
-    if (
-      isSelfNow &&
-      state.debugSelfMeshLoggedRef?.current !== true
-    ) {
-      state.debugSelfMeshLoggedRef.current = true;
-      console.log(
-        `[CLIENT_SELF_MESH] entity=(${Number(entity?.pos?.x ?? NaN)}, ${Number(
-          entity?.pos?.z ?? NaN
-        )}) visual=(${Number(nextX ?? NaN)}, ${Number(nextZ ?? NaN)}) ` +
-          `mesh=(${Number(mesh.position.x ?? NaN)}, ${Number(mesh.position.z ?? NaN)})`
-      );
-    }
+    try {
+      if (localStorage.getItem("debug-man-model") === "1") {
+        const now = performance.now();
+        if (!mesh.userData.manDebugLastSyncLogAtMs || now - Number(mesh.userData.manDebugLastSyncLogAtMs) >= 1000) {
+          mesh.userData.manDebugLastSyncLogAtMs = now;
+          console.log("[MAN_MODEL_SYNC]", {
+            entityId,
+            meshPosition: mesh.position.toArray(),
+            meshRotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+            nextX,
+            nextY,
+            nextZ,
+            meshGroundY,
+            groundAnchor,
+            isSelfNow,
+          });
+        }
+      }
+    } catch {}
 
     entityPositions.set(entityId, {
       x: nextX,
@@ -521,12 +560,7 @@ export function syncPlayerMeshes({
 
     scene.remove(mesh);
     try {
-      mesh.geometry?.dispose?.();
-      if (Array.isArray(mesh.material)) {
-        for (const material of mesh.material) material?.dispose?.();
-      } else {
-        mesh.material?.dispose?.();
-      }
+      disposePlayerMesh(mesh);
     } catch {}
 
     state.meshByEntityIdRef.current.delete(entityId);
