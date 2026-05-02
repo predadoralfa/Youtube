@@ -1,7 +1,5 @@
 "use strict";
 
-const { clearInventory } = require("../../../state/inventory/store");
-const { clearEquipment } = require("../../../state/equipment/store");
 const { getRuntime } = require("../../../state/runtimeStore");
 const { ensureInventoryLoaded } = require("../../../state/inventory/loader");
 const { loadActiveCraftDefs, loadActiveCraftJobs } = require("../../../state/inventory/loader/queries");
@@ -64,8 +62,6 @@ async function emitFullAndAck(socket, invRt, eqRt, ack) {
 }
 
 async function loadInventoryContext(userId) {
-  clearInventory(userId);
-  clearEquipment(userId);
   const invRt = await ensureInventoryLoaded(userId);
   const eqRt = await ensureEquipmentLoaded(userId);
   return { invRt, eqRt };
