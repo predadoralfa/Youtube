@@ -66,6 +66,7 @@ export function InventoryBody(props) {
         />
 
         <SidebarColumn
+          containers={props.containers}
           handSlots={props.handSlots}
           dragItem={props.dragItem}
           heldStateActive={props.heldStateActive}

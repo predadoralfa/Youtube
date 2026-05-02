@@ -51,15 +51,27 @@ export function InventoryGridSection({
     <>
       {containers.map((container, cIndex) => {
         const role = container?.slotRole ?? container?.role ?? "CONTAINER";
-        const slots = container?.slots || [];
+        const slots = Array.isArray(container?.slots) ? container.slots : [];
+        const containerId = container?.id ?? container?.containerId ?? cIndex;
+        const containerKey = String(role ?? "").startsWith("GRANTED:")
+          ? role
+          : containerId;
+        const slotCount = Math.max(
+          slots.length,
+          Number(container?.def?.slotCount ?? container?.def?.slot_count ?? 0)
+        );
+        const renderedSlots = Array.from({ length: slotCount }, (_, index) => slots[index] ?? {
+          slotIndex: index,
+          itemInstanceId: null,
+          qty: 0,
+        });
 
         return (
-          <div className="inv-container" key={cIndex}>
+          <div className="inv-container" key={String(containerKey)}>
             <div className="inv-container-title">{formatContainerTitle(container, role)}</div>
             <div className={compact ? "inv-grid inv-grid--compact" : "inv-grid"}>
-              {slots.map((slot, sIndex) => {
+              {renderedSlots.map((slot, sIndex) => {
                 const slotIndex = slot?.slotIndex ?? slot?.slot ?? sIndex;
-                const containerId = container?.id ?? container?.containerId ?? cIndex;
                 const instanceId = slot?.itemInstanceId ?? slot?.item_instance_id ?? null;
                 const qty = Number(slot?.qty ?? 0);
 
@@ -103,7 +115,7 @@ export function InventoryGridSection({
                       dragItem ? "is-drop-ready" : "",
                       isHeldSource ? "is-held-source" : "",
                     ].filter(Boolean).join(" ")}
-                    key={`${cIndex}-${sIndex}`}
+                    key={`${String(containerKey)}:${slotIndex}:${sIndex}`}
                     draggable={Boolean(instanceId) && !heldStateActive}
                     title={compact ? hoverLabel : undefined}
                     onDragStart={

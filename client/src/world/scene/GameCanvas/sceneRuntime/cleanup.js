@@ -7,6 +7,7 @@ export function cleanupSceneRuntime({
   boundsMaterial,
   proceduralWorldGroup,
   onResize,
+  statsPanel,
   state,
 }) {
   window.removeEventListener("resize", onResize);
@@ -15,6 +16,10 @@ export function cleanupSceneRuntime({
   if (canvas && canvas.parentNode) {
     canvas.parentNode.removeChild(canvas);
   }
+
+  try {
+    statsPanel?.dispose?.();
+  } catch {}
 
   for (const [, mesh] of state.meshByEntityIdRef.current.entries()) {
     scene.remove(mesh);

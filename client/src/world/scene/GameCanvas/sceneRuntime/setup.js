@@ -5,6 +5,7 @@ import { applyDayNightCycle } from "../../light/dayNightCycle";
 import { readCameraStateFromRuntime } from "../helpers";
 import { buildGroundGeometry, createGroundSampler, createGroundSamplerFromMesh } from "./terrain";
 import { clearProceduralWorld, syncProceduralWorld } from "./procedural";
+import { createStatsPanel } from "../../debug/createStatsPanel";
 
 function buildGroundMaterial(visual = {}) {
   const groundColor =
@@ -96,6 +97,7 @@ export function setupSceneRuntime({
   renderer.domElement.style.top = "0";
   renderer.domElement.style.zIndex = "0";
   container.appendChild(renderer.domElement);
+  const statsPanel = createStatsPanel(container);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
@@ -146,6 +148,7 @@ export function setupSceneRuntime({
     sizeZ,
     scene,
     renderer,
+    statsPanel,
     lightRig,
     groundMesh,
     boundsLine: bounds,

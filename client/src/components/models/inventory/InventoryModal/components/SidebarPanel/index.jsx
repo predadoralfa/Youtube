@@ -17,6 +17,7 @@ export function SidebarPanel(props) {
 
       {props.activeSidebarTab === "equipment" && !equipmentLocked ? (
         <EquipmentTab
+          containers={props.containers}
           wearSlotRows={props.wearSlotRows}
           dragItem={props.dragItem}
           heldStateActive={props.heldStateActive}
@@ -25,6 +26,7 @@ export function SidebarPanel(props) {
           handleDragEnd={props.handleDragEnd}
           handleInventoryDropHint={props.handleInventoryDropHint}
           handleEquipmentSlotMouseUp={props.handleEquipmentSlotMouseUp}
+          setLocalNotice={props.setLocalNotice}
         />
       ) : props.activeSidebarTab === "equipment" ? (
         <PlaceholderTab

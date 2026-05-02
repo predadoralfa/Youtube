@@ -12,6 +12,7 @@ const {
   persistSlot,
 } = require("./helpers");
 const { getGrantedContainerSlotRole } = require("../../../service/equipmentService/grantsContainer");
+const DEBUG_INV = process.env.NODE_ENV !== "production";
 
 async function place(invRt, intent, tx) {
   const heldState = assertHeldState(invRt);
@@ -20,6 +21,21 @@ async function place(invRt, intent, tx) {
   const containerId = intent?.containerId ?? intent?.to?.containerId ?? intent?.to?.container_id;
   const slotIndexRaw = intent?.slotIndex ?? intent?.to?.slotIndex ?? intent?.to?.slot;
   const slotIndex = Number(slotIndexRaw);
+
+  if (DEBUG_INV) {
+    console.debug("[INV_DEBUG][server][place:incoming]", {
+      containerId,
+      slotIndex,
+      heldState: {
+        itemInstanceId: heldState.itemInstanceId,
+        itemDefId: heldState.itemDefId,
+        sourceContainerId: heldState.sourceContainerId,
+        sourceSlotIndex: heldState.sourceSlotIndex,
+        qty: heldState.qty,
+        mode: heldState.mode,
+      },
+    });
+  }
 
   const { container, slot } = getSlot(invRt, containerId, slotIndex);
   const heldInstance = getItemInstance(invRt, heldState.itemInstanceId);
@@ -37,6 +53,18 @@ async function place(invRt, intent, tx) {
   const sourceRole = sourceContainer?.slotRole ?? null;
   const ownGrantedRole =
     heldDef && sourceRole ? getGrantedContainerSlotRole(heldDef, sourceRole) : null;
+
+  if (DEBUG_INV) {
+    console.debug("[INV_DEBUG][server][place:resolved]", {
+      containerId: container?.id ?? null,
+      containerRole: container?.slotRole ?? null,
+      slotCount: container?.slotCount ?? null,
+      sourceContainerId: sourceContainer?.id ?? null,
+      sourceRole,
+      ownGrantedRole,
+      targetSlotIndex: slotIndex,
+    });
+  }
 
   if (ownGrantedRole && String(container?.slotRole ?? "") === String(ownGrantedRole)) {
     throw invError(

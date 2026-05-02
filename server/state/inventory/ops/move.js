@@ -2,6 +2,7 @@
 const { assertContainerActive, assertSlotIndex, assertQtyPositive } = require("../validate/rules");
 const { INV_ERR, invError } = require("../validate/errors");
 const { getGrantedContainerSlotRole } = require("../../../service/equipmentService/grantsContainer");
+const DEBUG_INV = process.env.NODE_ENV !== "production";
 
 function getContainerByRole(invRt, role) {
   return invRt.containersByRole.get(role) || null;
@@ -19,6 +20,17 @@ function move(invRt, intent) {
 
   const qty = intent?.qty == null ? null : Number(intent.qty);
   assertQtyPositive(qty);
+
+  if (DEBUG_INV) {
+    console.debug("[INV_DEBUG][server][move:incoming]", {
+      fromRole,
+      fromSlot,
+      toRole,
+      toSlot,
+      qty,
+      held: Boolean(invRt?.heldState),
+    });
+  }
 
   const srcC = getContainerByRole(invRt, fromRole);
   const dstC = getContainerByRole(invRt, toRole);
@@ -41,6 +53,16 @@ function move(invRt, intent) {
   const originalSrcInstanceId = src.itemInstanceId;
   const ownGrantedRole =
     srcDef && srcC?.slotRole ? getGrantedContainerSlotRole(srcDef, srcC.slotRole) : null;
+
+  if (DEBUG_INV) {
+    console.debug("[INV_DEBUG][server][move:resolved]", {
+      sourceContainerId: srcC?.id ?? null,
+      sourceRole: srcC?.slotRole ?? null,
+      targetContainerId: dstC?.id ?? null,
+      targetRole: dstC?.slotRole ?? null,
+      ownGrantedRole,
+    });
+  }
   if (ownGrantedRole && String(dstC?.slotRole ?? "") === String(ownGrantedRole)) {
     throw invError(
       INV_ERR.INVALID_TARGET,

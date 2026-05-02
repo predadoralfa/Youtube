@@ -5,6 +5,18 @@ function asInt(n, fallback = 0) {
   return Number.isFinite(x) ? x : fallback;
 }
 
+function parseJsonObject(value) {
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  const raw = value.trim();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return value;
+  }
+}
+
 function normalizeSlotDefRow(row) {
   const plain = row.get ? row.get({ plain: true }) : row;
   return {
@@ -22,7 +34,7 @@ function normalizeItemDefComponentRow(row) {
     id: String(plain.id),
     itemDefId: String(plain.item_def_id),
     componentType: plain.component_type ?? null,
-    dataJson: plain.data_json ?? null,
+    dataJson: parseJsonObject(plain.data_json ?? null),
     version: asInt(plain.version, 1),
   };
 }
@@ -60,6 +72,7 @@ function normalizeItemInstanceRow(row) {
 
 module.exports = {
   asInt,
+  parseJsonObject,
   normalizeSlotDefRow,
   normalizeItemDefComponentRow,
   normalizeItemDefRow,

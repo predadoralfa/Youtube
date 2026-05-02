@@ -77,6 +77,27 @@ export function buildEquipmentIndex(snapshot) {
   return slotMap;
 }
 
+export function buildContainerIndex(containers) {
+  const slotMap = new Map();
+  for (const container of Array.isArray(containers) ? containers : []) {
+    const id = container?.id ?? container?.containerId ?? null;
+    if (id != null) slotMap.set(String(id), container);
+  }
+  return slotMap;
+}
+
+export function hasContainerItems(container) {
+  return Array.isArray(container?.slots)
+    ? container.slots.some((slot) => Number(slot?.qty ?? 0) > 0 || slot?.itemInstanceId != null)
+    : false;
+}
+
+export function hasContainerItemsById(containers, containerId) {
+  if (containerId == null) return false;
+  const container = buildContainerIndex(containers).get(String(containerId)) ?? null;
+  return hasContainerItems(container);
+}
+
 export function clampSplitQty(raw, maxQty) {
   const n = Number(raw);
   if (!Number.isFinite(n)) return 1;
@@ -111,6 +132,8 @@ export function buildSlotList(slotCodes, equipmentIndex, fallbackKind) {
       sourceContainerId: slot?.sourceContainerId ?? null,
       sourceSlotIndex: slot?.sourceSlotIndex ?? null,
       sourceRole: slot?.sourceRole ?? slotCode,
+      grantedContainerId: slot?.grantedContainerId ?? null,
+      grantedContainerSlotCount: slot?.grantedContainerSlotCount ?? null,
     };
   });
 }

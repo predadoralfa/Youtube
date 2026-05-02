@@ -3,6 +3,7 @@
 const db = require("../../../models");
 const { INV_ERR, invError } = require("../validate/errors");
 const { assertContainerActive, assertSlotIndex } = require("../validate/rules");
+const DEBUG_INV = process.env.NODE_ENV !== "production";
 
 function toNum(v, fallback = 0) {
   const n = Number(v);
@@ -11,15 +12,28 @@ function toNum(v, fallback = 0) {
 
 function getContainerById(invRt, containerId) {
   const key = String(containerId);
-  return (
+  const container =
     invRt?.containersById?.get(key) ||
     invRt?.containersByRole?.get(key) ||
-    null
-  );
+    null;
+  if (!container && DEBUG_INV) {
+    console.debug("[INV_DEBUG][server][getContainerById:not-found]", {
+      containerId: key,
+      availableContainerIds: Array.from(invRt?.containersById?.keys?.() ?? []),
+      availableRoles: Array.from(invRt?.containersByRole?.keys?.() ?? []),
+    });
+  }
+  return container;
 }
 
 function getSlot(invRt, containerId, slotIndex) {
   const container = getContainerById(invRt, containerId);
+  if (!container && DEBUG_INV) {
+    console.debug("[INV_DEBUG][server][getSlot:missing-container]", {
+      containerId: String(containerId),
+      slotIndex: Number(slotIndex),
+    });
+  }
   assertContainerActive(container);
   assertSlotIndex(container, slotIndex);
   return { container, slot: container.slots[slotIndex] };

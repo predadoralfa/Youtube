@@ -12,6 +12,10 @@ const { assertCanAddItemWeight } = require("../../../../state/inventory/weight")
 const { ensureEquipmentLoaded } = require("../../../../state/equipment/loader");
 const { ensureResearchLoaded } = require("../../../../service/researchService");
 const { awardSkillXp } = require("../../../../service/skillProgressionService");
+const {
+  removeGrantedContainerForItem,
+  removeGrantedContainersForUnequippedItemCode,
+} = require("../../../../service/equipmentService/grantsContainer");
 const { emitFullAndAck, resolveUserOrAck } = require("../context");
 const { safeAck } = require("../shared");
 const { getRuntime } = require("../../../../state/runtimeStore");
@@ -171,7 +175,15 @@ function resolveWeaponDurabilityMax(itemDef) {
   return Number.isFinite(durabilityMax) && durabilityMax > 0 ? Math.floor(durabilityMax) : null;
 }
 
-async function startCraftJob(invRt, craftDef, tx) {
+function hasGrantedContainerComponent(itemDef) {
+  const components = Array.isArray(itemDef?.components) ? itemDef.components : [];
+  return components.some((component) => {
+    const type = String(component?.component_type ?? component?.componentType ?? "").toUpperCase();
+    return type === "GRANTS_CONTAINER";
+  });
+}
+
+async function startCraftJob(invRt, eqRt, craftDef, tx) {
   const recipeItems = Array.isArray(craftDef.recipeItems) ? craftDef.recipeItems : [];
   const inputItems = recipeItems.filter((item) => String(item.role ?? "INPUT").toUpperCase() === "INPUT");
   const ingredientGroups = [];
@@ -213,6 +225,16 @@ async function startCraftJob(invRt, craftDef, tx) {
   for (const group of ingredientGroups) {
     for (const match of group.slots) {
       const slotIndex = match.container.slots.indexOf(match.slot);
+      const consumedItemInstanceId = match.slot.itemInstanceId;
+      const consumedItemInstance =
+        consumedItemInstanceId != null
+          ? invRt.itemInstanceById?.get(String(consumedItemInstanceId)) ?? null
+          : null;
+      const consumedItemDef =
+        consumedItemInstance?.itemDefId != null
+          ? invRt.itemDefsById?.get?.(String(consumedItemInstance.itemDefId)) ?? null
+          : null;
+      const sourceSlotCode = String(match.container?.slotRole ?? "").trim();
       match.slot.qty = Number(match.slot.qty ?? 0) - match.take;
       if (match.slot.qty <= 0) {
         if (match.slot.itemInstanceId != null) {
@@ -220,6 +242,21 @@ async function startCraftJob(invRt, craftDef, tx) {
         }
         match.slot.itemInstanceId = null;
         match.slot.qty = 0;
+        if (consumedItemDef && sourceSlotCode && hasGrantedContainerComponent(consumedItemDef)) {
+          const itemCode = String(consumedItemDef.code ?? "").trim();
+          await removeGrantedContainersForUnequippedItemCode({
+            playerId: invRt.userId,
+            itemCode,
+            equipmentRt: eqRt,
+            tx,
+          });
+          await removeGrantedContainerForItem({
+            playerId: invRt.userId,
+            slotCode: sourceSlotCode,
+            itemDef: consumedItemDef,
+            tx,
+          });
+        }
       }
       touchedContainers.add(String(match.container.id));
       touchedSlots.push({ container: match.container, slotIndex, slot: match.slot });
@@ -386,7 +423,7 @@ function registerCraftEvent(socket) {
         assertCraftSkillLevel(craftDef, invRt);
 
         await db.sequelize.transaction(async (tx) => {
-          await startCraftJob(invRt, craftDef, tx);
+          await startCraftJob(invRt, eqRt, craftDef, tx);
         });
 
         invRt.craftJobs = await loadActiveCraftJobs(userId);

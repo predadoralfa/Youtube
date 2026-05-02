@@ -5,6 +5,7 @@ export function SidebarColumn(props) {
   return (
     <div className="inv-sidebar">
       <UsagePanel
+        containers={props.containers}
         handSlots={props.handSlots}
         dragItem={props.dragItem}
         heldStateActive={props.heldStateActive}
@@ -14,6 +15,7 @@ export function SidebarColumn(props) {
         handleInventoryDropHint={props.handleInventoryDropHint}
         handleEquipmentSlotMouseUp={props.handleEquipmentSlotMouseUp}
         openContextMenuFromMouseDown={props.openContextMenuFromMouseDown}
+        setLocalNotice={props.setLocalNotice}
       />
 
       <SidebarPanel
@@ -27,6 +29,7 @@ export function SidebarColumn(props) {
         handleDragEnd={props.handleDragEnd}
         handleInventoryDropHint={props.handleInventoryDropHint}
         handleEquipmentSlotMouseUp={props.handleEquipmentSlotMouseUp}
+        containers={props.containers}
         selectedMacroFood={props.selectedMacroFood}
         selectedMacroFoodLabel={props.selectedMacroFoodLabel}
         macroFoodItemInstanceId={props.macroFoodItemInstanceId}

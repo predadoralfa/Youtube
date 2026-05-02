@@ -1,12 +1,30 @@
 import { useCallback } from "react";
 
 export function useGameShellInventoryActions({ emitInventoryAction, emitEquipmentAction }) {
+  const debugEnabled = import.meta.env.DEV;
   const onPickupInventoryItem = useCallback(
-    ({ containerId, slotIndex }) =>
-      emitInventoryAction("inv:pickup", {
+    ({ containerId, slotIndex }) => {
+      if (debugEnabled) {
+        console.debug("[INV_DEBUG][client][pickup]", {
+          containerId,
+          slotIndex,
+        });
+      }
+
+      const ok = emitInventoryAction("inv:pickup", {
         containerId: String(containerId),
         slotIndex: Number(slotIndex),
-      }),
+      });
+
+      if (debugEnabled && !ok) {
+        console.debug("[INV_DEBUG][client][pickup:emit-failed]", {
+          containerId,
+          slotIndex,
+        });
+      }
+
+      return ok;
+    },
     [emitInventoryAction]
   );
 

@@ -1,7 +1,10 @@
+import { hasContainerItemsById } from "../helpers";
+
 export function createDragHandlers({
   dragItem,
   setDragItem,
   heldStateActive,
+  containers,
   equipmentIndex,
   setLocalNotice,
   dropHandledRef,
@@ -10,6 +13,7 @@ export function createDragHandlers({
   onEquipItemToSlot,
   onDropItemToWorld,
 }) {
+  const debugEnabled = import.meta.env.DEV;
   const clearDrag = () => setDragItem(null);
 
   const handleDragStart = (payload) => (event) => {
@@ -40,7 +44,30 @@ export function createDragHandlers({
     if (!payload?.itemInstanceId) return;
 
     const sourceKind = payload.sourceKind || "inventory";
+    const fromRole = payload.sourceRole ?? payload.fromSlotCode ?? null;
     const allowed = Array.isArray(payload.allowedSlots) ? payload.allowedSlots : [];
+
+    if (debugEnabled) {
+      console.debug("[INV_DEBUG][client][drop-hint]", {
+        slotCode,
+        sourceKind,
+        fromRole,
+        fromSlotIndex: payload.sourceSlotIndex ?? null,
+        sourceContainerId: payload.sourceContainerId ?? null,
+        allowed,
+      });
+    }
+
+    if (
+      sourceKind === "equipment" &&
+      payload.grantedContainerId != null &&
+      hasContainerItemsById(containers, payload.grantedContainerId)
+    ) {
+      setLocalNotice("A cesta tem itens dentro e nao pode ser movida.");
+      clearDrag();
+      return;
+    }
+
     if (sourceKind === "inventory" && !allowed.includes(String(slotCode))) {
       setLocalNotice(`Item not allowed in ${slotCode}`);
       clearDrag();
@@ -48,7 +75,6 @@ export function createDragHandlers({
     }
 
     const slot = equipmentIndex.get(String(slotCode)) ?? null;
-    const fromRole = payload.sourceRole ?? payload.fromSlotCode ?? null;
     const toRole = slot?.sourceRole ?? slotCode;
     const canLegacyMove =
       sourceKind === "legacy-inventory" &&
@@ -106,6 +132,22 @@ export function createDragHandlers({
     }
 
     if (!payload?.itemInstanceId) return;
+
+    if (debugEnabled) {
+      console.debug("[INV_DEBUG][client][inventory-drop]", {
+        containerId,
+        slotIndex,
+        role,
+        payload: {
+          itemInstanceId: payload.itemInstanceId ?? null,
+          sourceKind: payload.sourceKind ?? null,
+          sourceRole: payload.sourceRole ?? payload.fromSlotCode ?? null,
+          sourceContainerId: payload.sourceContainerId ?? null,
+          sourceSlotIndex: payload.sourceSlotIndex ?? null,
+          qty: payload.qty ?? null,
+        },
+      });
+    }
 
     const fromRole = payload.sourceRole ?? payload.fromSlotCode ?? null;
     const fromSlotIndex = payload.sourceSlotIndex ?? null;

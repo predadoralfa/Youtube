@@ -1,6 +1,8 @@
 import { InventoryItemIcon } from "../InventoryItemIconBridge";
+import { hasContainerItemsById } from "../helpers";
 
 export function UsagePanel({
+  containers,
   handSlots,
   dragItem,
   heldStateActive,
@@ -10,7 +12,10 @@ export function UsagePanel({
   handleInventoryDropHint,
   handleEquipmentSlotMouseUp,
   openContextMenuFromMouseDown,
+  setLocalNotice,
 }) {
+  const blockedMoveMessage = "A cesta tem itens dentro e nao pode ser movida.";
+
   return (
     <section className="inv-panel inv-panel--hands">
       <div className="inv-panel-title">USAGE</div>
@@ -20,21 +25,53 @@ export function UsagePanel({
           const occupied = Boolean(slot.itemInstanceId);
           const qty = Number(slot.qty ?? 0);
           const compatible = dragItem ? isSlotCompatible(dragItem.itemInstanceId, slot.slotCode) : false;
-          const canDrag = occupied && !heldStateActive;
+          const lockedByGrantedContainer =
+            occupied && Boolean(slot.grantedContainerId) && hasContainerItemsById(containers, slot.grantedContainerId);
+          const canDrag = occupied && !heldStateActive && !lockedByGrantedContainer;
+          const handleMouseUp = (event) => {
+            if (lockedByGrantedContainer) {
+              event.preventDefault?.();
+              event.stopPropagation?.();
+              setLocalNotice?.(blockedMoveMessage);
+              return;
+            }
+            handleEquipmentSlotMouseUp(slot, occupied)(event);
+          };
 
           return (
             <div
               className={["equip-slot", occupied ? "is-occupied" : "is-empty", compatible ? "is-drop-ready" : ""].filter(Boolean).join(" ")}
               key={slot.slotCode}
               draggable={canDrag}
-              onDragStart={canDrag ? handleDragStart({ itemInstanceId: slot.itemInstanceId, fromSlotCode: slot.slotCode, sourceKind: "equipment" }) : undefined}
+              onDragStart={
+                canDrag
+                  ? handleDragStart({
+                      itemInstanceId: slot.itemInstanceId,
+                      fromSlotCode: slot.slotCode,
+                      sourceKind: "equipment",
+                      sourceContainerId: slot.sourceContainerId ?? null,
+                      sourceSlotIndex: slot.sourceSlotIndex ?? null,
+                      sourceRole: slot.sourceRole ?? slot.slotCode,
+                      grantedContainerId: slot.grantedContainerId ?? null,
+                      allowedSlots: slot.item?.allowedSlots ?? [],
+                      itemCategory: slot.item?.category ?? null,
+                      itemName: slot.item?.name || slot.item?.code || "Item",
+                    })
+                  : undefined
+              }
               onDragEnd={handleDragEnd}
               onDragOver={(e) => {
                 if (dragItem) e.preventDefault();
               }}
               onDrop={handleInventoryDropHint(slot.slotCode)}
-              onMouseUp={handleEquipmentSlotMouseUp(slot, occupied)}
+              onMouseUp={handleMouseUp}
               onMouseDown={(event) => {
+                if (lockedByGrantedContainer) {
+                  event.preventDefault?.();
+                  event.stopPropagation?.();
+                  setLocalNotice?.(blockedMoveMessage);
+                  return;
+                }
                 if (openContextMenuFromMouseDown(slot, event)) return;
                 event.stopPropagation?.();
               }}

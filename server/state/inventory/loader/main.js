@@ -6,6 +6,7 @@ const { ensureEquipmentLoaded } = require("../../equipment/loader");
 const {
   ensureGrantedContainerForItem,
   getGrantedContainerSlotRole,
+  removeGrantedContainersForUnequippedItemCode,
 } = require("../../../service/equipmentService/grantsContainer");
 const {
   ensurePrimitiveShelterMaterialsContainer,
@@ -23,6 +24,8 @@ const {
   loadActiveCraftJobs,
 } = require("./queries");
 const { loadUserSkillSummaries } = require("../../../service/skillProgressionService");
+const { clearInventory } = require("../store");
+const DEBUG_INV = process.env.NODE_ENV !== "production";
 const {
   uniq,
   makeEmptySlots,
@@ -52,6 +55,20 @@ function getGrantedContainerComponent(def) {
       return type === "GRANTS_CONTAINER";
     }) ?? null
   );
+}
+
+function resolveGrantedContainerSlotCount(itemDef) {
+  const component = getGrantedContainerComponent(itemDef);
+  const data = component?.dataJson ?? component?.data_json ?? null;
+  const raw =
+    data?.slotCount ??
+    data?.slot_count ??
+    data?.containerSlotCount ??
+    data?.container_slot_count ??
+    null;
+  const slotCount = Number(raw);
+  if (!Number.isFinite(slotCount) || slotCount <= 0) return null;
+  return Math.max(1, Math.floor(slotCount));
 }
 
 function firstEmptySlot(container) {
@@ -126,6 +143,73 @@ async function repairSelfContainedGrantedContainers(invRt, equipmentRt) {
   }
 }
 
+async function inventoryCacheNeedsRefresh(invRt, equipmentRt) {
+  const equipmentSlots = Object.values(equipmentRt?.equipmentBySlotCode ?? {});
+  for (const equipped of equipmentSlots) {
+    const itemDef = equipped?.itemDef ?? null;
+    if (!itemDef || !hasGrantedContainerComponent(itemDef)) continue;
+
+    const expectedSlotCount = resolveGrantedContainerSlotCount(itemDef);
+    if (!expectedSlotCount) continue;
+
+    const sourceRole = String(equipped.slotCode ?? "").trim();
+    if (!sourceRole) continue;
+
+    const grantedRole = getGrantedContainerSlotRole(itemDef, sourceRole);
+    const grantedContainer = invRt?.containersByRole?.get(grantedRole) ?? null;
+    if (!grantedContainer) return true;
+
+    const currentSlotCount = Number(
+      grantedContainer?.def?.slotCount ??
+        grantedContainer?.def?.slot_count ??
+        grantedContainer?.slots?.length ??
+        0
+    );
+    if (currentSlotCount !== expectedSlotCount) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function bootstrapGrantedContainersFromLegacyHands(invRt) {
+  let changed = false;
+  for (const container of invRt?.containers ?? []) {
+    const role = String(container?.slotRole ?? "").trim().toUpperCase();
+    if (role !== "HAND_L" && role !== "HAND_R") continue;
+
+    for (const slot of Array.isArray(container?.slots) ? container.slots : []) {
+      const itemInstanceId = slot?.itemInstanceId;
+      if (itemInstanceId == null) continue;
+
+      const instance = invRt?.itemInstanceById?.get?.(String(itemInstanceId)) ?? null;
+      if (!instance) continue;
+
+      const itemDef = invRt?.itemDefsById?.get?.(String(instance.itemDefId)) ?? null;
+      if (!itemDef || !hasGrantedContainerComponent(itemDef)) continue;
+
+      if (DEBUG_INV) {
+        console.debug("[INV_DEBUG][loader][bootstrapGrantedFromHand]", {
+          handRole: role,
+          itemCode: itemDef.code ?? null,
+          itemInstanceId: String(itemInstanceId),
+        });
+      }
+
+      const result = await ensureGrantedContainerForItem({
+        playerId: invRt.userId,
+        slotCode: role,
+        itemDef,
+      });
+
+      if (result?.changed) changed = true;
+    }
+  }
+
+  return changed;
+}
+
 async function loadInventoryRuntime(userIdRaw, options = {}) {
   const userId = String(userIdRaw);
   const { ensureStarterInventory } = require("../../../service/inventoryProvisioning");
@@ -196,6 +280,13 @@ async function loadInventoryRuntime(userIdRaw, options = {}) {
 
     if (!hasGrantedContainer) continue;
 
+    if (DEBUG_INV) {
+      console.debug("[INV_DEBUG][loader][ensureGrantedContainer]", {
+        slotCode: equipped.slotCode ?? null,
+        itemCode: equipped?.itemDef?.code ?? null,
+      });
+    }
+
     await ensureGrantedContainerForItem({
       playerId: userId,
       slotCode: equipped.slotCode,
@@ -205,6 +296,15 @@ async function loadInventoryRuntime(userIdRaw, options = {}) {
 
   const ownerRows = await loadOwnersForPlayer(userId);
   const owners = ownerRows.map(normalizeOwnerRow);
+  if (DEBUG_INV) {
+    console.debug("[INV_DEBUG][loader][owners]", {
+      userId,
+      owners: owners.map((owner) => ({
+        containerId: owner.containerId,
+        slotRole: owner.slotRole,
+      })),
+    });
+  }
 
   const containerIds = uniq(owners.map((o) => o.containerId));
   const containerRows = await loadContainersByIds(containerIds);
@@ -315,35 +415,117 @@ async function loadInventoryRuntime(userIdRaw, options = {}) {
     def.components = itemDefComponentsById.get(String(id)) || [];
   }
 
-  if (!options.skipGrantedContainerRepair) {
-    let createdGrantedContainer = false;
-    for (const container of containers) {
-      const sourceRole = String(container?.slotRole ?? "").trim();
-      if (!sourceRole || sourceRole.startsWith("GRANTED:")) continue;
+  if (!options.skipGrantedContainerBootstrap) {
+    const bootstrapped = await bootstrapGrantedContainersFromLegacyHands({
+      userId,
+      containers,
+      containersById,
+      containersByRole,
+      itemInstanceById,
+      itemDefsById,
+    });
 
-      for (const slot of container?.slots ?? []) {
-        if (!slot?.itemInstanceId) continue;
+    if (bootstrapped) {
+      clearInventory(userId);
+      return loadInventoryRuntime(userId, {
+        ...options,
+        skipGrantedContainerBootstrap: true,
+      });
+    }
+  }
 
-        const itemInstance = itemInstanceById.get(String(slot.itemInstanceId)) || null;
-        if (!itemInstance) continue;
-
-        const itemDef = itemDefsById.get(String(itemInstance.itemDefId)) || null;
-        if (!itemDef || !hasGrantedContainerComponent(itemDef)) continue;
-
-        const result = await ensureGrantedContainerForItem({
-          playerId: userId,
-          slotCode: sourceRole,
-          itemDef,
-        });
-
-        if (result?.created) {
-          createdGrantedContainer = true;
+  if (!options.skipGrantedContainerCleanup) {
+    const activeItemCodes = new Set();
+    const activeGrantedRoleMap = new Map();
+    for (const equipped of Object.values(equipmentRt?.equipmentBySlotCode ?? {})) {
+      const itemCode = String(
+        equipped?.itemDef?.code ??
+          equipmentRt?.itemDefsById?.get?.(String(equipped?.itemInstance?.itemDefId ?? ""))?.code ??
+          ""
+      )
+        .trim()
+        .toUpperCase();
+      if (itemCode) activeItemCodes.add(itemCode);
+      if (itemCode && equipped?.itemDef && equipped?.slotCode) {
+        const grantedRole = getGrantedContainerSlotRole(equipped.itemDef, equipped.slotCode);
+        const grantedContainerId = containersByRole.get(grantedRole)?.id ?? null;
+        if (grantedContainerId != null) {
+          activeGrantedRoleMap.set(String(grantedRole).trim().toUpperCase(), String(grantedContainerId));
         }
       }
     }
 
-    if (createdGrantedContainer) {
-      return loadInventoryRuntime(userId, { skipGrantedContainerRepair: true });
+    for (const container of containers) {
+      const role = String(container?.slotRole ?? "").trim().toUpperCase();
+      if (role !== "HAND_L" && role !== "HAND_R") continue;
+
+      for (const slot of Array.isArray(container?.slots) ? container.slots : []) {
+        const itemInstanceId = slot?.itemInstanceId;
+        if (itemInstanceId == null) continue;
+
+        const instance = itemInstanceById.get(String(itemInstanceId)) ?? null;
+        if (!instance) continue;
+
+        const itemDef = itemDefsById.get(String(instance.itemDefId)) ?? null;
+        if (!itemDef) continue;
+
+        const itemCode = String(itemDef.code ?? "").trim().toUpperCase();
+        if (itemCode) activeItemCodes.add(itemCode);
+        if (hasGrantedContainerComponent(itemDef)) {
+          const grantedRole = getGrantedContainerSlotRole(itemDef, role);
+          const grantedContainerId = containersByRole.get(grantedRole)?.id ?? null;
+          if (grantedContainerId != null) {
+            activeGrantedRoleMap.set(String(grantedRole).trim().toUpperCase(), String(grantedContainerId));
+          }
+        }
+      }
+    }
+
+    const grantedCleanupRows = await db.GaContainerOwner.findAll({
+      where: {
+        owner_kind: "PLAYER",
+        owner_id: Number(userId),
+        slot_role: {
+          [db.Sequelize.Op.like]: "GRANTED:%",
+        },
+      },
+    });
+
+    const grantedItemCodes = new Set();
+    for (const owner of grantedCleanupRows) {
+      const role = String(owner?.slot_role ?? "");
+      const parts = role.split(":");
+      if (parts.length < 3) continue;
+      grantedItemCodes.add(parts[1]);
+    }
+
+    if (DEBUG_INV && grantedItemCodes.size) {
+      console.debug("[INV_DEBUG][loader][grantedCleanup]", {
+        userId,
+        grantedItemCodes: Array.from(grantedItemCodes),
+        activeItemCodes: Array.from(activeItemCodes),
+      });
+    }
+
+    let cleaned = false;
+    for (const itemCode of grantedItemCodes) {
+      const result = await removeGrantedContainersForUnequippedItemCode({
+        playerId: userId,
+        itemCode,
+        equipmentRt,
+        equippedItemCodes: activeItemCodes,
+        activeGrantedRoleMap,
+        inventoryContainers: containers,
+      });
+      if (result?.removedCount > 0) cleaned = true;
+    }
+
+    if (cleaned) {
+      clearInventory(userId);
+      return loadInventoryRuntime(userId, {
+        ...options,
+        skipGrantedContainerCleanup: true,
+      });
     }
   }
 
@@ -379,7 +561,14 @@ async function ensureInventoryLoaded(userId) {
   const key = String(userId);
 
   const cached = getInventory(key);
-  if (cached) return cached;
+  if (cached) {
+    const equipmentRt = await ensureEquipmentLoaded(key);
+    if (!(await inventoryCacheNeedsRefresh(cached, equipmentRt))) {
+      return cached;
+    }
+
+    clearInventory(key);
+  }
 
   const rt = await loadInventoryRuntime(key);
   setInventory(key, rt);

@@ -121,6 +121,8 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
       });
     }
 
+    runtime.worldDebugGui?.syncSelectedObject?.(state.selectedObjectRef.current ?? null);
+
     applyDayNightCycle({
       scene: runtime.scene,
       renderer: runtime.renderer,
@@ -130,6 +132,7 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
     });
 
     runtime.renderer.render(runtime.scene, runtime.cameraApi.camera);
+    runtime.statsPanel?.stats?.update?.();
     requestAnimationFrame(tick);
   };
 

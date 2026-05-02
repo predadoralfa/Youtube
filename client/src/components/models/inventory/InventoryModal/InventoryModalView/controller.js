@@ -22,6 +22,7 @@ export function createInventoryModalController(state, props) {
     dragItem: state.dragItem,
     setDragItem: state.setDragItem,
     heldStateActive: state.heldStateActive,
+    containers: state.containers,
     equipmentIndex: state.equipmentIndex,
     setLocalNotice: state.setLocalNotice,
     dropHandledRef: state.dropHandledRef,

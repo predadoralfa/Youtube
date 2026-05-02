@@ -36,6 +36,59 @@ function resolveContainerDefCode(itemDef, component) {
   return String(fromComponent ?? itemDef?.code ?? "").trim();
 }
 
+function pickFirstEmptySlot(container) {
+  if (!container || !Array.isArray(container.slots)) return null;
+  const slotIndex = container.slots.findIndex((slot) => !slot?.itemInstanceId);
+  if (slotIndex < 0) return null;
+  return { container, slotIndex, slot: container.slots[slotIndex] };
+}
+
+function pickCleanupDestinationContainer(inventoryContainers = [], sourceRole = null) {
+  const blockedRole = String(sourceRole ?? "").trim();
+  for (const container of inventoryContainers ?? []) {
+    const role = String(container?.slotRole ?? "").trim();
+    if (!role || role.startsWith("GRANTED:")) continue;
+    if (blockedRole && role === blockedRole) continue;
+    const emptySlot = pickFirstEmptySlot(container);
+    if (emptySlot) {
+      return emptySlot.container.id;
+    }
+  }
+  return null;
+}
+
+function findActiveGrantedDestinationContainerId({
+  inventoryContainers = [],
+  equipmentRt = null,
+  itemCode = null,
+  sourceRole = null,
+}) {
+  const normalizedItemCode = normalizeKeyPart(itemCode);
+  if (!normalizedItemCode) return null;
+
+  const containersByRole = new Map(
+    (inventoryContainers ?? [])
+      .map((container) => [String(container?.slotRole ?? "").trim().toUpperCase(), container])
+      .filter(([role]) => Boolean(role))
+  );
+
+  for (const equipped of Object.values(equipmentRt?.equipmentBySlotCode ?? {})) {
+    const equippedCode = normalizeKeyPart(equipped?.itemDef?.code ?? "");
+    const equippedSlotCode = String(equipped?.slotCode ?? "").trim().toUpperCase();
+    if (!equippedCode || equippedCode !== normalizedItemCode) continue;
+    if (!equippedSlotCode || equippedSlotCode === String(sourceRole ?? "").trim().toUpperCase()) continue;
+
+    const grantedRole = `GRANTED:${normalizedItemCode}:${equippedSlotCode}`;
+    const grantedContainer = containersByRole.get(grantedRole) ?? null;
+    const grantedContainerId = grantedContainer?.id ?? grantedContainer?.containerId ?? null;
+    if (grantedContainerId != null) {
+      return String(grantedContainerId);
+    }
+  }
+
+  return null;
+}
+
 async function loadContainerDefByCode(containerCode, tx) {
   if (!containerCode) return null;
   return db.GaContainerDef.findOne({
@@ -118,7 +171,12 @@ async function ensureGrantedContainerForItem({ playerId, slotCode, itemDef, tx }
     }
   }
 
-  const slotCount = Math.max(0, Number(containerDef.slot_count ?? 0));
+  const slotCount = Number(containerDef.slot_count);
+  if (!Number.isInteger(slotCount) || slotCount < 1) {
+    throw Object.assign(new Error(`GRANTED_CONTAINER_SLOTCOUNT_INVALID:${containerCode}`), {
+      code: "GRANTED_CONTAINER_SLOTCOUNT_INVALID",
+    });
+  }
   for (let i = 0; i < slotCount; i++) {
     await db.GaContainerSlot.findOrCreate({
       where: { container_id: container.id, slot_index: i },
@@ -219,20 +277,6 @@ async function removeGrantedContainerForItem({
 
       await db.GaContainerSlot.update(
         {
-          item_instance_id: srcSlot.item_instance_id,
-          qty: Number(srcSlot.qty ?? 0),
-        },
-        {
-          where: {
-            container_id: destination.id,
-            slot_index: dstSlot.slot_index,
-          },
-          transaction: tx,
-        }
-      );
-
-      await db.GaContainerSlot.update(
-        {
           item_instance_id: null,
           qty: 0,
         },
@@ -240,6 +284,20 @@ async function removeGrantedContainerForItem({
           where: {
             container_id: container.id,
             slot_index: srcSlot.slot_index,
+          },
+          transaction: tx,
+        }
+      );
+
+      await db.GaContainerSlot.update(
+        {
+          item_instance_id: srcSlot.item_instance_id,
+          qty: Number(srcSlot.qty ?? 0),
+        },
+        {
+          where: {
+            container_id: destination.id,
+            slot_index: dstSlot.slot_index,
           },
           transaction: tx,
         }
@@ -260,8 +318,97 @@ async function removeGrantedContainerForItem({
   return { changed: true, removed: true, movedSlots };
 }
 
+async function removeGrantedContainersForUnequippedItemCode({
+  playerId,
+  itemCode,
+  equipmentRt = null,
+  equippedItemCodes = null,
+  activeGrantedRoleMap = null,
+  inventoryContainers = [],
+  tx = null,
+  destinationContainerId = null,
+}) {
+  const normalizedItemCode = normalizeKeyPart(itemCode);
+  if (!normalizedItemCode) {
+    return { changed: false, removed: false, removedCount: 0 };
+  }
+
+  const owners = await db.GaContainerOwner.findAll({
+    where: {
+      owner_kind: "PLAYER",
+      owner_id: String(playerId),
+      slot_role: {
+        [db.Sequelize.Op.like]: `GRANTED:${normalizedItemCode}:%`,
+      },
+    },
+    transaction: tx,
+    lock: tx ? tx.LOCK.UPDATE : undefined,
+  });
+
+  let removedCount = 0;
+  for (const owner of owners) {
+    const role = String(owner?.slot_role ?? "");
+    const normalizedRole = role.trim().toUpperCase();
+    const parts = role.split(":");
+    if (parts.length < 3) continue;
+
+    const sourceRole = parts.slice(2).join(":");
+    if (activeGrantedRoleMap instanceof Map && activeGrantedRoleMap.has(normalizedRole)) {
+      continue;
+    }
+
+    const equipped = equipmentRt?.equipmentBySlotCode?.[sourceRole] ?? null;
+    const equippedCode = normalizeKeyPart(equipped?.itemDef?.code ?? "");
+    if (equippedCode === normalizedItemCode) continue;
+
+    const activeGrantedDestinationContainerId =
+      activeGrantedRoleMap instanceof Map
+        ? (() => {
+            for (const [activeRole, containerId] of activeGrantedRoleMap.entries()) {
+              if (!String(activeRole ?? "").startsWith(`GRANTED:${normalizedItemCode}:`)) continue;
+              if (String(activeRole).trim().toUpperCase() === normalizedRole) continue;
+              if (containerId != null) return String(containerId);
+            }
+            return null;
+          })()
+        : null;
+
+    const resolvedDestinationContainerId =
+      destinationContainerId != null
+        ? destinationContainerId
+        : activeGrantedDestinationContainerId ??
+          findActiveGrantedDestinationContainerId({
+            inventoryContainers,
+            equipmentRt,
+            itemCode: normalizedItemCode,
+            sourceRole,
+          }) ??
+          pickCleanupDestinationContainer(inventoryContainers, sourceRole);
+
+    await removeGrantedContainerForItem({
+      playerId,
+      slotCode: sourceRole,
+      itemDef: {
+        code: normalizedItemCode,
+        components: [
+          {
+            component_type: GRANTS_CONTAINER_COMPONENT,
+            data_json: { containerDefCode: normalizedItemCode },
+          },
+        ],
+      },
+      tx,
+      destinationContainerId: resolvedDestinationContainerId,
+    });
+    removedCount += 1;
+  }
+
+  return { changed: removedCount > 0, removed: removedCount > 0, removedCount };
+}
+
 module.exports = {
   ensureGrantedContainerForItem,
   removeGrantedContainerForItem,
+  removeGrantedContainersForUnequippedItemCode,
   getGrantedContainerSlotRole,
 };

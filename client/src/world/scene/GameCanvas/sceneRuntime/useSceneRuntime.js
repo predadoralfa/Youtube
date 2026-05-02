@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { applySceneTemplate, setupSceneRuntime } from "./setup";
 import { createSelectionTools } from "./selection";
 import { cleanupSceneRuntime } from "./cleanup";
+import { createWorldDebugGui } from "../../debug/createWorldDebugGui";
 import { setupSceneInput } from "./useSceneRuntime/input";
 import { startSceneTick } from "./useSceneRuntime/tick";
 
@@ -45,6 +46,22 @@ export function useSceneRuntime({ snapshot, worldStoreRef, onInputIntent, onTarg
       onTargetClear,
     });
 
+    const worldDebugGui = createWorldDebugGui({
+      scene: runtime.scene,
+      camera: runtime.cameraApi.camera,
+      renderer: runtime.renderer,
+      container,
+      refs: {
+        selectedObjectRef: state.selectedObjectRef,
+        groundMesh: runtime.groundMesh,
+        boundsLine: runtime.boundsLine,
+        lightRig: runtime.lightRig,
+      },
+      flags: {},
+      onFlagsChange: null,
+    });
+    runtime.worldDebugGui = worldDebugGui;
+
     const input = setupSceneInput(runtime.renderer, runtime.cameraApi, tools, onInputIntent, state);
     const stopTick = startSceneTick({
       runtime,
@@ -58,19 +75,22 @@ export function useSceneRuntime({ snapshot, worldStoreRef, onInputIntent, onTarg
       stopTick();
       input.off();
       input.unbindInputs();
-        cleanupSceneRuntime({
-          scene: runtime.scene,
-          renderer: runtime.renderer,
-          groundMesh: runtime.groundMesh,
-          boundsLine: runtime.boundsLine,
-          boundsGeometry: runtime.boundsGeometry,
-          boundsMaterial: runtime.boundsMaterial,
-          proceduralWorldGroup: runtime.proceduralWorldGroup,
-          onResize: runtime.cameraApi.onResize,
-          state,
-        });
-      };
-    }, [onInputIntent, onTargetSelect, onTargetClear, state, worldStoreRef, runtimeInstanceId, localTemplateVersion]);
+      worldDebugGui?.dispose?.();
+      runtime.worldDebugGui = null;
+      cleanupSceneRuntime({
+        scene: runtime.scene,
+        renderer: runtime.renderer,
+        groundMesh: runtime.groundMesh,
+        boundsLine: runtime.boundsLine,
+        boundsGeometry: runtime.boundsGeometry,
+        boundsMaterial: runtime.boundsMaterial,
+        proceduralWorldGroup: runtime.proceduralWorldGroup,
+        onResize: runtime.cameraApi.onResize,
+        statsPanel: runtime.statsPanel,
+        state,
+      });
+    };
+  }, [onInputIntent, onTargetSelect, onTargetClear, state, worldStoreRef, runtimeInstanceId, localTemplateVersion]);
 
   useEffect(() => {
     const runtime = sceneRuntimeRef.current;
