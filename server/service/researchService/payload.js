@@ -58,18 +58,17 @@ function buildStudyPayload(study) {
     canStart: Boolean(study.canStart),
     isRunning: study.status === STATUS_RUNNING,
     isCompleted: study.status === STATUS_COMPLETED,
-     isVisible: study.isVisible !== false,
-     prerequisiteSatisfied: study.prerequisiteSatisfied !== false,
-     prerequisiteResearchDefId: study.prerequisiteResearchDefId ?? null,
-     prerequisiteResearchCode: study.prerequisiteResearchCode ?? null,
-     prerequisiteResearchName: study.prerequisiteResearchName ?? null,
-    prerequisiteLevel: Number(study.prerequisiteLevel ?? 1),
+    isVisible: study.isVisible !== false,
+    prerequisiteSatisfied: study.prerequisiteSatisfied !== false,
+    prerequisiteResearchDefId: study.prerequisiteResearchDefId ?? null,
     itemDef: study.itemDef
       ? {
           id: Number(study.itemDef.id),
           code: study.itemDef.code,
           name: study.itemDef.name,
           category: study.itemDef.category,
+          assetKey: study.itemDef.assetKey ?? study.itemDef.asset_key ?? null,
+          asset_key: study.itemDef.asset_key ?? study.itemDef.assetKey ?? null,
           componentTypes: itemDefComponentTypes,
           isWeapon,
         }

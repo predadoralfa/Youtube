@@ -88,11 +88,7 @@ function canonicalResearchItemCode(value) {
 
 function resolveCurrentStudy(levels, activeLevel) {
   if (!Array.isArray(levels) || levels.length === 0) return null;
-  return (
-    levels.find((level) => Number(level.level) === Number(activeLevel)) ??
-    levels[levels.length - 1] ??
-    null
-  );
+  return levels.find((level) => Number(level.level) === Number(activeLevel)) ?? null;
 }
 
 module.exports = {

@@ -111,6 +111,11 @@ Observacao:
 
 - o nome do container pode ser o mesmo do item, mas o contrato tecnico deve ser o container, nao o item
 - se o item for antigo ou legado, a migration precisa realinhar o container com o novo formato
+- a familia `BASKET` hoje segue esta evolucao:
+  - `BASKET`: `slot_count = 1`, `max_weight = 2.5`
+  - `BASKET_T2`: `slot_count = 1`, `max_weight = 5`
+  - `BASKET_T3`: `slot_count = 2`, `max_weight = 5`
+  - `BASKET_T4`: `slot_count = 2`, `max_weight = 7.5`
 
 ### 4. Criar a definicao do container
 

@@ -307,6 +307,9 @@ Regras de capacidade:
 - a capacidade total do jogador e a soma dos containers ativos que ele possui
 - `HAND_L` e `HAND_R` devem ficar com `2.5` kg cada
 - `BASKET` deve ficar com `10` kg
+- `BASKET_T2` deve ficar com `5` kg
+- `BASKET_T3` deve ficar com `5` kg e `2` slots
+- `BASKET_T4` deve ficar com `7.5` kg e `2` slots
 - a interface de inventario deve refletir a soma dos containers carregados, nao um valor hardcoded do personagem
 
 No contexto de actors:

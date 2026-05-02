@@ -479,6 +479,14 @@
   animation: invItemIconPop 180ms ease-out;
 }
 
+.inv-item-icon-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  animation: invItemIconPop 180ms ease-out;
+}
+
 @keyframes invItemIconPop {
   from {
     opacity: 0.85;

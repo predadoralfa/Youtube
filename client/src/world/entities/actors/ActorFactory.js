@@ -13,6 +13,8 @@ const appleModelUrl = new URL("../../../assets/Apple.glb", import.meta.url).href
 const grassModelUrl = new URL("../../../assets/Grass.glb", import.meta.url).href;
 const treeModelUrl = new URL("../../../assets/Apple tree.glb", import.meta.url).href;
 const twigModelUrl = new URL("../../../assets/Twig.glb", import.meta.url).href;
+const herbsModelUrl = new URL("../../../assets/Herbs.glb", import.meta.url).href;
+const primitiveShelterModelUrl = new URL("../../../assets/Primitive Shelter.glb", import.meta.url).href;
 
 const chestLoader = new GLTFLoader();
 const rockLoader = new GLTFLoader();
@@ -20,6 +22,8 @@ const appleLoader = new GLTFLoader();
 const grassLoader = new GLTFLoader();
 const treeLoader = new GLTFLoader();
 const twigLoader = new GLTFLoader();
+const herbsLoader = new GLTFLoader();
+const primitiveShelterLoader = new GLTFLoader();
 let chestModelPromise = null;
 let chestModelTemplate = null;
 let rockModelPromise = null;
@@ -32,6 +36,10 @@ let treeModelPromise = null;
 let treeModelTemplate = null;
 let twigModelPromise = null;
 let twigModelTemplate = null;
+let herbsModelPromise = null;
+let herbsModelTemplate = null;
+let primitiveShelterModelPromise = null;
+let primitiveShelterModelTemplate = null;
 
 function normalizeAssetKey(assetKey) {
   const raw = String(assetKey ?? "").trim().toUpperCase();
@@ -51,6 +59,10 @@ function normalizeAssetKey(assetKey) {
     case "TWIG":
     case "TWIG.GLB":
       return "TWIG_PATCH";
+    case "HERBS_PATCH":
+    case "HERBS":
+    case "HERBS.GLB":
+      return "HERBS_PATCH";
     case "FIBER_PATCH":
     case "GRASS_PATCH":
       return "GRASS";
@@ -70,6 +82,12 @@ function normalizeAssetKey(assetKey) {
     case "LOOT_DROP":
       return "ITEM_DROP";
     default:
+      if (raw.includes("HERBS")) {
+        return "HERBS_PATCH";
+      }
+      if (raw.includes("PRIMITIVE SHELTER")) {
+        return "PRIMITIVE_SHELTER";
+      }
       return raw || null;
   }
 }
@@ -99,6 +117,9 @@ function normalizeActorType(actorType) {
     case "TWIG_PATCH":
     case "TWIG":
       return "TWIG_PATCH";
+    case "HERBS_PATCH":
+    case "HERBS":
+      return "HERBS_PATCH";
     case "RIVER_PATCH":
       return "RIVER_PATCH";
     case "FIBER_PATCH":
@@ -108,6 +129,8 @@ function normalizeActorType(actorType) {
       return "NPC";
     case "PRIMITIVE_SHELTER":
     case "SHELTER":
+    case "PRIMITIVE SHELTER.GLB":
+    case "PRIMITIVE_SHELTER.GLB":
       return "PRIMITIVE_SHELTER";
     default:
       return raw || "DEFAULT";
@@ -353,6 +376,42 @@ async function loadTwigModelTemplate() {
   }
 
   return twigModelPromise;
+}
+
+async function loadHerbsModelTemplate() {
+  if (herbsModelTemplate) return herbsModelTemplate;
+
+  if (!herbsModelPromise) {
+    herbsModelPromise = herbsLoader.loadAsync(herbsModelUrl)
+      .then((gltf) => {
+        herbsModelTemplate = gltf.scene;
+        return herbsModelTemplate;
+      })
+      .catch((error) => {
+        herbsModelPromise = null;
+        throw error;
+      });
+  }
+
+  return herbsModelPromise;
+}
+
+async function loadPrimitiveShelterModelTemplate() {
+  if (primitiveShelterModelTemplate) return primitiveShelterModelTemplate;
+
+  if (!primitiveShelterModelPromise) {
+    primitiveShelterModelPromise = primitiveShelterLoader.loadAsync(primitiveShelterModelUrl)
+      .then((gltf) => {
+        primitiveShelterModelTemplate = gltf.scene;
+        return primitiveShelterModelTemplate;
+      })
+      .catch((error) => {
+        primitiveShelterModelPromise = null;
+        throw error;
+      });
+  }
+
+  return primitiveShelterModelPromise;
 }
 
 function resolveDroppedItemVisual(actor) {
@@ -771,7 +830,7 @@ export function createRiverMesh(actor) {
 /**
  * Cria um mesh para PRIMITIVE_SHELTER (projeto de construção)
  */
-export function createPrimitiveShelterMesh(actor) {
+function createPrimitiveShelterFallbackMesh(actor) {
   const group = new THREE.Group();
   applyActorUserData(group, actor, true);
 
@@ -822,6 +881,69 @@ export function createPrimitiveShelterMesh(actor) {
   );
   ridge.position.set(0, 0.36, -0.28);
   group.add(ridge);
+
+  return group;
+}
+
+export function createHerbsMesh(actor) {
+  const group = new THREE.Group();
+  applyActorUserData(group, actor, true);
+
+  loadHerbsModelTemplate()
+    .then((template) => {
+      const model = template.clone(true);
+      model.scale.setScalar(0.68);
+      model.position.set(0, 0, 0);
+      model.rotation.set(0, 0.2, 0);
+
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      alignModelToGround(model);
+      model.position.y -= 0.02;
+      applyActorUserData(model, actor, true);
+      group.add(model);
+    })
+    .catch((error) => {
+      console.error("[ACTOR_FACTORY] Failed to load herbs actor model:", error);
+      group.add(createDroppedItemFallbackMesh(actor));
+    });
+
+  return group;
+}
+
+export function createPrimitiveShelterMesh(actor) {
+  const group = new THREE.Group();
+  applyActorUserData(group, actor, true);
+
+  loadPrimitiveShelterModelTemplate()
+    .then((template) => {
+      const model = template.clone(true);
+
+      model.scale.setScalar(1.35);
+      model.position.set(0, 0, 0);
+      model.rotation.set(0, 0, 0);
+
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      alignModelToGround(model);
+      model.position.y += 0.02;
+      applyActorUserData(model, actor, true);
+      group.add(model);
+    })
+    .catch((error) => {
+      console.error("[ACTOR_FACTORY] Failed to load primitive shelter model:", error);
+      group.add(createPrimitiveShelterFallbackMesh(actor));
+    });
 
   return group;
 }
@@ -906,6 +1028,8 @@ export function createActorMesh(actor) {
       return createRiverMesh(actor);
     case "GRASS":
       return createGrassMesh(actor);
+    case "HERBS_PATCH":
+      return createHerbsMesh(actor);
     case "PRIMITIVE_SHELTER":
       return createPrimitiveShelterMesh(actor);
     case "NPC":

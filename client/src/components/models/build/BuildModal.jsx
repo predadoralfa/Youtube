@@ -1,6 +1,8 @@
 import "@/style/researchModal.css";
 import { useTreeBoardPanZoom } from "@/components/models/common/treeBoardPanZoom";
 
+const primitiveShelterIconUrl = new URL("../../../icon/Primitive Shelter.png", import.meta.url).href;
+
 const BUILD_NODES = [
   {
     id: "build-core",
@@ -25,15 +27,17 @@ function BuildCard({ node, onPlaceShelter }) {
   const metaRight = node?.metaRight ?? "";
   const actionLabel = node?.actionLabel ?? "Coming Soon";
   const actionDisabled = node?.actionDisabled !== false;
-  const iconLabel = node?.iconLabel ?? "B";
 
   return (
     <article className={`research-card research-card--${tone} build-card`}>
       <div className="research-card-head">
-        <div className="research-icon-box">
-          <span className="research-fallback-icon" aria-hidden="true">
-            {iconLabel}
-          </span>
+        <div className="research-icon-box research-icon-box--large">
+          <img
+            src={primitiveShelterIconUrl}
+            alt={title}
+            className="research-item-icon research-item-icon--image research-item-icon--large research-item-icon--shelter"
+            draggable={false}
+          />
         </div>
         <div className="research-head-copy">
           <span className="research-badge">{badge}</span>

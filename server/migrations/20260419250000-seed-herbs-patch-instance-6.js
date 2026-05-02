@@ -495,7 +495,7 @@ module.exports = {
         name: "Herbs Patch",
         actor_kind: "RESOURCE_NODE",
         visual_hint: "GRASS",
-        asset_key: "Grass.glb",
+        asset_key: "Herbs.glb",
         default_state_json: JSON.stringify({
           resourceType: "HERBS_PATCH",
           visualHint: "GRASS",

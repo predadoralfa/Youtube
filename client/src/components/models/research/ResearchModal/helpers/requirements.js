@@ -8,11 +8,6 @@ export function formatResearchRequirementSummary(study, inventoryIndex) {
   const parts = [];
   const researchRequirements = Array.isArray(study?.levelResearchRequirements) ? study.levelResearchRequirements : [];
 
-  if (study?.prerequisiteResearchName && researchRequirements.length === 0) {
-    const level = Number(study?.prerequisiteLevel ?? 1) || 1;
-    parts.push(`${study.prerequisiteResearchName} Lv.${level}`);
-  }
-
   for (const requirement of researchRequirements) {
     const level = Math.max(1, Number(requirement?.level) || 1);
     const label = requirement?.researchName ?? requirement?.researchCode ?? "Unknown";

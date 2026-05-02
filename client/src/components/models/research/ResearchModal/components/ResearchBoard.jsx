@@ -38,6 +38,19 @@ function ResearchTreeNode({
   const requirements = Array.isArray(node?.levelItemCosts) ? node.levelItemCosts : [];
   const children = Array.isArray(node?.treeChildren) ? node.treeChildren : [];
   const requirementSummary = formatResearchRequirementSummary(node, inventoryIndex);
+  const isPrimitiveShelter = String(node?.code ?? "").toUpperCase() === "RESEARCH_PRIMITIVE_SHELTER";
+  const iconItemDef = node?.itemDef
+    ? {
+        ...node.itemDef,
+        code: node.itemDef.code ?? node.code ?? "",
+        name: node.itemDef.name ?? node.name ?? "",
+        category: node.itemDef.category ?? "BUILD",
+      }
+    : {
+        code: node?.code ?? "",
+        name: node?.name ?? "",
+        category: "BUILD",
+      };
 
   return (
     <div className={`research-tree-node research-tree-node--depth-${depth}`} data-tree-node-key={getTreeNodeKey(node, depth)}>
@@ -46,8 +59,12 @@ function ResearchTreeNode({
         className={`research-card research-card--${node.tone} ${isLocked ? "research-card--locked" : ""}`}
       >
         <div className="research-card-head">
-          <div className="research-icon-box">
-            <InventoryItemIcon itemDef={node.itemDef} label={node.name} className="research-item-icon" />
+          <div className={`research-icon-box ${isPrimitiveShelter ? "research-icon-box--large" : ""}`}>
+            <InventoryItemIcon
+              itemDef={iconItemDef}
+              label={node.name}
+              className={`research-item-icon ${isPrimitiveShelter ? "research-item-icon--large research-item-icon--shelter" : ""}`}
+            />
           </div>
           <div className="research-head-copy">
             <span className="research-badge">{isCompleted ? "Mastered" : `Level ${stageLevel}`}</span>

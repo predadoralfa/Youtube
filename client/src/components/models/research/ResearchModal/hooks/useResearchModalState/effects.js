@@ -64,9 +64,11 @@ export function useResearchModalEffects({
     const lane = laneRef.current;
     if (!lane || typeof ResizeObserver === "undefined") return undefined;
     function updateSize() {
+      const width = Math.max(1160, lane.scrollWidth || 0, lane.offsetWidth || 0);
+      const height = Math.max(620, lane.scrollHeight || 0, lane.offsetHeight || 0);
       setContentSize({
-        width: lane.offsetWidth || 1160,
-        height: lane.offsetHeight || 620,
+        width,
+        height,
       });
     }
     updateSize();

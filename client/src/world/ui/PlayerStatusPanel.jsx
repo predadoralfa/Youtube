@@ -56,6 +56,12 @@ function resolveStatusBarTone(current, max) {
 
 function formatDuration(ms) {
   const totalSeconds = Math.max(0, Math.ceil(Number(ms ?? 0) / 1000));
+  if (totalSeconds >= 3600) {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    return `${hours}h ${minutes}m`;
+  }
+
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   if (minutes <= 0) return `${seconds}s`;

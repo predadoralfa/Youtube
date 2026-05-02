@@ -2,7 +2,7 @@ import { formatDuration } from "../helpers/study";
 import { formatResearchRequirementSummary } from "../helpers/requirements";
 
 export function ResearchTopbar({ activeStudy, previewStudy, inventoryIndex, onClose }) {
-  const requirementSummary = formatResearchRequirementSummary(previewStudy, inventoryIndex);
+  const requirementSummary = !activeStudy ? formatResearchRequirementSummary(previewStudy, inventoryIndex) : null;
 
   return (
     <div className="research-topbar">

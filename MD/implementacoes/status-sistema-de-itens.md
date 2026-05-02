@@ -178,6 +178,22 @@ Ponto importante:
 - possui `ga_container_def` proprio
 - possui `CRAFT_BASKET_T2`
 
+### `BASKET_T3`
+
+- `category = CONTAINER`
+- possui `EQUIPPABLE`
+- possui `GRANTS_CONTAINER`
+- possui `ga_container_def` proprio
+- possui `CRAFT_BASKET_T3`
+
+### `BASKET_T4`
+
+- `category = CONTAINER`
+- possui `EQUIPPABLE`
+- possui `GRANTS_CONTAINER`
+- possui `ga_container_def` proprio
+- possui `CRAFT_BASKET_T4`
+
 ### `HERBS`
 
 - `category = MEDICINE`

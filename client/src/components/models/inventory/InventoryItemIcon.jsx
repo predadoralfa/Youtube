@@ -8,6 +8,8 @@ const appleModelUrl = new URL("../../../assets/Apple.glb", import.meta.url).href
 const grassModelUrl = new URL("../../../assets/Grass.glb", import.meta.url).href;
 const logModelUrl = new URL("../../../assets/Log.glb", import.meta.url).href;
 const twigModelUrl = new URL("../../../assets/Twig.glb", import.meta.url).href;
+const primitiveShelterIconUrl = new URL("../../../icon/Primitive Shelter.png", import.meta.url).href;
+const simpleHerbsIconUrl = new URL("../../../icon/Simple Herbs.png", import.meta.url).href;
 
 function normalizeText(value) {
   return String(value ?? "").trim().toUpperCase();
@@ -28,6 +30,14 @@ function resolveInventoryIconSpec(itemDef) {
     };
   }
 
+  if (code.includes("STONE_THROW") || code.includes("STONE_PUNCH")) {
+    return {
+      url: stoneModelUrl,
+      scale: 1.4,
+      cameraPosition: [0, 0, 3.1],
+    };
+  }
+
   if (assetKey.includes("STONE")) {
     return {
       url: stoneModelUrl,
@@ -40,6 +50,27 @@ function resolveInventoryIconSpec(itemDef) {
     return {
       url: appleModelUrl,
       scale: 1.25,
+      cameraPosition: [0, 0, 3.2],
+    };
+  }
+
+  if (code.includes("HERBS") || name.includes("HERBS") || name.includes("HERB")) {
+    return {
+      url: simpleHerbsIconUrl,
+      scale: 1,
+      cameraPosition: [0, 0, 3.2],
+    };
+  }
+
+  if (
+    code.includes("PRIMITIVE_SHELTER") ||
+    name.includes("PRIMITIVE SHELTER") ||
+    name.includes("PRIMITIVE") ||
+    name.includes("SHELTER")
+  ) {
+    return {
+      url: primitiveShelterIconUrl,
+      scale: 1,
       cameraPosition: [0, 0, 3.2],
     };
   }
@@ -174,20 +205,31 @@ export function InventoryItemIcon({ itemDef, label, className = "" }) {
 
   return (
     <div className={["inv-item-icon-shell", className].filter(Boolean).join(" ")}>
-      <Canvas
-        dpr={[1, 1.5]}
-        gl={{ alpha: true, antialias: true }}
-        camera={{ position: spec.cameraPosition ?? [0, 0, 3], fov: 26 }}
-      >
-        <Suspense fallback={null}>
-          <InventoryModelPreview spec={spec} />
-        </Suspense>
-      </Canvas>
+      {String(spec.url ?? "").endsWith(".png") ? (
+        <img
+          src={spec.url}
+          alt={label ?? ""}
+          className="inv-item-icon-image"
+          draggable={false}
+          loading="eager"
+        />
+      ) : (
+        <Canvas
+          dpr={[1, 1.5]}
+          gl={{ alpha: true, antialias: true }}
+          camera={{ position: spec.cameraPosition ?? [0, 0, 3], fov: 26 }}
+        >
+          <Suspense fallback={null}>
+            <InventoryModelPreview spec={spec} />
+          </Suspense>
+        </Canvas>
+      )}
     </div>
   );
 }
 
 useGLTF.preload(rockModelUrl);
+useGLTF.preload(stoneModelUrl);
 useGLTF.preload(appleModelUrl);
 useGLTF.preload(grassModelUrl);
 useGLTF.preload(logModelUrl);

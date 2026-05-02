@@ -13,6 +13,8 @@ Exemplos iniciais:
 - `BASKET` nivel 1 libera o craft da cesta.
 - `BASKET` nivel 2 aumenta a capacidade de todas as cestas.
 - `BASKET` nivel 3 libera o craft da cesta reforcada `CRAFT_BASKET_T2`.
+- `BASKET` nivel 4 libera o craft da cesta reforcada `CRAFT_BASKET_T3`.
+- `BASKET` nivel 5 libera o craft da cesta reforcada `CRAFT_BASKET_T4`.
 - `STONE` nivel 1 libera coletar pedra.
 - `STONE` nivel 2 reduz o peso da pedra.
 - `STONE` nivel 3 libera o craft da funda `WEAPON-STONE-SLING`.
@@ -201,6 +203,8 @@ Exemplos práticos:
 - `RESEARCH_BASKET` no nivel 2 exige `10 FIBER` + `10 GRAVETO`
 - `RESEARCH_BASKET` no nivel 3 libera a tecnologia `CRAFT_BASKET_T2`
 - `RESEARCH_BASKET` no nivel 4 passa a exigir `RESEARCH_TWIG` nivel 3, sem custo extra de item
+- `RESEARCH_BASKET` no nivel 4 libera a tecnologia `CRAFT_BASKET_T3`
+- `RESEARCH_BASKET` no nivel 5 libera a tecnologia `CRAFT_BASKET_T4`
 - `RESEARCH_BASKET` continua ao lado da arvore de `APPLE`
 - quando surgir uma tecnologia nova, ela deve ser cadastrada com os requisitos de aparicao corretos, em vez de ser antecipada em toda a arvore pai
 
