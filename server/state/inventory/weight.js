@@ -120,37 +120,29 @@ function getGrantedContainerBonusFromItemDef(itemDef, research = null) {
   return getEquippedGrantedContainerBonus(itemDef, component, research);
 }
 
-function isEquippedItemTemporarilyHeld(invRt, eqRt, equipped) {
-  const heldState = invRt?.heldState ?? null;
-  if (!heldState || String(heldState?.mode ?? "").toUpperCase() !== "PICK") return false;
-  if (!equipped?.itemInstanceId || !equipped?.slotCode) return false;
-
-  const legacyContainer = invRt?.containersByRole?.get?.(String(equipped.slotCode)) ?? null;
-  if (!legacyContainer?.id || !Array.isArray(legacyContainer?.slots)) return false;
-
-  const sourceSlot = legacyContainer.slots.find(
-    (slot) => Number(slot?.slotIndex) === Number(heldState.sourceSlotIndex)
-  ) ?? null;
-
-  return (
-    String(heldState.sourceContainerId ?? "") === String(legacyContainer.id) &&
-    String(heldState.itemInstanceId ?? "") === String(equipped.itemInstanceId) &&
-    sourceSlot != null
-  );
-}
-
 function computeGrantedContainerBonus(invRt, eqRt = null, research = null) {
   let bonus = 0;
-  const seen = new Set();
+  const handRoles = new Set(["HAND_L", "HAND_R"]);
 
   for (const container of invRt?.containers ?? []) {
+    const role = String(container?.slotRole ?? "").trim().toUpperCase();
+    if (!handRoles.has(role)) continue;
     if (String(container?.state ?? "ACTIVE").toUpperCase() !== "ACTIVE") continue;
+
     for (const slot of container?.slots ?? []) {
       if (!slot?.itemInstanceId) continue;
 
       const itemInstanceId = String(slot.itemInstanceId);
-      if (seen.has(itemInstanceId)) continue;
-      seen.add(itemInstanceId);
+      const heldState = invRt?.heldState ?? null;
+      if (
+        heldState &&
+        String(heldState?.mode ?? "").toUpperCase() === "PICK" &&
+        String(heldState.sourceContainerId ?? "") === String(container.id) &&
+        Number(heldState.sourceSlotIndex) === Number(slot.slotIndex) &&
+        String(heldState.itemInstanceId ?? "") === itemInstanceId
+      ) {
+        continue;
+      }
 
       const itemInstance = invRt?.itemInstanceById?.get?.(itemInstanceId) ?? null;
       if (!itemInstance) continue;
@@ -159,24 +151,18 @@ function computeGrantedContainerBonus(invRt, eqRt = null, research = null) {
         invRt?.itemDefsById?.get?.(String(itemInstance.itemDefId)) ||
         eqRt?.itemDefsById?.get?.(String(itemInstance.itemDefId)) ||
         null;
-      bonus += getGrantedContainerBonusFromItemDef(itemDef, research);
+      if (!itemDef) continue;
+
+      const components = Array.isArray(itemDef?.components) ? itemDef.components : [];
+      const component = components.find((entry) => {
+        const type = String(entry?.componentType ?? entry?.component_type ?? "").toUpperCase();
+        return type === "GRANTS_CONTAINER";
+      });
+
+      const bonusWeight = getEquippedGrantedContainerBonus(itemDef, component, research);
+      if (bonusWeight <= 0) continue;
+      bonus += bonusWeight;
     }
-  }
-
-  for (const equipped of Object.values(eqRt?.equipmentBySlotCode ?? {})) {
-    const itemDef = equipped?.itemDef ?? null;
-    if (!itemDef) continue;
-    if (isEquippedItemTemporarilyHeld(invRt, eqRt, equipped)) continue;
-
-    const components = Array.isArray(itemDef?.components) ? itemDef.components : [];
-    const component = components.find((entry) => {
-      const type = String(entry?.componentType ?? entry?.component_type ?? "").toUpperCase();
-      return type === "GRANTS_CONTAINER";
-    });
-
-    const bonusWeight = getEquippedGrantedContainerBonus(itemDef, component, research);
-    if (bonusWeight <= 0) continue;
-    bonus += bonusWeight;
   }
 
   return bonus;
