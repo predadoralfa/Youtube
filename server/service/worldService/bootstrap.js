@@ -256,7 +256,7 @@ const bootstrap = async (req, res) => {
     const groundRenderMaterial = local.visual?.groundRenderMaterial ?? null;
     const groundColor = groundRenderMaterial?.base_color ?? DEFAULT_GROUND_COLOR;
 
-    const research = await ensureResearchLoaded(userId);
+    const research = await ensureResearchLoaded(userId, liveRuntime, { forceReload: true });
     const invRt = await ensureInventoryLoaded(userId);
     invRt.research = research;
     invRt.craftDefs = await loadActiveCraftDefs();

@@ -106,6 +106,66 @@ function findNearestCollectableActor(snapshot, maxRadius = 2.4) {
   };
 }
 
+function resolveEnemyWorldPos(state, targetId) {
+  const store = state?.worldStoreRef?.current ?? null;
+  if (!store) return null;
+
+  const normalizedId = String(targetId ?? "");
+  const alternateIds = new Set([
+    normalizedId,
+    normalizedId.replace(/^enemy_/i, ""),
+    normalizedId.startsWith("enemy_") ? normalizedId.slice("enemy_".length) : normalizedId,
+    normalizedId.startsWith("enemy_") ? normalizedId : `enemy_${normalizedId}`,
+  ]);
+
+  const entities = Array.isArray(store.getSnapshot?.()) ? store.getSnapshot() : [];
+  const entity =
+    entities.find((entry) => {
+      const entryId = String(entry?.entityId ?? entry?.id ?? "");
+      return alternateIds.has(entryId);
+    }) ??
+    (store.entities instanceof Map
+      ? Array.from(store.entities.values()).find((entry) => {
+          const entryId = String(entry?.entityId ?? entry?.id ?? "");
+          return alternateIds.has(entryId);
+        }) ?? null
+      : null);
+
+  const x = Number(entity?.pos?.x);
+  const z = Number(entity?.pos?.z);
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+
+  return { x, z };
+}
+
+function seedEnemyCombatMovementVisual(state, targetPos) {
+  const movementVisual = state?.movementVisualRef?.current ?? null;
+  if (!movementVisual || !targetPos) return;
+
+  const now = performance.now();
+  const playerPos = state?.snapshot?.runtime?.pos ?? null;
+  const px = Number(playerPos?.x ?? 0);
+  const pz = Number(playerPos?.z ?? 0);
+  const dx = Number(targetPos.x ?? 0) - px;
+  const dz = Number(targetPos.z ?? 0) - pz;
+  const facingYaw = Math.atan2(dx, dz);
+
+  movementVisual.seq += 1;
+  movementVisual.mode = "CLICK";
+  movementVisual.dir = { x: 0, z: 0 };
+  movementVisual.lastActiveDir = { x: 0, z: 0 };
+  movementVisual.stopRequestedAt = 0;
+  movementVisual.clickRequestedAt = now;
+  movementVisual.directionChangedAt = now;
+  movementVisual.stopRadius = 0.1;
+  movementVisual.clickTarget = {
+    x: Number(targetPos.x ?? 0),
+    z: Number(targetPos.z ?? 0),
+  };
+  movementVisual.lastFacingYaw = facingYaw;
+  movementVisual.stopFacingYaw = facingYaw;
+}
+
 export function useGameShellIntentAction(state, handlers) {
   const {
     requestInventoryFull,
@@ -225,6 +285,14 @@ export function useGameShellIntentAction(state, handlers) {
         const target = state.selectedTargetRef.current;
         if (target?.kind === "ENEMY") {
           const targetId = String(target.id);
+          const targetPos = resolveEnemyWorldPos(state, targetId);
+          seedEnemyCombatMovementVisual(state, targetPos);
+          if (targetPos && state.socketRef.current && state.joinedRef.current) {
+            state.socketRef.current.emit("move:click", {
+              x: Number(targetPos.x ?? 0),
+              z: Number(targetPos.z ?? 0),
+            });
+          }
           if (state.combatTargetRef.current !== targetId) {
             state.socketRef.current?.emit("interact:start", {
               target: {

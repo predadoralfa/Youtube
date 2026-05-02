@@ -3,17 +3,27 @@ import { InventoryItemIcon } from "@/components/models/inventory/InventoryItemIc
 import { formatDuration } from "../helpers/study";
 import {
   formatRequirementCounts,
+  formatResearchRequirementSummary,
   getRequirementCount,
-  getRequirementLabel,
 } from "../helpers/requirements";
+import { getRequirementLabel } from "../helpers/inventoryCounts";
 
 function getTreeNodeKey(node, fallback = "") {
   return String(node?.code ?? node?.researchDefId ?? node?.id ?? fallback);
 }
 
-function ResearchTreeNode({ node, inventoryIndex, onStartStudy, registerNodeRef, depth = 0 }) {
+function ResearchTreeNode({
+  node,
+  inventoryIndex,
+  onStartStudy,
+  registerNodeRef,
+  depth = 0,
+  showChildren = true,
+  childrenLayout = "stack",
+}) {
   const isRunning = node?.isRunning === true;
   const isCompleted = node?.isCompleted === true;
+  const isLocked = !isRunning && !isCompleted && node?.canStart !== true;
   const currentLevel = Number(node?.currentLevel ?? 0);
   const maxLevel = Number(node?.maxLevel ?? 1);
   const activeLevel = Number(node?.activeLevel ?? Math.min(currentLevel + 1, maxLevel));
@@ -21,16 +31,19 @@ function ResearchTreeNode({ node, inventoryIndex, onStartStudy, registerNodeRef,
     ? "Completed"
     : isRunning
       ? "Studying..."
-      : `Start Lv.${activeLevel}`;
+      : isLocked
+        ? "Locked"
+        : `Start Lv.${activeLevel}`;
   const stageLevel = Number(node?.currentLevel ?? 0);
   const requirements = Array.isArray(node?.levelItemCosts) ? node.levelItemCosts : [];
   const children = Array.isArray(node?.treeChildren) ? node.treeChildren : [];
+  const requirementSummary = formatResearchRequirementSummary(node, inventoryIndex);
 
   return (
     <div className={`research-tree-node research-tree-node--depth-${depth}`} data-tree-node-key={getTreeNodeKey(node, depth)}>
       <article
         ref={registerNodeRef?.(getTreeNodeKey(node, depth))}
-        className={`research-card research-card--${node.tone}`}
+        className={`research-card research-card--${node.tone} ${isLocked ? "research-card--locked" : ""}`}
       >
         <div className="research-card-head">
           <div className="research-icon-box">
@@ -42,11 +55,15 @@ function ResearchTreeNode({ node, inventoryIndex, onStartStudy, registerNodeRef,
           </div>
         </div>
 
-        <p>{node.nextLevelDescription ?? node.levelDescription ?? node.description}</p>
-
-        {node.isVisible === false ? (
-          <div className="research-locked-note">Locked until the prerequisite research is complete.</div>
-        ) : null}
+        <p>
+          {node.nextLevelDescription ?? node.levelDescription ?? node.description}
+          {requirementSummary ? (
+            <>
+              {" "}
+              <span className="research-description-requirements">{requirementSummary}</span>
+            </>
+          ) : null}
+        </p>
 
         {requirements.length > 0 ? (
           <div className="research-requirements">
@@ -82,15 +99,17 @@ function ResearchTreeNode({ node, inventoryIndex, onStartStudy, registerNodeRef,
         <button
           type="button"
           className="research-action"
-          disabled={!node?.canStart || isCompleted || node?.isVisible === false}
+          disabled={!node?.canStart || isCompleted || isRunning}
           onClick={() => onStartStudy?.(node.code)}
         >
           {buttonLabel}
         </button>
       </article>
 
-      {children.length > 0 ? (
-        <div className={`research-tree-children research-tree-children--depth-${depth}`}>
+      {showChildren && children.length > 0 ? (
+        <div
+          className={`research-tree-children research-tree-children--depth-${depth} research-tree-children--${childrenLayout}`}
+        >
           <div className="research-tree-children-stack">
             {children.map((child, childIndex) => (
               <ResearchTreeNode
@@ -100,6 +119,7 @@ function ResearchTreeNode({ node, inventoryIndex, onStartStudy, registerNodeRef,
                 onStartStudy={onStartStudy}
                 registerNodeRef={registerNodeRef}
                 depth={depth + 1}
+                childrenLayout={String(child?.code ?? "").toUpperCase() === "RESEARCH_STONE" ? "row" : "stack"}
               />
             ))}
           </div>
@@ -158,6 +178,7 @@ export function ResearchBoard({
               inventoryIndex={inventoryIndex}
               onStartStudy={onStartStudy}
               registerNodeRef={registerNodeRef}
+              childrenLayout={String(node?.code ?? "").toUpperCase() === "RESEARCH_STONE" ? "row" : "stack"}
             />
           ))}
         </div>

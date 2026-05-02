@@ -257,6 +257,19 @@ Observacao importante:
 - `durabilityMax` vive no componente da definicao como referencia de design
 - a durabilidade corrente continua pertencendo a `ga_item_instance.durability`
 - se a arma for criada no inventario por seed, a instancia deve nascer com `durability = durabilityMax`
+- `weaponClass` ainda fica em `WEAPON.data_json` por enquanto, mas o contrato futuro deve migrar para uma coluna `ENUM` no banco para evitar bagunca entre tipos de armas
+- quando essa migracao existir, o `data_json` deve continuar apenas para atributos variaveis, bonus extras e metadados de instancia
+
+Seed inicial registrado:
+
+- `STONE_THROW`
+  - `allowedSlots`: `HAND_L`, `HAND_R`
+  - `weaponClass`: `RANGED_THROWN`
+  - `asset_key`: `Stone.glb`
+- `STONE_PUNCH`
+  - `allowedSlots`: `HAND_L`
+  - `weaponClass`: `MELEE`
+  - `asset_key`: `Stone.glb`
 
 ### Caso E: item usavel generico
 

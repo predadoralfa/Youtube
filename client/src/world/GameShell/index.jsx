@@ -7,7 +7,7 @@ export function GameShell() {
   const state = useGameShellState();
   const actions = useGameShellActions(state);
 
-  useGameShellSocket(state, actions.requestInventoryFull);
+  useGameShellSocket(state, actions.requestInventoryFull, actions.requestResearchFull);
 
   return <GameShellView state={state} actions={actions} />;
 }

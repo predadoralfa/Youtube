@@ -81,8 +81,29 @@ export function useInventoryModalDerivedState({
     () => buildSlotList(HANDS_SLOT_ORDER, equipmentIndex, "USAGE"),
     [equipmentIndex]
   );
-  const handItemCounts = useMemo(() => {
+  const craftItemCounts = useMemo(() => {
     const counts = new Map();
+
+    for (const container of Array.isArray(snapshot?.containers) ? snapshot.containers : []) {
+      for (const slot of Array.isArray(container?.slots) ? container.slots : []) {
+        const qty = Number(slot?.qty ?? 0);
+        const itemInstanceId = slot?.itemInstanceId != null ? String(slot.itemInstanceId) : null;
+        if (!itemInstanceId || qty <= 0) continue;
+
+        const inst = inventoryIndex.instanceMap.get(itemInstanceId) ?? null;
+        const itemDefId =
+          inst?.itemDefId ??
+          inst?.item_def_id ??
+          inst?.defId ??
+          inst?.def_id ??
+          null;
+        if (itemDefId == null) continue;
+
+        const key = String(itemDefId);
+        counts.set(key, (counts.get(key) ?? 0) + qty);
+      }
+    }
+
     for (const slot of handSlots) {
       const itemDefId =
         slot?.itemDef?.id ??
@@ -98,7 +119,7 @@ export function useInventoryModalDerivedState({
       counts.set(key, (counts.get(key) ?? 0) + qty);
     }
     return counts;
-  }, [handSlots]);
+  }, [handSlots, inventoryIndex, snapshot]);
 
   const hungerCurrent = Number(selfVitals?.hunger?.current ?? 0);
   const hungerMax = Math.max(0, Number(selfVitals?.hunger?.max ?? 100)) || 100;
@@ -223,7 +244,7 @@ export function useInventoryModalDerivedState({
             ingredient?.itemDef?.item_def_id;
           const needed = Number(ingredient?.quantity ?? 0);
           if (itemDefId == null || needed <= 0) return false;
-          return Number(handItemCounts.get(String(itemDefId)) ?? 0) >= needed;
+          return Number(craftItemCounts.get(String(itemDefId)) ?? 0) >= needed;
         });
         const canCraft = hasIngredients && hasRequiredSkill && !hasActiveCraftJob;
 
@@ -242,7 +263,7 @@ export function useInventoryModalDerivedState({
               ? `Crafting level ${requiredSkillLevel} required.`
               : hasIngredients
                 ? null
-                : "Put the required items in one of your hands first.",
+                : "Put the required items anywhere in your inventory first.",
           recipeItems: ingredients.map((ingredient) => {
             const itemDefId =
               ingredient?.itemDefId ??
@@ -251,7 +272,7 @@ export function useInventoryModalDerivedState({
               ingredient?.itemDef?.itemDefId ??
               ingredient?.itemDef?.item_def_id;
             const needed = Number(ingredient?.quantity ?? 0);
-            const available = itemDefId == null ? 0 : Number(handItemCounts.get(String(itemDefId)) ?? 0);
+            const available = itemDefId == null ? 0 : Number(craftItemCounts.get(String(itemDefId)) ?? 0);
             return {
               ...ingredient,
               itemDefId,

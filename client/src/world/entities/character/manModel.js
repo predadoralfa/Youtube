@@ -247,13 +247,13 @@ function makeActionMap(mixer, animations) {
     const clip = matchClip(animations, clipName);
     if (!clip) continue;
     const action = mixer.clipAction(clip);
-    action.setLoop(key === "attack" || key === "death" || key === "jump" || key === "runningJump"
+    action.setLoop(key === "attack" || key === "death" || key === "jump" || key === "runningJump" || key === "interactive"
       ? THREE.LoopOnce
       : THREE.LoopRepeat,
-    key === "attack" || key === "death" || key === "jump" || key === "runningJump"
+    key === "attack" || key === "death" || key === "jump" || key === "runningJump" || key === "interactive"
       ? 1
       : Infinity);
-    action.clampWhenFinished = key === "attack" || key === "death" || key === "jump" || key === "runningJump";
+    action.clampWhenFinished = key === "attack" || key === "death" || key === "jump" || key === "runningJump" || key === "interactive";
     action.enabled = true;
     actionMap.set(key, action);
   }
@@ -274,12 +274,15 @@ function ensureAnimationState(mesh, modelRoot, animations) {
 
   const mixer = new THREE.AnimationMixer(modelRoot);
   const actions = makeActionMap(mixer, animations);
+  const interactiveClip = actions.get("interactive")?.getClip?.() ?? null;
   const state = {
     mixer,
     actions,
     currentKey: null,
     lastUpdateAtMs: performance.now(),
     lastAttackAtMs: 0,
+    lastCollectAtMs: 0,
+    interactiveClipDurationMs: Number(interactiveClip?.duration ?? 0) * 1000,
   };
 
   mesh.userData.manAnimationState = state;
@@ -303,7 +306,7 @@ function getMoveSpeed(entity, runtime) {
   return 0;
 }
 
-function resolveMotionKey(entity, runtime) {
+function resolveMotionKey(entity, runtime, animationState) {
   const hpCurrent = Number(entity?.vitals?.hp?.current ?? entity?.hp ?? 0);
   if (hpCurrent <= 0) {
     return "death";
@@ -326,7 +329,27 @@ function resolveMotionKey(entity, runtime) {
     String(interact?.kind ?? "").toUpperCase() === "ACTOR" &&
     String(interact?.phase ?? "").toUpperCase() === "COLLECTING"
   ) {
-    return "interactive";
+    const collectAtMs = Number(runtime?.lastActorCollectAtMs ?? 0);
+    const collectDurationMs = Number(animationState?.interactiveClipDurationMs ?? 0);
+    if (
+      Number.isFinite(collectAtMs) &&
+      collectAtMs > 0 &&
+      Number.isFinite(collectDurationMs) &&
+      collectDurationMs > 0 &&
+      now - collectAtMs < collectDurationMs
+    ) {
+      return "interactive";
+    }
+    return "idle";
+  }
+
+  const combatState = String(runtime?.combat?.state ?? "").toUpperCase();
+  const combatTargetKind = String(runtime?.combat?.targetKind ?? "").toUpperCase();
+  if (combatState === "ENGAGED" && combatTargetKind === "ENEMY") {
+    const action = String(entity?.action ?? "idle").toLowerCase();
+    if (action !== "move") {
+      return "attack";
+    }
   }
 
   const action = String(entity?.action ?? "idle").toLowerCase();
@@ -373,7 +396,7 @@ function resolveMotionKey(entity, runtime) {
   return isRunning ? "run" : "walk";
 }
 
-function startAction(state, key) {
+function startAction(state, key, { forceRestart = false } = {}) {
   if (!state || !key) return;
 
   const fallbackKey =
@@ -381,15 +404,16 @@ function startAction(state, key) {
       ? "walk"
       : key === "runForward" || key === "runBackward" || key === "runLeft" || key === "runRight"
         ? "run"
-      : key === "attack" || key === "hit"
+        : key === "attack" || key === "hit" || key === "interactive"
           ? "standing"
-        : key === "interactive"
-          ? "clap"
           : key;
   const nextAction = state.actions.get(key) ?? state.actions.get(fallbackKey);
   if (!nextAction) return;
 
   if (state.currentKey === key) {
+    if (key === "interactive" && !forceRestart) {
+      return;
+    }
     if (!nextAction.isRunning()) {
       nextAction.reset().play();
     }
@@ -486,8 +510,17 @@ export function updatePlayerMeshAnimation(mesh, { entity, runtime, movementVisua
   const nextKey = resolveMotionKey(entity, {
     ...(runtime ?? {}),
     movementVisual,
-  });
-  startAction(resolvedState, nextKey);
+  }, resolvedState);
+  const collectAtMs = Number(runtime?.lastActorCollectAtMs ?? 0);
+  const forceInteractiveRestart =
+    nextKey === "interactive" &&
+    Number.isFinite(collectAtMs) &&
+    collectAtMs > 0 &&
+    collectAtMs !== Number(resolvedState.lastCollectAtMs ?? 0);
+  if (forceInteractiveRestart) {
+    resolvedState.lastCollectAtMs = collectAtMs;
+  }
+  startAction(resolvedState, nextKey, { forceRestart: forceInteractiveRestart });
   modelRoot.rotation.y = getMotionYawOffset(nextKey);
 
   const now = performance.now();

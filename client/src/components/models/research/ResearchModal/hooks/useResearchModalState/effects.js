@@ -3,6 +3,7 @@ import { useEffect } from "react";
 export function useResearchModalEffects({
   open,
   onRequestInventoryFull,
+  onRequestResearchFull,
   zoom,
   zoomRef,
   zoomFrameRef,
@@ -33,7 +34,8 @@ export function useResearchModalEffects({
   useEffect(() => {
     if (!open) return;
     onRequestInventoryFull?.();
-  }, [open, onRequestInventoryFull]);
+    onRequestResearchFull?.();
+  }, [open, onRequestInventoryFull, onRequestResearchFull]);
 
   useEffect(() => {
     if (!open) return undefined;

@@ -19,6 +19,7 @@ export function ResearchModal(props) {
           <ResearchTopbar
             activeStudy={state.activeStudy}
             previewStudy={state.previewStudy}
+            inventoryIndex={state.inventoryIndex}
             onClose={props.onClose}
           />
 

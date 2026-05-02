@@ -48,6 +48,22 @@ function normalizeItemCosts(value) {
     .filter((entry) => entry.qty > 0 && (entry.itemCode || entry.itemDefId));
 }
 
+function normalizeResearchRequirements(value) {
+  return (Array.isArray(value?.researchRequirements) ? value.researchRequirements : [])
+    .map((entry) => {
+      const researchCode = entry?.researchCode != null ? String(entry.researchCode).trim() : null;
+      const researchDefId = entry?.researchDefId != null ? Math.floor(toFiniteNumber(entry.researchDefId, 0)) : null;
+      const level = Math.max(1, Math.floor(toFiniteNumber(entry?.level, 1)));
+
+      return {
+        researchCode: researchCode || null,
+        researchDefId: Number.isFinite(researchDefId) && researchDefId > 0 ? researchDefId : null,
+        level,
+      };
+    })
+    .filter((entry) => (entry.researchCode || entry.researchDefId) && entry.level > 0);
+}
+
 function normalizeItemCode(value) {
   return String(value ?? "")
     .trim()
@@ -89,6 +105,7 @@ module.exports = {
   parseJsonObject,
   normalizeUnlocks,
   normalizeItemCosts,
+  normalizeResearchRequirements,
   normalizeItemCode,
   canonicalResearchItemCode,
   resolveCurrentStudy,

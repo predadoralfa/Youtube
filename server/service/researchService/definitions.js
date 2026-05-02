@@ -9,6 +9,7 @@ const {
   PROGRESS_PERSIST_STEP_MS,
   clamp,
   normalizeItemCosts,
+  normalizeResearchRequirements,
   parseJsonObject,
   resolveCurrentStudy,
   toFiniteNumber,
@@ -54,6 +55,14 @@ async function loadResearchDefinitions() {
         model: db.GaItemDef,
         as: "itemDef",
         required: false,
+        include: [
+          {
+            model: db.GaItemDefComponent,
+            as: "components",
+            required: false,
+            attributes: ["id", "component_type"],
+          },
+        ],
       },
     ],
     order: [
@@ -97,17 +106,17 @@ async function ensureUserResearchRows(userId, defs, transaction = null) {
 
 function buildResearchRuntime(defs, userRows) {
   const defById = new Map(defs.map((def) => [Number(def.id), def]));
+  const defByCode = new Map(defs.map((def) => [String(def.code), def]));
   const userByDefId = new Map(userRows.map((row) => [Number(row.research_def_id), row]));
 
   const studies = defs.map((def) => {
     const row = userByDefId.get(Number(def.id));
     const prerequisiteResearchDefId = toFiniteNumber(def.prerequisite_research_def_id ?? def.prerequisiteResearchDefId, 0) || null;
-    const prerequisiteLevel = clamp(
-      Math.floor(toFiniteNumber(def.prerequisite_level ?? def.prerequisiteLevel, 1)),
-      1,
-      Math.max(1, Number(def.max_level ?? 1))
-    );
     const prerequisiteDef = prerequisiteResearchDefId ? defById.get(Number(prerequisiteResearchDefId)) ?? null : null;
+    const prerequisiteLevelRaw = Math.max(1, Math.floor(toFiniteNumber(def.prerequisite_level ?? def.prerequisiteLevel, 1)));
+    const prerequisiteLevel = prerequisiteDef
+      ? clamp(prerequisiteLevelRaw, 1, Math.max(1, Number(prerequisiteDef.max_level ?? prerequisiteLevelRaw)))
+      : prerequisiteLevelRaw;
     const prerequisiteRow = prerequisiteDef ? userByDefId.get(Number(prerequisiteDef.id)) ?? null : null;
     const prerequisiteCurrentLevel = prerequisiteDef
       ? clamp(
@@ -116,7 +125,9 @@ function buildResearchRuntime(defs, userRows) {
           Math.max(0, Number(prerequisiteDef.max_level ?? 1))
         )
       : 0;
-    const isVisible = !prerequisiteDef || prerequisiteCurrentLevel >= prerequisiteLevel;
+    const prerequisiteSatisfied = !prerequisiteResearchDefId
+      ? true
+      : Boolean(prerequisiteDef) && prerequisiteCurrentLevel >= prerequisiteLevel;
     const levels = (Array.isArray(def.levels) ? def.levels : []).map((level) => ({
       level: Number(level.level),
       studyTimeMs: toFiniteNumber(level.study_time_ms, 0),
@@ -140,6 +151,26 @@ function buildResearchRuntime(defs, userRows) {
           : STATUS_IDLE;
     const levelStudyTimeMs = toFiniteNumber(resolveCurrentStudy(levels, activeLevel)?.studyTimeMs, 0);
     const nextStudy = resolveCurrentStudy(levels, activeLevel);
+    const levelResearchRequirements = normalizeResearchRequirements(nextStudy?.requirements).map((requirement) => {
+      const requiredDef =
+        (requirement.researchDefId ? defById.get(Number(requirement.researchDefId)) ?? null : null) ??
+        (requirement.researchCode ? defByCode.get(String(requirement.researchCode)) ?? null : null);
+      const requiredCurrentLevel = requiredDef
+        ? clamp(
+            toFiniteNumber(userByDefId.get(Number(requiredDef.id))?.current_level, 0),
+            0,
+            Math.max(0, Number(requiredDef.max_level ?? 1))
+          )
+        : 0;
+      return {
+        researchDefId: requiredDef ? Number(requiredDef.id) : requirement.researchDefId ?? null,
+        researchCode: requiredDef?.code ?? requirement.researchCode ?? null,
+        researchName: requiredDef?.name ?? null,
+        level: Number(requirement.level ?? 1),
+        satisfied: Boolean(requiredDef) && requiredCurrentLevel >= Number(requirement.level ?? 1),
+      };
+    });
+    const levelResearchRequirementsSatisfied = levelResearchRequirements.every((requirement) => requirement.satisfied !== false);
     const progressMs =
       status === STATUS_COMPLETED
         ? 0
@@ -159,6 +190,8 @@ function buildResearchRuntime(defs, userRows) {
       completedAtMs: row?.completed_at_ms == null ? null : toFiniteNumber(row.completed_at_ms, null),
       levelRequirements: nextStudy?.requirements ?? null,
       levelItemCosts: normalizeItemCosts(nextStudy?.requirements),
+      levelResearchRequirements,
+      levelResearchRequirementsSatisfied,
       levels,
       itemDef: def.itemDef
         ? {
@@ -173,11 +206,12 @@ function buildResearchRuntime(defs, userRows) {
       prerequisiteResearchCode: prerequisiteDef?.code ?? null,
       prerequisiteResearchName: prerequisiteDef?.name ?? null,
       prerequisiteLevel,
-      isVisible,
+      isVisible: true,
+      prerequisiteSatisfied,
       dirty: false,
       forcePersist: false,
       lastPersistBucket: Math.floor(progressMs / PROGRESS_PERSIST_STEP_MS),
-      canStart: currentLevel < maxLevel,
+      canStart: currentLevel < maxLevel && levelResearchRequirementsSatisfied,
     };
   });
 
@@ -186,7 +220,8 @@ function buildResearchRuntime(defs, userRows) {
     study.canStart =
       study.currentLevel < study.maxLevel &&
       study.status !== STATUS_RUNNING &&
-      study.isVisible &&
+      study.prerequisiteSatisfied !== false &&
+      study.levelResearchRequirementsSatisfied !== false &&
       (!running || running.code === study.code);
   }
 

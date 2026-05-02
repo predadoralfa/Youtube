@@ -22,6 +22,7 @@ export function useGameShellState() {
   const socketRef = useRef(null);
   const joinedRef = useRef(false);
   const pendingInvRequestRef = useRef(false);
+  const pendingResearchRequestRef = useRef(false);
   const inventorySnapshotRef = useRef(null);
   const selectedTargetRef = useRef(null);
   const combatTargetRef = useRef(null);
@@ -58,6 +59,7 @@ export function useGameShellState() {
       socketRef,
       joinedRef,
       pendingInvRequestRef,
+      pendingResearchRequestRef,
       inventorySnapshotRef,
       selectedTargetRef,
       combatTargetRef,
@@ -97,6 +99,7 @@ export function useGameShellState() {
   stateRef.current.worldNotifications = worldNotifications;
   stateRef.current.buildPlacement = buildPlacement;
   stateRef.current.selfVitals = selfVitals;
+  stateRef.current.pendingResearchRequestRef = pendingResearchRequestRef;
 
   return stateRef.current;
 }

@@ -256,7 +256,7 @@ async function completeDueCraftJobs(userId) {
   const jobs = await db.GaUserCraftJob.findAll({
     where: {
       user_id: userId,
-      status: "RUNNING",
+      status: ["RUNNING", "PAUSED"],
     },
     include: [
       {
@@ -270,56 +270,139 @@ async function completeDueCraftJobs(userId) {
   const nowMs = Date.now();
   const now = new Date();
   const runtime = getRuntime(userId);
+  const statsRow = runtime ? null : await db.GaUserStats.findByPk(userId);
+  const staminaMax = runtime ? readRuntimeStaminaMax(runtime) : Number(statsRow?.stamina_max ?? 0);
+  let staminaCurrent = runtime ? readRuntimeStaminaCurrent(runtime) : Number(statsRow?.stamina_current ?? 0);
 
   for (const job of jobs) {
     await normalizeBasketTier2CraftDef(job?.craftDef ?? null);
 
+    const status = String(job.status ?? "").toUpperCase();
     const startedAtMs = Number(job.started_at_ms ?? 0);
     const craftTimeMs = Number(job.craft_time_ms ?? job.craftDef?.craft_time_ms ?? job.craftDef?.craftTimeMs ?? 0);
-    if (!Number.isFinite(startedAtMs) || !Number.isFinite(craftTimeMs) || craftTimeMs <= 0) continue;
-    const elapsedMs = Math.max(0, nowMs - startedAtMs);
-    const nextProgressMs = Math.min(craftTimeMs, elapsedMs);
+    const currentProgressMs = Math.max(0, Number(job.current_progress_ms ?? 0));
     const totalStaminaCost = Math.max(0, Number(job.craftDef?.stamina_cost_total ?? job.craftDef?.staminaCostTotal ?? 0));
     const currentSpent = Math.max(0, Number(job.stamina_spent ?? 0));
-    const targetSpent = craftTimeMs > 0 ? Math.min(totalStaminaCost, (totalStaminaCost * nextProgressMs) / craftTimeMs) : totalStaminaCost;
-    const nextSpent = Math.max(currentSpent, targetSpent);
-    const staminaDebit = Math.max(0, Math.floor(nextSpent) - Math.floor(currentSpent));
 
-    if (staminaDebit > 0) {
-      if (runtime) {
-        const staminaBefore = readRuntimeStaminaCurrent(runtime);
-        const staminaMax = readRuntimeStaminaMax(runtime);
-        const staminaAfter = Math.max(0, staminaBefore - staminaDebit);
-        syncRuntimeStamina(runtime, staminaAfter, staminaMax);
-        markStatsDirty(userId);
-      } else {
-        const stats = await db.GaUserStats.findByPk(userId);
-        if (stats) {
-          const staminaBefore = Number(stats.stamina_current ?? 0);
-          const staminaAfter = Math.max(0, staminaBefore - staminaDebit);
-          await stats.update({ stamina_current: staminaAfter });
-        }
-      }
+    if (!Number.isFinite(craftTimeMs) || craftTimeMs <= 0) {
+      continue;
     }
 
-    if (nextProgressMs < craftTimeMs) {
-      if (nextProgressMs !== Number(job.current_progress_ms ?? 0) || nextSpent !== currentSpent) {
+    if (status === "PAUSED") {
+      if (currentProgressMs >= craftTimeMs) {
         await job.update({
-          current_progress_ms: Math.floor(nextProgressMs),
-          stamina_spent: nextSpent,
+          status: "COMPLETED",
+          current_progress_ms: Math.floor(craftTimeMs),
+          stamina_spent: totalStaminaCost,
+          completed_at_ms: nowMs,
+          updated_at: now,
+        });
+      } else if (staminaCurrent > 0) {
+        await job.update({
+          status: "RUNNING",
+          started_at_ms: nowMs,
+          paused_at_ms: null,
           updated_at: now,
         });
       }
       continue;
     }
 
-    await job.update({
-      status: "COMPLETED",
-      current_progress_ms: Math.floor(craftTimeMs),
-      stamina_spent: totalStaminaCost,
-      completed_at_ms: startedAtMs + craftTimeMs,
-      updated_at: now,
-    });
+    if (status !== "RUNNING") {
+      continue;
+    }
+
+    if (!Number.isFinite(startedAtMs) || startedAtMs <= 0) continue;
+    if (currentProgressMs >= craftTimeMs) {
+      await job.update({
+        status: "COMPLETED",
+        current_progress_ms: Math.floor(craftTimeMs),
+        stamina_spent: totalStaminaCost,
+        completed_at_ms: startedAtMs + craftTimeMs,
+        updated_at: now,
+      });
+      continue;
+    }
+
+    const elapsedMs = Math.max(0, nowMs - startedAtMs);
+    const remainingTimeMs = Math.max(0, craftTimeMs - currentProgressMs);
+    const desiredAdvanceMs = Math.min(elapsedMs, remainingTimeMs);
+    if (desiredAdvanceMs <= 0) continue;
+
+    let actualAdvanceMs = desiredAdvanceMs;
+    let staminaDebit = 0;
+    let shouldPause = false;
+
+    if (totalStaminaCost > 0) {
+      if (staminaCurrent <= 0) {
+        actualAdvanceMs = 0;
+        shouldPause = true;
+      } else {
+        const maxAdvanceByStaminaMs = Math.floor((staminaCurrent * craftTimeMs) / totalStaminaCost);
+        actualAdvanceMs = Math.min(desiredAdvanceMs, maxAdvanceByStaminaMs, remainingTimeMs);
+        staminaDebit = actualAdvanceMs > 0 ? Math.min(staminaCurrent, Math.max(1, Math.ceil((actualAdvanceMs * totalStaminaCost) / craftTimeMs))) : 0;
+        shouldPause = actualAdvanceMs < desiredAdvanceMs;
+      }
+    }
+
+    const nextProgressMs = Math.min(craftTimeMs, currentProgressMs + actualAdvanceMs);
+    if (staminaDebit > 0) {
+      staminaCurrent = Math.max(0, staminaCurrent - staminaDebit);
+      if (runtime) {
+        syncRuntimeStamina(runtime, staminaCurrent, staminaMax);
+        markStatsDirty(userId);
+      } else {
+        if (statsRow) {
+          await statsRow.update({ stamina_current: staminaCurrent });
+        }
+      }
+    }
+
+    if (nextProgressMs >= craftTimeMs) {
+      const remainingCharge = Math.max(0, totalStaminaCost - (currentSpent + staminaDebit));
+      if (remainingCharge > 0) {
+        staminaCurrent = Math.max(0, staminaCurrent - remainingCharge);
+        if (runtime) {
+          syncRuntimeStamina(runtime, staminaCurrent, staminaMax);
+          markStatsDirty(userId);
+        } else {
+          if (statsRow) {
+            await statsRow.update({ stamina_current: staminaCurrent });
+          }
+        }
+      }
+
+      await job.update({
+        status: "COMPLETED",
+        current_progress_ms: Math.floor(craftTimeMs),
+        stamina_spent: totalStaminaCost,
+        completed_at_ms: nowMs,
+        updated_at: now,
+      });
+      continue;
+    }
+
+    if (shouldPause) {
+      await job.update({
+        status: "PAUSED",
+        current_progress_ms: Math.floor(nextProgressMs),
+        stamina_spent: Math.min(totalStaminaCost, Math.max(currentSpent, currentSpent + staminaDebit)),
+        started_at_ms: null,
+        paused_at_ms: nowMs,
+        updated_at: now,
+      });
+      continue;
+    }
+
+    if (nextProgressMs !== currentProgressMs || staminaDebit > 0) {
+      await job.update({
+        current_progress_ms: Math.floor(nextProgressMs),
+        stamina_spent: Math.min(totalStaminaCost, currentSpent + staminaDebit),
+        started_at_ms: nowMs,
+        paused_at_ms: null,
+        updated_at: now,
+      });
+    }
   }
 }
 

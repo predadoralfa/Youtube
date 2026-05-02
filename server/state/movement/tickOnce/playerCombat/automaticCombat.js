@@ -5,7 +5,10 @@ const { getEnemy } = require("../../../enemies/enemiesRuntimeStore");
 const { loadPlayerCombatStats } = require("../../../runtime/combatLoader");
 const { executeServerSideAttack } = require("./executeServerSideAttack");
 const { resolveFeverDebuffTempoMultiplier } = require("../../../conditions/fever");
-const { applyClickInput } = require("../../input");
+const { applyClickInput, stopMovement } = require("../../input");
+const { bumpRev, toDelta } = require("../../entity");
+const { markRuntimeDirty } = require("../../../runtimeStore");
+const { emitPlayerState } = require("../playerMovementPhase/emitPlayerState");
 
 async function processAutomaticCombat(io, rt, nowMs) {
   if (!rt.combat || rt.combat.state !== "ENGAGED") {
@@ -38,6 +41,17 @@ async function processAutomaticCombat(io, rt, nowMs) {
   const approachStopRadius = 0.1;
 
   if (distance <= attackRange) {
+    const movementStopped = stopMovement(rt, { nowMs });
+    if (movementStopped.changed) {
+      rt.action = "idle";
+      bumpRev(rt);
+      markRuntimeDirty(rt.userId, nowMs);
+      await emitPlayerState(io, rt, {
+        nowMs,
+        force: true,
+      });
+    }
+
     let stats;
     try {
       stats = await loadPlayerCombatStats(rt.userId);

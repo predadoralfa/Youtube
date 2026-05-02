@@ -83,6 +83,7 @@ export function GameShellView({ state, actions }) {
         onClose={actions.closeResearch}
         onStartStudy={actions.emitResearchStart}
         onRequestInventoryFull={actions.requestInventoryFull}
+        onRequestResearchFull={actions.requestResearchFull}
       />
 
       <SkillsModal

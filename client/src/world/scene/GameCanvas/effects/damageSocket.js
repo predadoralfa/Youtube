@@ -8,6 +8,42 @@ export function useDamageSocket(state, worldStoreRef, damageTtlMs) {
     const socket = getSocket();
     if (!socket) return;
 
+    const resetCombatVisualState = () => {
+      if (state.combatTargetRef) {
+        state.combatTargetRef.current = null;
+      }
+
+      const movementVisual = state.movementVisualRef?.current ?? null;
+      if (movementVisual) {
+        movementVisual.mode = "STOP";
+        movementVisual.dir = { x: 0, z: 0 };
+        movementVisual.inputDir = { x: 0, z: 0 };
+        movementVisual.localDir = { x: 0, z: 0 };
+        movementVisual.clickTarget = null;
+        movementVisual.clickRequestedAt = 0;
+        movementVisual.stopRequestedAt = performance.now();
+        movementVisual.directionChangedAt = 0;
+        movementVisual.lastVisualStepAt = 0;
+      }
+
+      state.setSnapshot((prev) => {
+        if (!prev?.runtime) return prev;
+
+        return {
+          ...prev,
+          runtime: {
+            ...prev.runtime,
+            combat: {
+              ...(prev.runtime.combat ?? {}),
+              state: "IDLE",
+              targetId: null,
+              targetKind: null,
+            },
+          },
+        };
+      });
+    };
+
     const applyDamageEvent = (data, fallbackKind = "DEFAULT") => {
       if (!data) return;
 
@@ -128,6 +164,7 @@ export function useDamageSocket(state, worldStoreRef, damageTtlMs) {
     const onDamageTaken = (data) => applyDamageEvent(data, "OUTGOING_PLAYER");
     const onEnemyAttack = (data) => applyDamageEvent(data, "INCOMING_ENEMY");
     const onCombatCancelled = () => {
+      resetCombatVisualState();
       state.seenDamageEventIdsRef.current.clear();
       state.setFloatingDamages([]);
       state.setTargetHpBar(null);

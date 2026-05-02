@@ -1,7 +1,7 @@
 import { debugIds, toId } from "../helpers";
 import { normalizeSpawnedActor, patchSelfFromBaseline } from "./patches";
 
-export function createWorldHandlers(state, requestInventoryFull, socket, store, mountedRef) {
+export function createWorldHandlers(state, requestInventoryFull, requestResearchFull, socket, store, mountedRef) {
   const onWorldObjectSpawn = (payload) => {
     const actor = payload?.actor ?? payload?.object ?? payload ?? null;
     const normalizedActor = normalizeSpawnedActor(actor, store);
@@ -57,6 +57,11 @@ export function createWorldHandlers(state, requestInventoryFull, socket, store, 
       if (state.pendingInvRequestRef.current) {
         const ok = requestInventoryFull();
         if (ok) state.pendingInvRequestRef.current = false;
+      }
+
+      if (state.pendingResearchRequestRef?.current) {
+        const ok = requestResearchFull();
+        if (ok) state.pendingResearchRequestRef.current = false;
       }
     });
   };

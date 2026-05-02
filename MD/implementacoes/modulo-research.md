@@ -194,8 +194,14 @@ Em vez de colocar no item antigo uma lista de futuros desbloqueios, a gente cria
 Exemplos práticos:
 
 - `RESEARCH_STONE` no nivel 3 libera a tecnologia `WEAPON-STONE-SLING`
+- `RESEARCH_STONE` no nivel 4 libera a tecnologia `RESEARCH_STONE_THROW`
+- `RESEARCH_STONE_THROW` nivel 1 libera o craft `CRAFT_STONE_THROW`
+- `RESEARCH_STONE` no nivel 4 libera a tecnologia `RESEARCH_STONE_PUNCH`
+- `RESEARCH_STONE_PUNCH` nivel 1 libera o craft `CRAFT_STONE_PUNCH`
 - `RESEARCH_BASKET` no nivel 2 exige `10 FIBER` + `10 GRAVETO`
 - `RESEARCH_BASKET` no nivel 3 libera a tecnologia `CRAFT_BASKET_T2`
+- `RESEARCH_BASKET` no nivel 4 passa a exigir `RESEARCH_TWIG` nivel 3, sem custo extra de item
+- `RESEARCH_BASKET` continua ao lado da arvore de `APPLE`
 - quando surgir uma tecnologia nova, ela deve ser cadastrada com os requisitos de aparicao corretos, em vez de ser antecipada em toda a arvore pai
 
 Regra mental:
@@ -264,6 +270,8 @@ A tela de research:
 
 - abre com `R`
 - consome payload real do backend
+- mostra a arvore completa de researches
+- deixa cinza e bloqueado o que ainda nao pode iniciar
 - mostra progresso por estudo
 - mostra tempo do nivel atual
 - expõe botao de iniciar estudo

@@ -2,13 +2,14 @@ import { canonicalItemCode, normalizeIdentity } from "./normalize";
 
 export function getRequirementLabel(cost, inventoryIndex) {
   if (!cost) return "Unknown";
+  const index = inventoryIndex ?? {};
   if (cost.itemDefId != null) {
-    const def = inventoryIndex.defById.get(String(cost.itemDefId)) ?? null;
+    const def = index.defById?.get(String(cost.itemDefId)) ?? null;
     if (def?.name) return def.name;
   }
   if (cost.itemCode != null) {
     const code = String(cost.itemCode).toUpperCase();
-    const def = inventoryIndex.defByCode.get(code) ?? null;
+    const def = index.defByCode?.get(code) ?? null;
     if (def?.name) return def.name;
     return code;
   }
@@ -17,16 +18,17 @@ export function getRequirementLabel(cost, inventoryIndex) {
 
 export function getRequirementCount(cost, inventoryIndex) {
   if (!cost) return 0;
+  const index = inventoryIndex ?? {};
   if (cost.itemDefId != null) {
-    const count = inventoryIndex.countsByDefId.get(String(cost.itemDefId));
+    const count = index.countsByDefId?.get(String(cost.itemDefId));
     if (Number.isFinite(count)) return Number(count);
   }
   if (cost.itemCode != null) {
-    const count = inventoryIndex.countsByCode.get(canonicalItemCode(cost.itemCode));
+    const count = index.countsByCode?.get(canonicalItemCode(cost.itemCode));
     if (Number.isFinite(count)) return Number(count);
   }
   if (cost.itemCode != null) {
-    const countByName = inventoryIndex.countsByName.get(normalizeIdentity(canonicalItemCode(cost.itemCode)));
+    const countByName = index.countsByName?.get(normalizeIdentity(canonicalItemCode(cost.itemCode)));
     if (Number.isFinite(countByName)) return Number(countByName);
   }
   return 0;

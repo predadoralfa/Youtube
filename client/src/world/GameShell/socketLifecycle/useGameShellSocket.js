@@ -6,7 +6,7 @@ import { createInventoryHandlers } from "./inventoryHandlers";
 import { createWorldHandlers } from "./worldHandlers";
 import { createEntityHandlers } from "./entityHandlers";
 
-export function useGameShellSocket(state, requestInventoryFull) {
+export function useGameShellSocket(state, requestInventoryFull, requestResearchFull) {
   const mountedRef = useRef(false);
   const {
     setLoading,
@@ -16,6 +16,7 @@ export function useGameShellSocket(state, requestInventoryFull) {
     socketRef,
     joinedRef,
     pendingInvRequestRef,
+    pendingResearchRequestRef,
     worldStoreRef,
     selectedTargetRef,
     combatTargetRef,
@@ -70,7 +71,7 @@ export function useGameShellSocket(state, requestInventoryFull) {
         const store = worldStoreRef.current;
         const handlers = {
           ...createInventoryHandlers(state),
-          ...createWorldHandlers(state, requestInventoryFull, socket, store, mountedRef),
+          ...createWorldHandlers(state, requestInventoryFull, requestResearchFull, socket, store, mountedRef),
           ...createEntityHandlers(state, store),
         };
 
@@ -137,11 +138,13 @@ export function useGameShellSocket(state, requestInventoryFull) {
       socketRef.current = null;
       joinedRef.current = false;
       pendingInvRequestRef.current = false;
+      state.pendingResearchRequestRef.current = false;
       selectedTargetRef.current = null;
       combatTargetRef.current = null;
     };
   }, [
     requestInventoryFull,
+    requestResearchFull,
     setLoading,
     setInventorySnapshot,
     setEquipmentSnapshot,
@@ -149,6 +152,7 @@ export function useGameShellSocket(state, requestInventoryFull) {
     socketRef,
     joinedRef,
     pendingInvRequestRef,
+    pendingResearchRequestRef,
     worldStoreRef,
     selectedTargetRef,
     combatTargetRef,

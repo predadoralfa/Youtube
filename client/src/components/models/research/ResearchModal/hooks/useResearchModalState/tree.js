@@ -3,12 +3,12 @@ function normalizeStudyId(study) {
 }
 
 function buildStudyTree(studies) {
-  const visibleStudies = Array.isArray(studies) ? studies.filter((study) => study?.isVisible !== false) : [];
-  const byId = new Map(visibleStudies.map((study) => [normalizeStudyId(study), study]));
+  const allStudies = Array.isArray(studies) ? studies : [];
+  const byId = new Map(allStudies.map((study) => [normalizeStudyId(study), study]));
   const childrenByParentId = new Map();
   const roots = [];
 
-  for (const study of visibleStudies) {
+  for (const study of allStudies) {
     const parentId = Number(study?.prerequisiteResearchDefId ?? 0) || null;
     const parent = parentId ? byId.get(parentId) ?? null : null;
     if (parent) {

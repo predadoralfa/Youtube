@@ -46,6 +46,7 @@ Estrutura atual:
  |   |-- guia-registro-builder.md
  |   |-- guia-registro-itens-com-container.md
  |   |-- guia-registro-itens.md
+ |   |-- guia-registro-armas.md
  |   |-- guia-registro-research.md
  |   `-- guia-registro-skills-craft.md
   `-- implementacoes/
@@ -92,6 +93,7 @@ Atalhos:
 
 - actors: [guia-registro-actors.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-actors.md)
 - itens: [guia-registro-itens.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-itens.md)
+- armas: [guia-registro-armas.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-armas.md)
 - research: [guia-registro-research.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-research.md)
 - builder: [guia-registro-builder.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-builder.md)
 - skills e craft: [guia-registro-skills-craft.md](/D:/JS-Projects/Youtube/MD/seeds/guia-registro-skills-craft.md)
@@ -441,6 +443,7 @@ Ideia principal:
 - progresso e persistido por jogador
 - progresso so avanca online
 - cada nivel desbloqueia capacidade concreta
+- todas as researches aparecem na arvore, mas as que dependem de prerequisitos ficam cinza e sem clique ate serem liberadas
 
 Pecas principais:
 

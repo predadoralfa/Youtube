@@ -118,6 +118,20 @@ export function createInventoryHandlers(state) {
       ].slice(-8));
     }
 
+    const collectAtMs = Date.now();
+    state.setSnapshot((prev) => {
+      if (!prev?.runtime) return prev;
+      return {
+        ...prev,
+        runtime: {
+          ...prev.runtime,
+          lastActorCollectAtMs: collectAtMs,
+          lastActorCollectId: actorId,
+          lastActorCollectDisabled: actorDisabled,
+        },
+      };
+    });
+
     state.setSnapshot((prev) => {
       let next = prev;
       if (payload?.actorUpdate) {

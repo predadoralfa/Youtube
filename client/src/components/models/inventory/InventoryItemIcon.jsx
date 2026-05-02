@@ -3,6 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import { Bounds, Center, useGLTF } from "@react-three/drei";
 
 const rockModelUrl = new URL("../../../assets/Rock.glb", import.meta.url).href;
+const stoneModelUrl = new URL("../../../assets/Stone.glb", import.meta.url).href;
 const appleModelUrl = new URL("../../../assets/Apple.glb", import.meta.url).href;
 const grassModelUrl = new URL("../../../assets/Grass.glb", import.meta.url).href;
 const logModelUrl = new URL("../../../assets/Log.glb", import.meta.url).href;
@@ -24,6 +25,14 @@ function resolveInventoryIconSpec(itemDef) {
       scale: 1.15,
       cameraPosition: [0, 0, 3.15],
       rotation: [Math.PI / 2, 0, 0],
+    };
+  }
+
+  if (assetKey.includes("STONE")) {
+    return {
+      url: stoneModelUrl,
+      scale: 1.4,
+      cameraPosition: [0, 0, 3.1],
     };
   }
 

@@ -32,8 +32,15 @@ async function startResearch(userId, researchCode, nowMs = Date.now()) {
     if (!target) {
       return { ok: false, code: "RESEARCH_NOT_FOUND", message: "Research not found" };
     }
-    if (target.isVisible === false) {
+    if (target.prerequisiteSatisfied === false) {
       return { ok: false, code: "RESEARCH_LOCKED", message: "Research is locked" };
+    }
+    if (target.levelResearchRequirementsSatisfied === false) {
+      return {
+        ok: false,
+        code: "RESEARCH_LEVEL_REQUIREMENT_LOCKED",
+        message: "Research level requirements are not met",
+      };
     }
     if (target.status === STATUS_RUNNING) {
       return { ok: true, research: buildResearchPayload(rt) };

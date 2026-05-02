@@ -19,6 +19,7 @@ export function useResearchModalState(props) {
   useResearchModalEffects({
     open: props.open,
     onRequestInventoryFull: props.onRequestInventoryFull,
+    onRequestResearchFull: props.onRequestResearchFull,
     zoom,
     zoomRef: refs.zoomRef,
     zoomFrameRef: refs.zoomFrameRef,

@@ -18,6 +18,11 @@ function buildStudyPayload(study) {
   const levelStudyTimeMs = toFiniteNumber(nextStudy?.studyTimeMs, 0);
   const progressMs = clamp(toFiniteNumber(study.progressMs, 0), 0, Math.max(0, levelStudyTimeMs));
   const progressRatio = levelStudyTimeMs > 0 ? clamp(progressMs / levelStudyTimeMs, 0, 1) : 0;
+  const itemDefComponents = Array.isArray(study.itemDef?.components) ? study.itemDef.components : [];
+  const itemDefComponentTypes = itemDefComponents
+    .map((component) => String(component?.component_type ?? component?.componentType ?? "").trim().toUpperCase())
+    .filter(Boolean);
+  const isWeapon = itemDefComponentTypes.includes("WEAPON");
 
   return {
     researchDefId: Number(study.researchDefId),
@@ -40,13 +45,24 @@ function buildStudyPayload(study) {
     nextLevelDescription: nextStudy?.description ?? null,
     levelRequirements: nextStudy?.requirements ?? null,
     levelItemCosts: normalizeItemCosts(nextStudy?.requirements),
+    levelResearchRequirements: Array.isArray(study.levelResearchRequirements)
+      ? study.levelResearchRequirements.map((requirement) => ({
+          researchDefId: requirement?.researchDefId != null ? Number(requirement.researchDefId) : null,
+          researchCode: requirement?.researchCode ?? null,
+          researchName: requirement?.researchName ?? null,
+          level: Number(requirement?.level ?? 1),
+          satisfied: requirement?.satisfied !== false,
+        }))
+      : [],
+    levelResearchRequirementsSatisfied: study.levelResearchRequirementsSatisfied !== false,
     canStart: Boolean(study.canStart),
     isRunning: study.status === STATUS_RUNNING,
     isCompleted: study.status === STATUS_COMPLETED,
-    isVisible: study.isVisible !== false,
-    prerequisiteResearchDefId: study.prerequisiteResearchDefId ?? null,
-    prerequisiteResearchCode: study.prerequisiteResearchCode ?? null,
-    prerequisiteResearchName: study.prerequisiteResearchName ?? null,
+     isVisible: study.isVisible !== false,
+     prerequisiteSatisfied: study.prerequisiteSatisfied !== false,
+     prerequisiteResearchDefId: study.prerequisiteResearchDefId ?? null,
+     prerequisiteResearchCode: study.prerequisiteResearchCode ?? null,
+     prerequisiteResearchName: study.prerequisiteResearchName ?? null,
     prerequisiteLevel: Number(study.prerequisiteLevel ?? 1),
     itemDef: study.itemDef
       ? {
@@ -54,6 +70,8 @@ function buildStudyPayload(study) {
           code: study.itemDef.code,
           name: study.itemDef.name,
           category: study.itemDef.category,
+          componentTypes: itemDefComponentTypes,
+          isWeapon,
         }
       : null,
   };

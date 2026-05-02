@@ -90,10 +90,30 @@ Exemplo de `requirements_json`:
 ```json
 {
   "requiresLevel": 2,
+  "researchRequirements": [
+    {
+      "researchCode": "RESEARCH_TWIG",
+      "level": 3
+    }
+  ],
   "itemCosts": [
     {
       "itemCode": "GRAVETO",
       "qty": 30
+    }
+  ]
+}
+```
+
+Para um requisito de pesquisa extra, sem custo de item:
+
+```json
+{
+  "requiresLevel": 3,
+  "researchRequirements": [
+    {
+      "researchCode": "RESEARCH_TWIG",
+      "level": 3
     }
   ]
 }
@@ -137,8 +157,8 @@ Estados:
 Hoje o desbloqueio de pesquisa nao depende de hardcode por item. Ele depende desta regra:
 
 1. a research pai precisa estar concluida no nivel minimo
-2. o `payload` do backend marca a research filha como visivel
-3. o front so mostra o que o backend autorizou
+2. o backend continua enviando a arvore completa
+3. o front mostra tudo, mas bloqueia o clique e deixa cinza o que ainda nao pode iniciar
 
 Exemplo:
 
@@ -254,6 +274,7 @@ Entao, em geral, nao precisa criar if novo no codigo para uma research comum.
 - niveis: sempre iniciar em `1`
 - unlocks: usar `grants_json.unlock`
 - custos: usar `requirements_json.itemCosts`
+- prerequisitos extras de pesquisa: usar `requirements_json.researchRequirements`
 - arvore: sempre preferir pai-filho no banco
 
 Para pesquisas iniciais de item, manter a progressao padronizada com:

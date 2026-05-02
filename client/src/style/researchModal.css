@@ -136,6 +136,11 @@
   font-size: 0.88rem;
 }
 
+.research-description-requirements {
+  color: rgba(236, 251, 255, 0.9);
+  font-weight: 600;
+}
+
 .research-close {
   align-self: flex-start;
   padding: 11px 16px;
@@ -180,6 +185,7 @@
   position: relative;
   gap: 38px;
   padding-bottom: 24px;
+  flex: 0 0 auto;
 }
 
 .research-lane--static {
@@ -254,6 +260,28 @@
   min-width: 0;
 }
 
+.research-tree-children--row {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 34px;
+  margin-left: 0;
+  margin-top: 0;
+  padding-left: 38px;
+  width: max-content;
+}
+
+.research-tree-children--row .research-tree-children-stack {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 34px;
+  min-width: max-content;
+}
+
+.research-tree-children--row .research-tree-node {
+  flex: 0 0 auto;
+}
+
 .research-tree-children::before {
   display: none;
 }
@@ -323,6 +351,22 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 0 0 1px rgba(255, 211, 138, 0.12),
     0 16px 38px rgba(0, 0, 0, 0.22);
+}
+
+.research-card--locked {
+  opacity: 0.62;
+  filter: grayscale(0.95) saturate(0.75);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.research-card--locked .research-icon-box {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.research-card--locked .research-badge {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(236, 251, 255, 0.8);
 }
 
 .build-stage {

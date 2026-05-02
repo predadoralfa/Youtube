@@ -10,10 +10,15 @@ export function useGameShellRequestActions(state) {
 
   const requestResearchFull = useCallback(() => {
     const s = state.socketRef.current;
-    if (!s || !state.joinedRef.current) return false;
+    if (!s || !state.joinedRef.current) {
+      if (state.pendingResearchRequestRef) {
+        state.pendingResearchRequestRef.current = true;
+      }
+      return false;
+    }
     s.emit("research:request_full", { reason: "ui_open" });
     return true;
-  }, [state.joinedRef, state.socketRef]);
+  }, [state.joinedRef, state.pendingResearchRequestRef, state.socketRef]);
 
   const emitEquipmentAction = useCallback((eventName, payload) => {
     const s = state.socketRef.current;

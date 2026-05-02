@@ -32,6 +32,8 @@ module.exports = (sequelize, DataTypes) => {
 
       // JSON pequeno e versionável por componente.
       // Ex consumable: { effects:[{stat:"hp",op:"add",value:50,durationMs:0}] }
+      // Para armas, este JSON e temporario: o plano e migrar classificacoes
+      // como `weaponClass` para uma coluna ENUM no schema futuramente.
       data_json: {
         type: DataTypes.JSON,
         allowNull: true,

@@ -1,6 +1,9 @@
 import { formatDuration } from "../helpers/study";
+import { formatResearchRequirementSummary } from "../helpers/requirements";
 
-export function ResearchTopbar({ activeStudy, previewStudy, onClose }) {
+export function ResearchTopbar({ activeStudy, previewStudy, inventoryIndex, onClose }) {
+  const requirementSummary = formatResearchRequirementSummary(previewStudy, inventoryIndex);
+
   return (
     <div className="research-topbar">
       <div className="research-topbar-main">
@@ -27,9 +30,13 @@ export function ResearchTopbar({ activeStudy, previewStudy, onClose }) {
             <span style={{ width: `${activeStudy ? activeStudy.liveProgressRatio * 100 : 0}%` }} />
           </div>
           <p className="research-global-copy">
-            {previewStudy?.nextLevelDescription ??
-              previewStudy?.levelDescription ??
-              "Select or start a study to see what the next level unlocks."}
+            {previewStudy?.nextLevelDescription ?? previewStudy?.levelDescription ?? "Select or start a study to see what the next level unlocks."}
+            {requirementSummary ? (
+              <>
+                {" "}
+                <span className="research-description-requirements">{requirementSummary}</span>
+              </>
+            ) : null}
           </p>
         </div>
       </div>

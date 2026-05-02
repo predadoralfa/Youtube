@@ -66,8 +66,6 @@ function collectIngredientSlots(invRt, itemDefId, quantity) {
   const matches = [];
 
   for (const container of invRt.containers ?? []) {
-    if (!isLegacyHandRole(container.slotRole)) continue;
-
     for (const slot of container.slots ?? []) {
       if (remaining <= 0) break;
       if (slot.itemInstanceId == null || Number(slot.qty ?? 0) <= 0) continue;
@@ -83,7 +81,7 @@ function collectIngredientSlots(invRt, itemDefId, quantity) {
   }
 
   if (remaining > 0) {
-    const err = new Error("Put the required items in HAND_L or HAND_R first.");
+    const err = new Error("Put the required items anywhere in your inventory first.");
     err.code = "CRAFT_MISSING_INGREDIENTS";
     throw err;
   }
@@ -161,6 +159,16 @@ function findOutputSlot(invRt) {
   const err = new Error("No empty inventory or hand slot.");
   err.code = "CRAFT_NO_FREE_SLOT";
   throw err;
+}
+
+function resolveWeaponDurabilityMax(itemDef) {
+  const components = Array.isArray(itemDef?.components) ? itemDef.components : [];
+  const weaponComponent = components.find((component) => String(component?.component_type ?? component?.componentType ?? "").toUpperCase() === "WEAPON");
+  if (!weaponComponent) return null;
+
+  const data = weaponComponent.data_json ?? weaponComponent.dataJson ?? null;
+  const durabilityMax = Number(data?.durabilityMax ?? data?.durability_max ?? 0);
+  return Number.isFinite(durabilityMax) && durabilityMax > 0 ? Math.floor(durabilityMax) : null;
 }
 
 async function startCraftJob(invRt, craftDef, tx) {
@@ -303,6 +311,7 @@ async function claimCraftJob(invRt, eqRt, research, jobId, tx) {
   const craftDef = job.craftDef;
   const output = findOutputSlot(invRt);
   const outputQty = Math.max(1, Number(craftDef.output_qty ?? craftDef.outputQty ?? 1));
+  const outputDurability = resolveWeaponDurabilityMax(craftDef.outputItemDef);
 
   assertCanAddItemWeight(invRt, eqRt, research, craftDef.outputItemDef, outputQty);
 
@@ -311,7 +320,7 @@ async function claimCraftJob(invRt, eqRt, research, jobId, tx) {
       item_def_id: Number(craftDef.output_item_def_id ?? craftDef.outputItemDef?.id),
       owner_user_id: Number(invRt.userId),
       bind_state: "NONE",
-      durability: null,
+      durability: outputDurability,
       props_json: null,
     },
     { transaction: tx }
@@ -326,7 +335,7 @@ async function claimCraftJob(invRt, eqRt, research, jobId, tx) {
     userId: String(invRt.userId),
     itemDefId: String(craftDef.output_item_def_id ?? craftDef.outputItemDef?.id),
     props: null,
-    durability: null,
+    durability: outputDurability,
   });
 
   if (craftDef.outputItemDef) {

@@ -46,7 +46,7 @@ export function CraftTab({ craftRecipes, onCraftRecipe, onClaimCraftJob, setLoca
         const isReady = Boolean(readyJob);
         const canCraft = Boolean(recipe.canCraft);
         const hasRequiredSkill = Boolean(recipe.hasRequiredSkill);
-        const blockReason = recipe.blockReason || "Put the required items in HAND_L or HAND_R first";
+        const blockReason = recipe.blockReason || "Put the required items anywhere in your inventory first";
         const ingredients = recipe.recipeItems ?? [];
         const baseCraftTimeMs = Number(recipe.craftTimeBaseMs ?? recipe.craftTimeMs ?? 0);
         const effectiveCraftTimeMs = Number(recipe.craftTimeMs ?? baseCraftTimeMs ?? 0);
@@ -69,8 +69,8 @@ export function CraftTab({ craftRecipes, onCraftRecipe, onClaimCraftJob, setLoca
                         className={ingredientStateClass}
                         title={
                           ingredient.isReady
-                            ? `${ingredientName} available in hand`
-                            : `${ingredientName} missing from hands`
+                            ? `${ingredientName} available in inventory`
+                            : `${ingredientName} missing from inventory`
                         }
                       >
                         {ingredientName} {Number(ingredient.quantity ?? 0)}x
