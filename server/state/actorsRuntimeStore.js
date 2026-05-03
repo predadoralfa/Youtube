@@ -47,6 +47,12 @@ function addActor(actor) {
       y: toNum(actor.pos?.y, 0),
       z: toNum(actor.pos?.z, 0),
     },
+    yaw: toNum(actor.yaw, 0),
+    scale: {
+      x: toNum(actor.scale?.x, 1),
+      y: toNum(actor.scale?.y, 1),
+      z: toNum(actor.scale?.z, 1),
+    },
     status: actor.status ?? "ACTIVE",
     rev: toNum(actor.rev, 0),
     state: actor.state ?? actor.state_json ?? null,
@@ -64,7 +70,7 @@ function addActor(actor) {
   set.add(id);
 }
 
-function updateActorPos(actorId, pos) {
+function updateActorPos(actorId, pos, yaw = null, scale = null) {
   const id = toKey(actorId);
   const actor = actorsById.get(id);
   if (!actor) return false;
@@ -74,7 +80,19 @@ function updateActorPos(actorId, pos) {
     y: toNum(pos?.y, actor.pos?.y ?? 0),
     z: toNum(pos?.z, actor.pos?.z ?? 0),
   };
-  actor.rev += 1;
+
+  if (Number.isFinite(Number(yaw))) {
+    actor.yaw = toNum(yaw, actor.yaw ?? 0);
+  }
+
+  if (scale && typeof scale === "object") {
+    actor.scale = {
+      x: toNum(scale?.x, actor.scale?.x ?? 1),
+      y: toNum(scale?.y, actor.scale?.y ?? 1),
+      z: toNum(scale?.z, actor.scale?.z ?? 1),
+    };
+  }
+
   return true;
 }
 

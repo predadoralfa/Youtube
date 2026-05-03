@@ -40,12 +40,13 @@ export function useGameShellRequestActions(state) {
     return true;
   }, [state]);
 
-  const emitInventoryAction = useCallback((eventName, payload) => {
+  const emitInventoryAction = useCallback((eventName, payload, onAck) => {
     const s = state.socketRef.current;
     if (!s || !state.joinedRef.current) return false;
 
     state.setInventoryMessage(null);
     s.emit(eventName, payload, (ack) => {
+      onAck?.(ack);
       if (ack?.ok === true && ack?.inventory?.ok === true) {
         state.setInventorySnapshot(ack.inventory);
         if (ack.inventory?.equipment?.ok === true) {

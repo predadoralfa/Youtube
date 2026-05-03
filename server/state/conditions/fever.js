@@ -189,22 +189,6 @@ function applyFeverTick(
     writeRuntimeDiseaseState(rt, nextCurrent, feverSeverity);
   }
 
-  console.log(
-    `[FEVER_TICK] ${JSON.stringify({
-      userId: rt.userId ?? rt.user_id ?? null,
-      t: now,
-      current: Number(nextCurrent.toFixed(3)),
-      severity: Number(feverSeverity.toFixed(3)),
-      active: nextCurrent > 0,
-      activated: feverChanged && current <= 0 && nextCurrent > 0,
-      changed: feverChanged,
-      onsetChance: Number(onsetChance.toFixed(3)),
-      roll: Number(roll.toFixed(3)),
-      immunityCurrent: Number(immunityCurrent.toFixed(3)),
-      immunityMax: Number(immunityMax.toFixed(3)),
-    })}`
-  );
-
   return {
     changed: feverChanged,
     feverChanged,

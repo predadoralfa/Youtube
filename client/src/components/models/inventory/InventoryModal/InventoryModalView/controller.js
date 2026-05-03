@@ -50,10 +50,12 @@ export function createInventoryModalController(state, props) {
   const macroHandlers = createMacroHandlers({
     inventoryIndex: state.inventoryIndex,
     equipmentSnapshot: state.equipmentSnapshot,
+    macroUnlocked: state.macroUnlocked,
     macroHungerThreshold: state.macroHungerThreshold,
     setMacroFoodItemInstanceId: state.setMacroFoodItemInstanceId,
     setLocalNotice: state.setLocalNotice,
     onSetAutoFoodMacro: props.onSetAutoFoodMacro,
+    onCancelHeldState: props.onCancelHeldState,
     clearDrag: dragHandlers.clearDrag,
     dropHandledRef: state.dropHandledRef,
   });

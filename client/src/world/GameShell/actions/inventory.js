@@ -89,11 +89,11 @@ export function useGameShellInventoryActions({ emitInventoryAction, emitEquipmen
   );
 
   const onSetAutoFoodMacro = useCallback(
-    ({ itemInstanceId, hungerThreshold }) =>
+    ({ itemInstanceId, hungerThreshold }, onAck) =>
       emitInventoryAction("inv:auto_food:set", {
         itemInstanceId: itemInstanceId == null ? null : String(itemInstanceId),
         hungerThreshold: Number(hungerThreshold),
-      }),
+      }, onAck),
     [emitInventoryAction]
   );
 

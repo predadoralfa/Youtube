@@ -75,6 +75,8 @@ Ele guarda:
 - qual definicao esta sendo usada
 - qual spawn originou o actor, quando existir
 - posicao atual
+- rotacao atual em `yaw`
+- escala atual
 - estado atual
 - status
 
@@ -82,6 +84,46 @@ Regra:
 
 - actor fixo do mapa normalmente nasce de `spawn`
 - actor transitório pode existir so em `ga_actor`
+
+## Controle de transform no painel de debug
+
+O painel de debug do mundo permite editar transform de actor em runtime.
+
+Hoje ele controla:
+
+- posicao `x`, `y` e `z`
+- rotacao no eixo `Y`
+- escala `x`, `y` e `z`
+
+Comportamento importante:
+
+- `position.y` e salvo como offset relativo ao terreno, nao como altura absoluta
+- `rotation.y` e persistido como `yaw`
+- `scale` e persistida em colunas separadas no runtime
+- ao recarregar a cena, o client reaplica esses valores no mesh do actor
+
+Isso significa que:
+
+- um actor editado no painel nao deve voltar ao padrao depois de `F5`
+- o valor da transform nao fica so em memoria do client
+- a fonte de verdade do estado runtime passa a ser `ga_actor_runtime`
+
+### Colunas runtime usadas no banco
+
+Campos persistidos hoje em `ga_actor_runtime`:
+
+- `pos_x`
+- `pos_y`
+- `pos_z`
+- `yaw`
+- `scale_x`
+- `scale_y`
+- `scale_z`
+
+Observacao:
+
+- o sistema usa `yaw` como nome de persistencia para a rotacao horizontal
+- a renderizacao do mundo aplica `position`, `yaw` e `scale` a cada sync de actors
 
 ## Campo `actor_kind`
 

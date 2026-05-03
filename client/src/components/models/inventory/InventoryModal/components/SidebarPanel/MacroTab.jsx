@@ -1,7 +1,6 @@
 import { InventoryItemIcon } from "../../InventoryItemIconBridge";
 
 export function MacroTab({
-  dragItem,
   heldStateActive,
   selectedMacroFood,
   selectedMacroFoodLabel,
@@ -22,14 +21,9 @@ export function MacroTab({
           className={[
             "macro-food-slot",
             selectedMacroFood ? "is-occupied" : "is-empty",
-            dragItem || heldStateActive ? "is-drop-ready" : "",
           ]
             .filter(Boolean)
             .join(" ")}
-          onDragOver={(event) => {
-            if (dragItem) event.preventDefault();
-          }}
-          onDrop={handleMacroFoodDrop}
           onMouseUp={(event) => {
             if (!heldStateActive) return;
             if (event.button != null && event.button !== 0) return;
@@ -38,18 +32,24 @@ export function MacroTab({
 
             handleMacroFoodHeldSelect?.();
           }}
-        >
-          <div className="macro-food-slot-top">
-            <div className="macro-food-slot-body">
-              <InventoryItemIcon
-                itemDef={selectedMacroFood?.def ?? null}
-                label={selectedMacroFoodLabel}
-                className={`macro-food-icon-box ${selectedMacroFood ? "is-filled" : "is-empty"}`}
-              />
-              <div className="macro-food-slot-name">{selectedMacroFoodLabel}</div>
-            </div>
+          >
+            <div className="macro-food-slot-top">
+              <div className="macro-food-slot-body">
+                {selectedMacroFood ? (
+                  <>
+                    <InventoryItemIcon
+                      itemDef={selectedMacroFood?.def ?? null}
+                      label={selectedMacroFoodLabel}
+                      className="macro-food-icon-box is-filled"
+                    />
+                    <div className="macro-food-slot-name">{selectedMacroFoodLabel}</div>
+                  </>
+                ) : (
+                  <div className="macro-food-icon-box is-empty" aria-hidden="true" />
+                )}
+              </div>
 
-            {selectedMacroFood ? (
+              {selectedMacroFood ? (
               <button
                 type="button"
                 className="macro-food-clear"
@@ -59,15 +59,17 @@ export function MacroTab({
                     itemInstanceId: null,
                     hungerThreshold: macroHungerThreshold,
                   });
-                  setLocalNotice(ok ? null : "Macro update is not available right now");
+                  if (ok) {
+                    setLocalNotice(null);
+                  }
                 }}
-              >
-                Clear
-              </button>
+                >
+                  Clear
+                </button>
             ) : (
               <span className="macro-food-empty-state">EMPTY</span>
             )}
-          </div>
+            </div>
 
           <div className="macro-threshold-head">
             <span className="macro-threshold-label">Trigger Hunger</span>
@@ -88,7 +90,9 @@ export function MacroTab({
                 itemInstanceId: macroFoodItemInstanceId,
                 hungerThreshold: nextThreshold,
               });
-              setLocalNotice(ok ? null : "Macro update is not available right now");
+              if (ok) {
+                setLocalNotice(null);
+              }
             }}
           />
         </div>

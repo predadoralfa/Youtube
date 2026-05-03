@@ -32,6 +32,12 @@ function buildActorPayload(actorRow) {
       y: toFiniteNumber(actor.pos_y, 0),
       z: toFiniteNumber(actor.pos_z, 0),
     },
+    yaw: toFiniteNumber(actor.yaw, 0),
+    scale: {
+      x: toFiniteNumber(actor.scale_x, 1),
+      y: toFiniteNumber(actor.scale_y, 1),
+      z: toFiniteNumber(actor.scale_z, 1),
+    },
     status: actor.status,
     rev: Number(actor.rev ?? 0),
     visualHint: actorDef?.visual_hint ?? null,

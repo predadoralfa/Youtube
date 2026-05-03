@@ -12,14 +12,10 @@ export function InventoryGridSection({
   inventoryIndex,
   heldState,
   heldStateActive,
-  dragItem,
   setCursorPos,
   setContextMenu,
   setSplitDraft,
   setLocalNotice,
-  handleDragStart,
-  handleDragEnd,
-  handleInventorySlotDrop,
   openContextMenu,
   openContextMenuFromMouseDown,
   onPickupInventoryItem,
@@ -112,32 +108,10 @@ export function InventoryGridSection({
                       "inv-slot",
                       compact ? "inv-slot--compact" : "",
                       instanceId ? "is-occupied" : "is-empty",
-                      dragItem ? "is-drop-ready" : "",
                       isHeldSource ? "is-held-source" : "",
                     ].filter(Boolean).join(" ")}
                     key={`${String(containerKey)}:${slotIndex}:${sIndex}`}
-                    draggable={Boolean(instanceId) && !heldStateActive}
                     title={compact ? hoverLabel : undefined}
-                    onDragStart={
-                      instanceId
-                        ? handleDragStart({
-                            itemInstanceId: instanceId,
-                            fromSlotCode: `INV:${containerId}:${slotIndex}`,
-                            sourceKind: "inventory",
-                            sourceContainerId: containerId,
-                            sourceSlotIndex: slotIndex,
-                            sourceRole: role,
-                            allowedSlots,
-                            itemCategory: itemDef?.category ?? null,
-                            itemName,
-                          })
-                        : undefined
-                    }
-                    onDragEnd={instanceId ? handleDragEnd : undefined}
-                    onDragOver={(event) => {
-                      if (dragItem) event.preventDefault?.();
-                    }}
-                    onDrop={handleInventorySlotDrop?.({ containerId, slotIndex, role })}
                     onMouseUp={(event) => {
                       if (event.button != null && event.button !== 0) return;
                       event.preventDefault?.();

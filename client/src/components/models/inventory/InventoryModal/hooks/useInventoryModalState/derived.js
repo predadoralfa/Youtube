@@ -285,11 +285,44 @@ export function useInventoryModalDerivedState({
       })
     : [];
   const selectedMacroFood = macroFoodItemInstanceId
-    ? getInventoryOrEquipmentItemContext({
-        inventoryIndex,
-        equipmentSnapshot,
-        itemInstanceId: macroFoodItemInstanceId,
-      })
+    ? (() => {
+        const snapshotContext = getInventoryOrEquipmentItemContext({
+          inventoryIndex,
+          equipmentSnapshot,
+          itemInstanceId: macroFoodItemInstanceId,
+        });
+        if (snapshotContext) return snapshotContext;
+
+        if (String(heldState?.itemInstanceId ?? "") !== String(macroFoodItemInstanceId)) return null;
+
+        const heldItem = heldState?.item ?? null;
+        const heldDefId =
+          heldItem?.itemDefId ??
+          heldItem?.item_def_id ??
+          heldItem?.defId ??
+          heldItem?.def_id ??
+          heldState?.itemDefId ??
+          heldState?.item_def_id ??
+          null;
+        const heldDef = heldDefId != null ? inventoryIndex.defMap.get(String(heldDefId)) ?? null : null;
+
+        return {
+          inst: heldItem
+            ? {
+                id: String(macroFoodItemInstanceId),
+                itemDefId: heldDefId != null ? String(heldDefId) : heldItem.itemDefId ?? null,
+                item_def_id: heldDefId != null ? String(heldDefId) : heldItem.itemDefId ?? null,
+                defId: heldDefId != null ? String(heldDefId) : heldItem.itemDefId ?? null,
+              }
+            : {
+                id: String(macroFoodItemInstanceId),
+                itemDefId: heldDefId != null ? String(heldDefId) : null,
+                item_def_id: heldDefId != null ? String(heldDefId) : null,
+                defId: heldDefId != null ? String(heldDefId) : null,
+              },
+          def: heldDef,
+        };
+      })()
     : null;
   const selectedMacroFoodLabel = selectedMacroFood
     ? getItemLabel(selectedMacroFood.inst, selectedMacroFood.def)
@@ -324,6 +357,7 @@ export function useInventoryModalDerivedState({
     selectedMacroFood,
     selectedMacroFoodLabel,
     isFoodItemAvailable: (itemInstanceId) =>
-      isFoodItemInSnapshots({ inventoryIndex, equipmentSnapshot, itemInstanceId }),
+      isFoodItemInSnapshots({ inventoryIndex, equipmentSnapshot, itemInstanceId }) ||
+      String(heldState?.itemInstanceId ?? "") === String(itemInstanceId),
   };
 }

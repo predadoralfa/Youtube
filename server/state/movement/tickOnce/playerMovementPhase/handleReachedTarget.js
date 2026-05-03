@@ -26,13 +26,6 @@ async function handleReachedTarget(io, rt, t, processAutomaticCombat) {
     const interactActorId = rt.interact?.id ?? null;
     const pendingBuildActorId = rt.pendingBuild?.actorId ?? null;
     const pendingSleepActorId = rt.pendingSleep?.actorId ?? null;
-    console.log("[BUILD][SERVER] reached target", {
-      userId: rt.userId,
-      interactActorId,
-      pendingBuildActorId,
-      pendingSleepActorId,
-    });
-
     if (pendingSleepActorId != null && String(pendingSleepActorId) === String(interactActorId)) {
       try {
         if (!canStartPrimitiveShelterSleep(rt, 50)) {

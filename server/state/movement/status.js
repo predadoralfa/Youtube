@@ -252,22 +252,6 @@ function applyImmunityTick(
     Number(readRuntimeImmunityPercent(rt)) !== immunityPercent
   ) {
     syncRuntimeImmunity(rt, nextImmunityCurrent, immunityMax, immunityPercent);
-    console.log(
-      `[IMMUNITY_TICK] ${JSON.stringify({
-        userId: rt.userId ?? rt.user_id ?? null,
-        t: now,
-        before: Number(immunityCurrent.toFixed(3)),
-        current: Number(nextImmunityCurrent.toFixed(3)),
-        max: Number(immunityMax.toFixed(3)),
-        percent: Number(immunityPercent.toFixed(3)),
-        recovery: Number(recovery.toFixed(3)),
-        loss: Number(loss.toFixed(3)),
-        recoveryMultiplier: Number(recoveryMultiplier.toFixed(3)),
-        sleepRecoveryBonus: Number(sleepRecoveryBonus.toFixed(3)),
-        lossMultiplier: Number(resolveNeedLossMultiplier(hungerRatio, thirstRatio).toFixed(3)),
-        climateStressFactor: Number(climateStressFactor.toFixed(3)),
-      })}`
-    );
   }
 
   const diseaseChance = resolveDiseaseChance(nextImmunityCurrent, immunityMax);

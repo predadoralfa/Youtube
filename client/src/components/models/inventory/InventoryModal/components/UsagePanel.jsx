@@ -4,12 +4,7 @@ import { hasContainerItemsById } from "../helpers";
 export function UsagePanel({
   containers,
   handSlots,
-  dragItem,
   heldStateActive,
-  isSlotCompatible,
-  handleDragStart,
-  handleDragEnd,
-  handleInventoryDropHint,
   handleEquipmentSlotMouseUp,
   openContextMenuFromMouseDown,
   setLocalNotice,
@@ -24,10 +19,9 @@ export function UsagePanel({
           const item = slot.item;
           const occupied = Boolean(slot.itemInstanceId);
           const qty = Number(slot.qty ?? 0);
-          const compatible = dragItem ? isSlotCompatible(dragItem.itemInstanceId, slot.slotCode) : false;
           const lockedByGrantedContainer =
             occupied && Boolean(slot.grantedContainerId) && hasContainerItemsById(containers, slot.grantedContainerId);
-          const canDrag = occupied && !heldStateActive && !lockedByGrantedContainer;
+
           const handleMouseUp = (event) => {
             if (lockedByGrantedContainer) {
               event.preventDefault?.();
@@ -40,30 +34,8 @@ export function UsagePanel({
 
           return (
             <div
-              className={["equip-slot", occupied ? "is-occupied" : "is-empty", compatible ? "is-drop-ready" : ""].filter(Boolean).join(" ")}
+              className={["equip-slot", occupied ? "is-occupied" : "is-empty"].filter(Boolean).join(" ")}
               key={slot.slotCode}
-              draggable={canDrag}
-              onDragStart={
-                canDrag
-                  ? handleDragStart({
-                      itemInstanceId: slot.itemInstanceId,
-                      fromSlotCode: slot.slotCode,
-                      sourceKind: "equipment",
-                      sourceContainerId: slot.sourceContainerId ?? null,
-                      sourceSlotIndex: slot.sourceSlotIndex ?? null,
-                      sourceRole: slot.sourceRole ?? slot.slotCode,
-                      grantedContainerId: slot.grantedContainerId ?? null,
-                      allowedSlots: slot.item?.allowedSlots ?? [],
-                      itemCategory: slot.item?.category ?? null,
-                      itemName: slot.item?.name || slot.item?.code || "Item",
-                    })
-                  : undefined
-              }
-              onDragEnd={handleDragEnd}
-              onDragOver={(e) => {
-                if (dragItem) e.preventDefault();
-              }}
-              onDrop={handleInventoryDropHint(slot.slotCode)}
               onMouseUp={handleMouseUp}
               onMouseDown={(event) => {
                 if (lockedByGrantedContainer) {

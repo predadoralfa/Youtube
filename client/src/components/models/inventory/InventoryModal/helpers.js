@@ -202,15 +202,13 @@ function findEdibleComponent(def) {
 function hasRestoreHungerEffect(component) {
   const data = component?.dataJson ?? component?.data_json ?? null;
   const effects = Array.isArray(data?.effects) ? data.effects : [];
-  return effects.some(
-    (effect) => String(effect?.type ?? "").toUpperCase() === "RESTORE_HUNGER"
-  );
+  return effects.some((effect) => String(effect?.type ?? effect?.effectType ?? "").toUpperCase() === "RESTORE_HUNGER");
 }
 
 function isFoodLikeCategory(def) {
   const category = String(def?.category ?? "").toUpperCase();
   if (category === "FOOD" || category === "CONSUMABLE") return true;
-  return String(def?.code ?? "").toUpperCase().startsWith("FOOD-");
+  return false;
 }
 
 export function isFoodItem(inventoryIndex, itemInstanceId) {
@@ -219,7 +217,7 @@ export function isFoodItem(inventoryIndex, itemInstanceId) {
   if (!def || !isFoodLikeCategory(def)) return false;
 
   const edibleComponent = findEdibleComponent(def);
-  if (!edibleComponent) return String(def?.category ?? "").toUpperCase() === "FOOD";
+  if (!edibleComponent) return false;
 
   return hasRestoreHungerEffect(edibleComponent);
 }
@@ -230,7 +228,7 @@ export function isFoodItemInSnapshots({ inventoryIndex, equipmentSnapshot, itemI
   if (!def || !isFoodLikeCategory(def)) return false;
 
   const edibleComponent = findEdibleComponent(def);
-  if (!edibleComponent) return String(def?.category ?? "").toUpperCase() === "FOOD";
+  if (!edibleComponent) return false;
 
   return hasRestoreHungerEffect(edibleComponent);
 }

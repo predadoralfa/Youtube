@@ -57,29 +57,52 @@ function bindVector3Folder(folder, vector, labelPrefix, min = -500, max = 500, s
     .add(vector, "x", min, max, step)
     .name(`${labelPrefix}.x`)
     .listen()
-    .onChange(() => onChange?.());
+    .onChange(() => onChange?.())
+    .onFinishChange(() => onChange?.());
   folder
     .add(vector, "y", min, max, step)
     .name(`${labelPrefix}.y`)
     .listen()
-    .onChange(() => onChange?.());
+    .onChange(() => onChange?.())
+    .onFinishChange(() => onChange?.());
   folder
     .add(vector, "z", min, max, step)
     .name(`${labelPrefix}.z`)
     .listen()
-    .onChange(() => onChange?.());
+    .onChange(() => onChange?.())
+    .onFinishChange(() => onChange?.());
 }
 
-function bindRotationFolder(folder, euler, labelPrefix) {
+function bindRotationFolder(folder, euler, labelPrefix, onChange = null) {
   folder.add(euler, "x", -Math.PI, Math.PI, 0.001).name(`${labelPrefix}.x`).listen();
-  folder.add(euler, "y", -Math.PI, Math.PI, 0.001).name(`${labelPrefix}.y`).listen();
+  folder
+    .add(euler, "y", -Math.PI, Math.PI, 0.001)
+    .name(`${labelPrefix}.y`)
+    .listen()
+    .onChange(() => onChange?.())
+    .onFinishChange(() => onChange?.());
   folder.add(euler, "z", -Math.PI, Math.PI, 0.001).name(`${labelPrefix}.z`).listen();
 }
 
-function bindScaleFolder(folder, scale, labelPrefix) {
-  folder.add(scale, "x", 0.01, 50, 0.01).name(`${labelPrefix}.x`).listen();
-  folder.add(scale, "y", 0.01, 50, 0.01).name(`${labelPrefix}.y`).listen();
-  folder.add(scale, "z", 0.01, 50, 0.01).name(`${labelPrefix}.z`).listen();
+function bindScaleFolder(folder, scale, labelPrefix, onChange = null) {
+  folder
+    .add(scale, "x", 0.01, 50, 0.01)
+    .name(`${labelPrefix}.x`)
+    .listen()
+    .onChange(() => onChange?.())
+    .onFinishChange(() => onChange?.());
+  folder
+    .add(scale, "y", 0.01, 50, 0.01)
+    .name(`${labelPrefix}.y`)
+    .listen()
+    .onChange(() => onChange?.())
+    .onFinishChange(() => onChange?.());
+  folder
+    .add(scale, "z", 0.01, 50, 0.01)
+    .name(`${labelPrefix}.z`)
+    .listen()
+    .onChange(() => onChange?.())
+    .onFinishChange(() => onChange?.());
 }
 
 function resolveActorId(object) {
@@ -141,6 +164,91 @@ function createActorPositionCommitter(state, object) {
     socket?.emit?.("actor:update_position", {
       actorId,
       pos: actorPosition,
+    });
+
+    object?.updateMatrixWorld?.(true);
+  };
+}
+
+function createActorRotationCommitter(state, object) {
+  const actorId = resolveActorId(object);
+  if (!actorId) return null;
+
+  return () => {
+    const yaw = Number(object?.rotation?.y ?? 0);
+
+    if (Array.isArray(state?.actorsRef?.current)) {
+      state.actorsRef.current = state.actorsRef.current.map((actor) =>
+        String(actor?.id ?? "") === actorId
+          ? {
+              ...actor,
+              yaw,
+            }
+          : actor
+      );
+    }
+
+    if (typeof state?.setSnapshot === "function") {
+      state.setSnapshot((prev) =>
+        mergeSnapshotActor(prev, {
+          id: actorId,
+          actor: {
+            yaw,
+          },
+        })
+      );
+    }
+
+    const socket = getSocket();
+    socket?.emit?.("actor:update_position", {
+      actorId,
+      yaw,
+      pos: readObjectPosition(object),
+    });
+
+    object?.updateMatrixWorld?.(true);
+  };
+}
+
+function createActorScaleCommitter(state, object) {
+  const actorId = resolveActorId(object);
+  if (!actorId) return null;
+
+  return () => {
+    const scale = {
+      x: Number(object?.scale?.x ?? 1),
+      y: Number(object?.scale?.y ?? 1),
+      z: Number(object?.scale?.z ?? 1),
+    };
+
+    if (Array.isArray(state?.actorsRef?.current)) {
+      state.actorsRef.current = state.actorsRef.current.map((actor) =>
+        String(actor?.id ?? "") === actorId
+          ? {
+              ...actor,
+              scale,
+            }
+          : actor
+      );
+    }
+
+    if (typeof state?.setSnapshot === "function") {
+      state.setSnapshot((prev) =>
+        mergeSnapshotActor(prev, {
+          id: actorId,
+          actor: {
+            scale,
+          },
+        })
+      );
+    }
+
+    const socket = getSocket();
+    socket?.emit?.("actor:update_position", {
+      actorId,
+      scale,
+      pos: readObjectPosition(object),
+      yaw: Number(object?.rotation?.y ?? 0),
     });
 
     object?.updateMatrixWorld?.(true);
@@ -313,8 +421,8 @@ export function createWorldDebugGui({ scene, camera, renderer, refs = {}, flags 
     }
 
     bindVector3Folder(selectedFolder, object.position, "position", -500, 500, 0.01, createActorPositionCommitter(refs.state ?? null, object));
-    bindRotationFolder(selectedFolder, object.rotation, "rotation");
-    bindScaleFolder(selectedFolder, object.scale, "scale");
+    bindRotationFolder(selectedFolder, object.rotation, "rotation", createActorRotationCommitter(refs.state ?? null, object));
+    bindScaleFolder(selectedFolder, object.scale, "scale", createActorScaleCommitter(refs.state ?? null, object));
 
     selectedFolder.add(object, "visible").name("visible").listen();
 

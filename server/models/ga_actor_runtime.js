@@ -42,6 +42,26 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0,
       },
+      yaw: {
+        type: DataTypes.DECIMAL(10, 3),
+        allowNull: false,
+        defaultValue: 0,
+      },
+      scale_x: {
+        type: DataTypes.DECIMAL(10, 3),
+        allowNull: false,
+        defaultValue: 1,
+      },
+      scale_y: {
+        type: DataTypes.DECIMAL(10, 3),
+        allowNull: false,
+        defaultValue: 1,
+      },
+      scale_z: {
+        type: DataTypes.DECIMAL(10, 3),
+        allowNull: false,
+        defaultValue: 1,
+      },
       state_json: {
         type: DataTypes.JSON,
         allowNull: true,

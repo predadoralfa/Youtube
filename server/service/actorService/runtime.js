@@ -11,6 +11,10 @@ async function createRuntimeActor(params) {
   const posX = toFiniteNumber(params?.posX, 0);
   const posY = toFiniteNumber(params?.posY, 0);
   const posZ = toFiniteNumber(params?.posZ, 0);
+  const yaw = toFiniteNumber(params?.yaw, 0);
+  const scaleX = toFiniteNumber(params?.scaleX, 1);
+  const scaleY = toFiniteNumber(params?.scaleY, 1);
+  const scaleZ = toFiniteNumber(params?.scaleZ, 1);
   const stateJson = params?.stateJson ?? null;
   const status = String(params?.status || "ACTIVE").toUpperCase();
   const rev = Number.isFinite(Number(params?.rev)) ? Number(params.rev) : 1;
@@ -38,6 +42,10 @@ async function createRuntimeActor(params) {
         pos_x: posX,
         pos_y: posY,
         pos_z: posZ,
+        yaw,
+        scale_x: scaleX,
+        scale_y: scaleY,
+        scale_z: scaleZ,
         state_json: stateJson,
         status,
         rev,

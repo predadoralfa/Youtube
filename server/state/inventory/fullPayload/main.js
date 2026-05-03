@@ -324,28 +324,6 @@ function buildInventoryFull(invRt, equipmentRt = null) {
   const inventoryContainers = containers.filter((c) => !isLegacyHandRole(c.slotRole));
   const legacyHandContainers = containers.filter((c) => isLegacyHandRole(c.slotRole));
 
-  const containersPayload = inventoryContainers.map((c) => ({
-    id: c.id,
-    slotRole: c.slotRole,
-    state: c.state,
-    rev: c.rev,
-    def: c.def
-      ? {
-          id: c.def.id,
-          code: c.def.code,
-          name: c.def.name,
-          slotCount: c.def.slotCount,
-          maxWeight: c.def.maxWeight,
-          allowedCategoriesMask: c.def.allowedCategoriesMask,
-        }
-      : null,
-    slots: stableSortBy(c.slots ?? [], (s) => s.slotIndex).map((s) => ({
-      slotIndex: s.slotIndex,
-      itemInstanceId: s.itemInstanceId ?? null,
-      qty: s.qty ?? 0,
-    })),
-  }));
-
   const referencedInstanceIds = uniq(
     [...inventoryContainers, ...legacyHandContainers]
       .flatMap((c) => c.slots ?? [])
@@ -366,7 +344,52 @@ function buildInventoryFull(invRt, equipmentRt = null) {
     .map((id) => instanceMap?.get(id) || instanceMap?.get(Number(id)))
     .filter(Boolean);
 
-  const itemInstancesPayload = stableSortBy(itemInstances, (it) => String(it.id)).map((it) => ({
+  const resolvedDefIds = new Set(
+    uniq(
+      itemInstances
+        .map((it) => it.itemDefId)
+        .filter((id) => id != null)
+        .map((id) => String(id))
+    ).filter((id) =>
+      Boolean(
+        invRt.itemDefsById?.get(id) ||
+          invRt.itemDefsById?.get(Number(id)) ||
+          equipmentRt?.itemDefsById?.get?.(id) ||
+          equipmentRt?.itemDefsById?.get?.(Number(id))
+      )
+    )
+  );
+
+  const validItemInstances = itemInstances.filter((it) => resolvedDefIds.has(String(it.itemDefId)));
+  const validItemInstanceIds = new Set(validItemInstances.map((it) => String(it.id)));
+
+  const containersPayload = inventoryContainers.map((c) => ({
+    id: c.id,
+    slotRole: c.slotRole,
+    state: c.state,
+    rev: c.rev,
+    def: c.def
+      ? {
+          id: c.def.id,
+          code: c.def.code,
+          name: c.def.name,
+          slotCount: c.def.slotCount,
+          maxWeight: c.def.maxWeight,
+          allowedCategoriesMask: c.def.allowedCategoriesMask,
+        }
+      : null,
+    slots: stableSortBy(c.slots ?? [], (s) => s.slotIndex).map((s) => {
+      const itemInstanceId = s.itemInstanceId ?? null;
+      const isValidItem = itemInstanceId != null && validItemInstanceIds.has(String(itemInstanceId));
+      return {
+        slotIndex: s.slotIndex,
+        itemInstanceId: isValidItem ? itemInstanceId : null,
+        qty: isValidItem ? (s.qty ?? 0) : 0,
+      };
+    }),
+  }));
+
+  const itemInstancesPayload = stableSortBy(validItemInstances, (it) => String(it.id)).map((it) => ({
     id: String(it.id),
     itemDefId: String(it.itemDefId),
     durability: it.durability ?? null,
@@ -374,7 +397,7 @@ function buildInventoryFull(invRt, equipmentRt = null) {
   }));
 
   const referencedDefIds = uniq(
-    itemInstances
+    validItemInstances
       .map((it) => it.itemDefId)
       .filter((id) => id != null)
       .map((id) => String(id))
@@ -422,7 +445,10 @@ function buildInventoryFull(invRt, equipmentRt = null) {
         itemDefId: heldState.itemDefId != null ? String(heldState.itemDefId) : null,
         qty: heldState.qty != null ? Number(heldState.qty) : 0,
         createdAtMs: heldState.createdAtMs ?? null,
-        item: buildItemInstanceSummary(invRt, heldState.itemInstanceId),
+        item:
+          heldState.itemInstanceId != null && validItemInstanceIds.has(String(heldState.itemInstanceId))
+            ? buildItemInstanceSummary(invRt, heldState.itemInstanceId)
+            : null,
       }
     : null;
 

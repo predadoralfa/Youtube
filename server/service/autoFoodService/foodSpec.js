@@ -13,7 +13,7 @@ function findSlotByItemInstance(invRt, itemInstanceId) {
 
   for (const container of invRt?.containers ?? []) {
     for (const slot of container?.slots ?? []) {
-      if (String(slot?.itemInstanceId ?? "") === target && Number(slot?.qty ?? 0) > 0) {
+      if (String(slot?.itemInstanceId ?? "") === target) {
         return {
           container,
           slot,
@@ -74,10 +74,22 @@ function findEdibleComponent(itemDef) {
 
 function isFoodLikeCategory(itemDef) {
   const category = String(itemDef?.category ?? "").toUpperCase();
-  return category === "FOOD" || category === "CONSUMABLE";
+  if (category === "FOOD" || category === "CONSUMABLE") return true;
+  return false;
 }
 
-async function ensureItemDefHydrated(invRt, equipmentRt, itemDefId) {
+function readRestoreHungerValue(effect) {
+  const raw =
+    effect?.value ??
+    effect?.amount ??
+    effect?.qty ??
+    effect?.restoreHunger ??
+    effect?.restore_hunger ??
+    null;
+  return Math.max(0, toFiniteNumber(raw, 0));
+}
+
+async function ensureItemDefHydrated(invRt, equipmentRt, itemDefId, forceReload = false) {
   const key = String(itemDefId ?? "");
   if (!key) return null;
 
@@ -86,7 +98,7 @@ async function ensureItemDefHydrated(invRt, equipmentRt, itemDefId) {
   let itemDef = invMap?.get?.(key) ?? eqMap?.get?.(key) ?? null;
   const hasComponents = Array.isArray(itemDef?.components) && itemDef.components.length > 0;
 
-  if (itemDef && hasComponents) return itemDef;
+  if (itemDef && hasComponents && !forceReload) return itemDef;
 
   const itemDefRow = await db.GaItemDef.findByPk(Number(key));
   if (!itemDefRow) return itemDef;
@@ -103,37 +115,49 @@ async function ensureItemDefHydrated(invRt, equipmentRt, itemDefId) {
   return hydratedDef;
 }
 
-async function getFoodSpec(invRt, equipmentRt, itemInstanceId) {
+async function getFoodSpec(invRt, equipmentRt, itemInstanceId, options = {}) {
+  const requireSlotRef = options.requireSlotRef !== false;
   const itemInstance = getFoodItemInstance(invRt, equipmentRt, itemInstanceId);
   if (!itemInstance) return null;
 
-  let itemDef =
-    invRt?.itemDefsById?.get?.(String(itemInstance.itemDefId)) ??
-    equipmentRt?.itemDefsById?.get?.(String(itemInstance.itemDefId)) ??
-    null;
-  itemDef = itemDef ?? await ensureItemDefHydrated(invRt, equipmentRt, itemInstance.itemDefId);
-  if (itemDef && (!Array.isArray(itemDef.components) || itemDef.components.length === 0)) {
-    itemDef = await ensureItemDefHydrated(invRt, equipmentRt, itemInstance.itemDefId);
-  }
+  const itemDef = await ensureItemDefHydrated(invRt, equipmentRt, itemInstance.itemDefId, true);
   if (!itemDef || !isFoodLikeCategory(itemDef)) return null;
 
   const component = findEdibleComponent(itemDef);
   const data = component?.dataJson ?? component?.data_json ?? null;
-  const effects = Array.isArray(data?.effects) ? data.effects : [];
   const restoreEffect =
-    effects.find((effect) => String(effect?.type ?? "").toUpperCase() === "RESTORE_HUNGER") ?? null;
+    Array.isArray(data?.effects)
+      ? data.effects.find((effect) => String(effect?.type ?? effect?.effectType ?? "").toUpperCase() === "RESTORE_HUNGER") ??
+        null
+      : null;
+  const restoreHunger = readRestoreHungerValue(restoreEffect);
+  const slotRef = requireSlotRef ? findFoodLocation(invRt, equipmentRt, itemInstanceId) : null;
 
-  if (!restoreEffect) return null;
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[AUTO_FOOD][server][spec:debug]", {
+      itemInstanceId: String(itemInstanceId ?? ""),
+      itemDefId: String(itemDef?.id ?? ""),
+      itemCode: String(itemDef?.code ?? ""),
+      category: String(itemDef?.category ?? "").toUpperCase(),
+      componentType: String(component?.componentType ?? component?.component_type ?? "").toUpperCase() || null,
+      effectType: String(restoreEffect?.type ?? restoreEffect?.effectType ?? "").toUpperCase() || null,
+      restoreHunger,
+      hasSlotRef: Boolean(slotRef),
+      consumeTimeMs: data?.consumeTimeMs ?? null,
+      cooldownMs: data?.cooldownMs ?? null,
+    });
+  }
 
-  const slotRef = findFoodLocation(invRt, equipmentRt, itemInstanceId);
-  if (!slotRef) return null;
+  if (restoreHunger <= 0) return null;
+
+  if (requireSlotRef && !slotRef) return null;
 
   return {
     itemInstance,
     itemDef,
     component,
     slotRef,
-    restoreHunger: Math.max(0, toFiniteNumber(restoreEffect.value, 0)),
+    restoreHunger,
     consumeTimeMs: Math.max(1000, toFiniteNumber(data?.consumeTimeMs, 60000)),
     cooldownMs: Math.max(0, toFiniteNumber(data?.cooldownMs, 0)),
   };
@@ -142,4 +166,6 @@ async function getFoodSpec(invRt, equipmentRt, itemInstanceId) {
 module.exports = {
   findFoodLocation,
   getFoodSpec,
+  getFoodItemInstance,
+  ensureItemDefHydrated,
 };

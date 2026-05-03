@@ -18,33 +18,30 @@ function normalizeItems(lootSummary) {
 
 export function TargetLootCard({
   visible = true,
-  x = null,
-  y = null,
   lootSummary = null,
   actorName = "Container",
-  width = 190,
 }) {
   if (!visible) return null;
 
-  const safeX = Number.isFinite(Number(x)) ? Number(x) : 0;
-  const safeY = Number.isFinite(Number(y)) ? Number(y) : 0;
   const items = normalizeItems(lootSummary);
 
   if (items.length === 0) return null;
 
   const visibleItems = items.slice(0, 3);
   const moreCount = Math.max(0, items.length - visibleItems.length);
+  const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1200;
+  const cardWidth = Math.max(220, Math.min(420, Math.floor(viewportWidth * 0.34)));
 
   return (
     <div
       style={{
         position: "fixed",
-        left: `${safeX}px`,
-        top: `${safeY}px`,
-        transform: "translate(-50%, -115%)",
-        minWidth: `${width}px`,
-        maxWidth: `${width}px`,
-        padding: "10px 12px",
+        left: "50%",
+        top: "clamp(20px, 2.4vh, 30px)",
+        transform: "translateX(-50%)",
+        width: `min(92vw, ${cardWidth}px)`,
+        maxWidth: "92vw",
+        padding: "12px 14px",
         borderRadius: 14,
         background: "linear-gradient(180deg, rgba(11, 19, 34, 0.96), rgba(7, 12, 22, 0.92))",
         border: "1px solid rgba(45, 212, 191, 0.55)",
@@ -54,16 +51,23 @@ export function TargetLootCard({
         pointerEvents: "none",
         zIndex: 1125,
         backdropFilter: "blur(10px)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
       }}
     >
       <div
         style={{
-          fontSize: 10,
+          fontSize: 11,
           textTransform: "uppercase",
-          letterSpacing: "0.18em",
+          letterSpacing: "0.14em",
           color: "rgba(103, 232, 249, 0.85)",
-          marginBottom: 6,
           fontWeight: 700,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          textAlign: "center",
+          lineHeight: 1.1,
         }}
       >
         {String(actorName ?? "Container").trim() || "Container"}
@@ -117,6 +121,7 @@ export function TargetLootCard({
               marginTop: 2,
               fontSize: 11,
               color: "rgba(191, 219, 254, 0.78)",
+              textAlign: "center",
             }}
           >
             +{moreCount} more

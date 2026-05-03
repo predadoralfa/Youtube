@@ -30,16 +30,20 @@ export function syncActorMeshes({ actors, scene, state, clearSelection, sampleGr
     mesh.userData.lootSummary = actor.lootSummary ?? null;
 
     const { x, y, z, yaw } = readPosYawFromEntity(actor);
+    const scale = actor?.scale ?? actor?.scale_x ?? null;
     const groundY = Number(typeof sampleGroundHeight === "function" ? sampleGroundHeight(x, z) : 0);
-    const actorType = String(actor?.actorType ?? actor?.actor_type ?? "").trim().toUpperCase();
-    const isTreeActor =
-      actorType === "TREE" ||
-      actorType === "TREE_APPLE" ||
-      actorType === "APPLE_TREE" ||
-      actorType === "PRIMITIVE_SHELTER";
-    const actorOffsetY = isTreeActor ? 0 : Number(y ?? 0);
+    const actorOffsetY = Number(y ?? 0);
     mesh.position.set(x, groundY + actorOffsetY, z);
     mesh.rotation.y = yaw ?? 0;
+
+    const scaleX = Number(scale?.x ?? actor?.scaleX ?? actor?.scale_x ?? 1);
+    const scaleY = Number(scale?.y ?? actor?.scaleY ?? actor?.scale_y ?? 1);
+    const scaleZ = Number(scale?.z ?? actor?.scaleZ ?? actor?.scale_z ?? 1);
+    mesh.scale.set(
+      Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1,
+      Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1,
+      Number.isFinite(scaleZ) && scaleZ > 0 ? scaleZ : 1
+    );
   }
 
   for (const [actorId, mesh] of state.meshByActorIdRef.current.entries()) {

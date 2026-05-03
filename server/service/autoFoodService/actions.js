@@ -11,7 +11,8 @@ const { readRuntimeHungerMax } = require("../../state/movement/stamina");
 const { ensureResearchLoaded, hasCapability } = require("../researchService");
 const { buildAutoFoodPayload, clamp, getFoodMacroState, toFiniteNumber } = require("./shared");
 const { persistAutoFoodConfig } = require("./config");
-const { findFoodLocation, getFoodSpec } = require("./foodSpec");
+const { getFoodItemInstance, ensureItemDefHydrated, getFoodSpec, findFoodLocation } = require("./foodSpec");
+const DEBUG_AUTO_FOOD = process.env.NODE_ENV !== "production";
 
 async function consumeFoodInstanceUnlocked(userId, itemInstanceId) {
   const invRt = await ensureInventoryLoaded(userId);
@@ -97,6 +98,27 @@ async function consumeOneConfiguredFood(userId, itemInstanceId) {
   return withInventoryLock(userId, async () => consumeFoodInstanceUnlocked(userId, itemInstanceId));
 }
 
+async function resolveFoodCapabilityCode(invRt, eqRt, itemInstanceId) {
+  const itemInstance = getFoodItemInstance(invRt, eqRt, itemInstanceId);
+  if (!itemInstance) return null;
+
+  const itemDef = await ensureItemDefHydrated(invRt, eqRt, itemInstance.itemDefId, true);
+  const category = String(itemDef?.category ?? "").toUpperCase();
+  if (DEBUG_AUTO_FOOD) {
+    console.debug("[AUTO_FOOD][server][resolve:item]", {
+      itemInstanceId: String(itemInstanceId ?? ""),
+      itemDefId: String(itemInstance.itemDefId ?? ""),
+      itemCode: String(itemDef?.code ?? ""),
+      category,
+      hasComponents: Array.isArray(itemDef?.components) && itemDef.components.length > 0,
+    });
+  }
+  if (!(category === "FOOD" || category === "CONSUMABLE")) return null;
+
+  const itemCode = String(itemDef?.code ?? "").trim().toUpperCase();
+  return itemCode ? { itemDef, itemCode } : null;
+}
+
 async function startFoodConsumption(rt, itemInstanceId, options = {}) {
   if (!rt) {
     return { ok: false, code: "RUNTIME_NOT_LOADED", message: "Runtime not loaded" };
@@ -106,8 +128,46 @@ async function startFoodConsumption(rt, itemInstanceId, options = {}) {
   const run = async () => {
     const invRt = await ensureInventoryLoaded(userId);
     const eqRt = await ensureEquipmentLoaded(userId);
+    if (DEBUG_AUTO_FOOD) {
+      console.debug("[AUTO_FOOD][server][consume:start]", {
+        userId,
+        itemInstanceId: String(itemInstanceId ?? ""),
+      });
+    }
+    const capabilityItem = await resolveFoodCapabilityCode(invRt, eqRt, itemInstanceId);
+    if (!capabilityItem?.itemCode) {
+      if (DEBUG_AUTO_FOOD) {
+        console.debug("[AUTO_FOOD][server][consume:invalid-item]", {
+          userId,
+          itemInstanceId: String(itemInstanceId ?? ""),
+        });
+      }
+      return {
+        ok: false,
+        code: "AUTO_FOOD_INVALID_ITEM",
+        message: "Selected item is not a valid FOOD consumable",
+      };
+    }
+
+    if (DEBUG_AUTO_FOOD) {
+      console.debug("[AUTO_FOOD][server][consume:resolved-item]", {
+        userId,
+        itemInstanceId: String(itemInstanceId ?? ""),
+        itemDefId: String(capabilityItem.itemDef?.id ?? ""),
+        itemCode: capabilityItem.itemCode,
+        category: String(capabilityItem.itemDef?.category ?? "").toUpperCase(),
+      });
+    }
+
     const foodSpec = await getFoodSpec(invRt, eqRt, itemInstanceId);
     if (!foodSpec) {
+      if (DEBUG_AUTO_FOOD) {
+        console.debug("[AUTO_FOOD][server][consume:invalid-spec]", {
+          userId,
+          itemInstanceId: String(itemInstanceId ?? ""),
+          itemCode: capabilityItem.itemCode,
+        });
+      }
       return {
         ok: false,
         code: "AUTO_FOOD_INVALID_ITEM",
@@ -116,8 +176,17 @@ async function startFoodConsumption(rt, itemInstanceId, options = {}) {
     }
 
     await ensureResearchLoaded(userId, rt);
-    const consumeUnlockCode = `item.consume:${foodSpec?.itemDef?.code ?? ""}`;
-    if (!hasCapability(rt, consumeUnlockCode)) {
+    const consumeUnlockCode = `item.consume:${capabilityItem.itemCode}`;
+    const consumeUnlocked = hasCapability(rt, consumeUnlockCode);
+    if (DEBUG_AUTO_FOOD) {
+      console.debug("[AUTO_FOOD][server][consume:research-check]", {
+        userId,
+        itemCode: capabilityItem.itemCode,
+        consumeUnlockCode,
+        consumeUnlocked,
+      });
+    }
+    if (!consumeUnlocked) {
       return {
         ok: false,
         code: "RESEARCH_REQUIRED_FOR_AUTO_FOOD",
@@ -188,22 +257,73 @@ async function setAutoFoodConfig(userId, rt, intent = {}) {
   );
 
   if (nextItemInstanceId) {
-    await ensureResearchLoaded(userId, rt);
     const eqRt = await ensureEquipmentLoaded(userId);
-    const foodSpec = await getFoodSpec(invRt, eqRt, nextItemInstanceId);
-    if (!foodSpec) {
+    if (DEBUG_AUTO_FOOD) {
+      console.debug("[AUTO_FOOD][server][set:start]", {
+        userId,
+        itemInstanceId: nextItemInstanceId,
+        hungerThreshold: nextThreshold,
+      });
+    }
+    const capabilityItem = await resolveFoodCapabilityCode(invRt, eqRt, nextItemInstanceId);
+    if (!capabilityItem?.itemCode) {
+      if (DEBUG_AUTO_FOOD) {
+        console.debug("[AUTO_FOOD][server][set:invalid-item]", {
+          userId,
+          itemInstanceId: nextItemInstanceId,
+        });
+      }
       return {
         ok: false,
         code: "AUTO_FOOD_INVALID_ITEM",
         message: "Selected item is not a valid FOOD consumable",
       };
     }
-    const autoFoodUnlockCode = `macro.auto_food:${foodSpec?.itemDef?.code ?? ""}`;
-    if (!hasCapability(rt, autoFoodUnlockCode)) {
+
+    if (DEBUG_AUTO_FOOD) {
+      console.debug("[AUTO_FOOD][server][set:resolved-item]", {
+        userId,
+        itemInstanceId: nextItemInstanceId,
+        itemDefId: String(capabilityItem.itemDef?.id ?? ""),
+        itemCode: capabilityItem.itemCode,
+        category: String(capabilityItem.itemDef?.category ?? "").toUpperCase(),
+      });
+    }
+
+    await ensureResearchLoaded(userId, rt);
+    const autoFoodUnlockCode = `macro.auto_food:${capabilityItem.itemCode}`;
+    const autoFoodUnlocked = hasCapability(rt, autoFoodUnlockCode);
+    if (DEBUG_AUTO_FOOD) {
+      console.debug("[AUTO_FOOD][server][set:research-check]", {
+        userId,
+        itemCode: capabilityItem.itemCode,
+        autoFoodUnlockCode,
+        autoFoodUnlocked,
+      });
+    }
+    if (!autoFoodUnlocked) {
       return {
         ok: false,
         code: "RESEARCH_REQUIRED_FOR_AUTO_FOOD",
         message: "Study this food before using it in auto food",
+      };
+    }
+
+    const foodSpec = await getFoodSpec(invRt, eqRt, nextItemInstanceId, {
+      requireSlotRef: false,
+    });
+    if (!foodSpec) {
+      if (DEBUG_AUTO_FOOD) {
+        console.debug("[AUTO_FOOD][server][set:invalid-spec]", {
+          userId,
+          itemInstanceId: nextItemInstanceId,
+          itemCode: capabilityItem.itemCode,
+        });
+      }
+      return {
+        ok: false,
+        code: "AUTO_FOOD_INVALID_ITEM",
+        message: "Selected item is not a valid FOOD consumable",
       };
     }
   }
@@ -219,6 +339,14 @@ async function setAutoFoodConfig(userId, rt, intent = {}) {
 
   await persistAutoFoodConfig(userId, autoFood);
   markRuntimeDirty(userId);
+  if (DEBUG_AUTO_FOOD) {
+    console.debug("[AUTO_FOOD][server][set:ok]", {
+      userId,
+      itemInstanceId: nextItemInstanceId,
+      hungerThreshold: nextThreshold,
+      activeConsumption: Boolean(autoFood.activeConsumption),
+    });
+  }
 
   const eqRt = await ensureEquipmentLoaded(userId);
   const inventory = buildInventoryFull(invRt, eqRt);

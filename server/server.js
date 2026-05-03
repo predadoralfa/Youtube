@@ -32,6 +32,10 @@ const { registerSocket } = require("./socket");
 
 const app = express();
 
+process.on("unhandledRejection", (reason) => {
+  console.error("[SERVER] unhandledRejection:", reason);
+});
+
 app.use(cors());
 app.use(express.json());
 

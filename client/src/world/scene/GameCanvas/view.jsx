@@ -84,8 +84,6 @@ export function GameCanvasView({
         {state.targetLootCard ? (
           <TargetLootCard
             visible={true}
-            x={state.targetLootCard.x}
-            y={state.targetLootCard.y}
             actorName={state.targetLootCard.actorName}
             lootSummary={state.targetLootCard.lootSummary}
           />

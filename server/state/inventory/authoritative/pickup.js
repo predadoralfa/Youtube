@@ -12,7 +12,6 @@ const {
   normalizeHeldState,
   persistSlot,
 } = require("./helpers");
-const DEBUG_INV = process.env.NODE_ENV !== "production";
 
 async function pickup(invRt, intent, tx) {
   assertNoHeldState(invRt);
@@ -21,25 +20,7 @@ async function pickup(invRt, intent, tx) {
   const slotIndexRaw = intent?.slotIndex ?? intent?.from?.slotIndex ?? intent?.from?.slot;
   const slotIndex = Number(slotIndexRaw);
 
-  if (DEBUG_INV) {
-    console.debug("[INV_DEBUG][server][pickup:incoming]", {
-      containerId,
-      slotIndex,
-      hasHeldState: Boolean(invRt?.heldState),
-    });
-  }
-
   const { container, slot } = getSlot(invRt, containerId, slotIndex);
-  if (DEBUG_INV) {
-    console.debug("[INV_DEBUG][server][pickup:resolved]", {
-      containerId: container?.id ?? null,
-      containerRole: container?.slotRole ?? null,
-      slotCount: container?.slotCount ?? null,
-      slotIndex,
-      slotItemInstanceId: slot?.itemInstanceId ?? null,
-      slotQty: slot?.qty ?? null,
-    });
-  }
   const itemInstanceId = slot.itemInstanceId;
   if (!itemInstanceId) throw invError(INV_ERR.EMPTY_SOURCE);
 
