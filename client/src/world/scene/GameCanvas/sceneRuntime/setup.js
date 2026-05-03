@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { setupCamera } from "../../camera/camera";
 import { setupLight } from "../../light/light";
 import { applyDayNightCycle } from "../../light/dayNightCycle";
+import { createSkyDome } from "../../environment/SkyDome";
 import { readCameraStateFromRuntime } from "../helpers";
 import { buildGroundGeometry, createGroundSampler, createGroundSamplerFromMesh } from "./terrain";
 import { clearProceduralWorld, syncProceduralWorld } from "./procedural";
@@ -106,9 +107,9 @@ export function setupSceneRuntime({
   cameraRef.current = cameraApi.camera;
 
   const lightRig = setupLight(scene);
+  const skyDome = createSkyDome(scene, renderer);
   applyDayNightCycle({
     scene,
-    renderer,
     hemiLight: lightRig.hemiLight,
     dirLight: lightRig.dirLight,
     worldTime: worldTimeRef.current,
@@ -150,6 +151,7 @@ export function setupSceneRuntime({
     renderer,
     statsPanel,
     lightRig,
+    skyDome,
     groundMesh,
     boundsLine: bounds,
     boundsGeometry,

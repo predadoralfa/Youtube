@@ -8,36 +8,40 @@ const { registerEquipmentHandler } = require("../handlers/equipmentHandler");
 const { registerResearchHandler } = require("../handlers/researchHandler");
 const { registerBuildHandler } = require("../handlers/buildHandler/register");
 const { registerSleepHandler } = require("../handlers/sleepHandler/register");
+const { registerActorHandler } = require("../handlers/actorHandler/register");
 
-// ✅ NOVO: aproximação/interação (space hold)
+// New: approach/interact flow
 const { registerInteractHandler } = require("../handlers/interactHandler");
 
 function registerGameHandlers(io, socket) {
-  // Movimento WASD
+  // Movement
   registerMoveHandler(socket);
 
   // Click-to-move
   registerClickMoveHandler(socket);
 
-  // ✅ SPACE hold -> approach target (PLAYER/ACTOR) usando motor CLICK
+  // Space-hold approach target (player/actor)
   registerInteractHandler(io, socket);
 
-  // Mundo (join/resync/baseline)
+  // World join/resync/baseline
   registerWorldHandler(io, socket);
 
-  // Inventário (privado, autoritativo)
+  // Inventory
   registerInventoryHandler(io, socket);
 
-  // Equipment corporal simples
+  // Equipment
   registerEquipmentHandler(io, socket);
 
-  // Research / estudos
+  // Research
   registerResearchHandler(io, socket);
 
-  // Construcoes autoritativas
+  // Authoritative building
   registerBuildHandler(io, socket);
 
-  // Sleep autoritativo via shelter concluído
+  // Authoritative actor debug transform updates
+  registerActorHandler(io, socket);
+
+  // Sleep authoritative via completed shelter
   registerSleepHandler(io, socket);
 }
 

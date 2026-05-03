@@ -158,13 +158,15 @@ export function createDragHandlers({
       String(sourceContainerId ?? "") === String(containerId) && Number(fromSlotIndex) === Number(slotIndex);
 
     if (!isSameTarget && fromRole != null && fromSlotIndex != null) {
-      const ok = onMoveInventoryItem?.({
-        fromRole,
-        fromSlotIndex,
-        toRole,
-        toSlotIndex,
-        qty: payload.qty == null ? 1 : Number(payload.qty),
-      });
+        const ok = onMoveInventoryItem?.({
+          fromRole,
+          fromContainerId: sourceContainerId,
+          fromSlotIndex,
+          toRole,
+          toContainerId: containerId,
+          toSlotIndex,
+          qty: payload.qty == null ? 1 : Number(payload.qty),
+        });
       setLocalNotice(ok ? null : "Inventory move is not available right now");
       clearDrag();
       return;

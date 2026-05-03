@@ -28,6 +28,7 @@ function getContainerEffectiveMaxWeight(container, research = null) {
   if (code === "BASKET") return 2.5 + researchBonus;
   if (code === "BASKET_T2") return 5 + researchBonus;
   if (code === "BASKET_T3") return 5 + researchBonus;
+  if (code === "BASKET_T4") return 7.5 + researchBonus;
 
   return 0;
 }
@@ -94,6 +95,7 @@ function getGrantedContainerFallbackWeight(itemDef, component, research = null) 
   if (containerCode === "BASKET") return 2.5 + researchBonus;
   if (containerCode === "BASKET_T2") return 5 + researchBonus;
   if (containerCode === "BASKET_T3") return 5 + researchBonus;
+  if (containerCode === "BASKET_T4") return 7.5 + researchBonus;
   return researchBonus;
 }
 
@@ -104,6 +106,7 @@ function getEquippedGrantedContainerBonus(itemDef, component, research = null) {
   if (code === "BASKET") return 2.5 + researchBonus;
   if (code === "BASKET_T2") return 5 + researchBonus;
   if (code === "BASKET_T3") return 5 + researchBonus;
+  if (code === "BASKET_T4") return 7.5 + researchBonus;
   return getGrantedContainerFallbackWeight(itemDef, component, research);
 }
 

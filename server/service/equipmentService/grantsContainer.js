@@ -126,27 +126,51 @@ async function ensureGrantedContainerForItem({ playerId, slotCode, itemDef, tx }
   let container = null;
   if (!owner) {
     created = true;
-    container = await db.GaContainer.create(
-      {
-        container_def_id: Number(containerDef.id),
-        slot_role: role,
-        state: "ACTIVE",
-        rev: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      { transaction: tx }
-    );
+    try {
+      container = await db.GaContainer.create(
+        {
+          container_def_id: Number(containerDef.id),
+          slot_role: role,
+          state: "ACTIVE",
+          rev: 1,
+          created_at: now,
+          updated_at: now,
+        },
+        { transaction: tx }
+      );
 
-    owner = await db.GaContainerOwner.create(
-      {
-        container_id: container.id,
-        owner_kind: "PLAYER",
-        owner_id: String(playerId),
-        slot_role: role,
-      },
-      { transaction: tx }
-    );
+      owner = await db.GaContainerOwner.create(
+        {
+          container_id: container.id,
+          owner_kind: "PLAYER",
+          owner_id: String(playerId),
+          slot_role: role,
+        },
+        { transaction: tx }
+      );
+    } catch (error) {
+      if (String(error?.name ?? "").includes("UniqueConstraint") || String(error?.code ?? "") === "ER_DUP_ENTRY") {
+        owner = await db.GaContainerOwner.findOne({
+          where: {
+            owner_kind: "PLAYER",
+            owner_id: String(playerId),
+            slot_role: role,
+          },
+          transaction: tx,
+          lock: tx ? tx.LOCK.UPDATE : undefined,
+        });
+        if (owner) {
+          container = await db.GaContainer.findByPk(owner.container_id, {
+            transaction: tx,
+            lock: tx ? tx.LOCK.UPDATE : undefined,
+          });
+        }
+      }
+
+      if (!owner || !container) {
+        throw error;
+      }
+    }
   } else {
     container = await db.GaContainer.findByPk(owner.container_id, {
       transaction: tx,

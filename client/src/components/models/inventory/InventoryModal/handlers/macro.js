@@ -1,14 +1,42 @@
-import { isFoodItem } from "../helpers";
+import { isFoodItemInSnapshots } from "../helpers";
 
 export function createMacroHandlers({
   inventoryIndex,
+  equipmentSnapshot,
   macroHungerThreshold,
   setMacroFoodItemInstanceId,
   setLocalNotice,
   onSetAutoFoodMacro,
   clearDrag,
   dropHandledRef,
-}) {
+  }) {
+  const applyMacroFoodSelection = (itemInstanceId) => {
+    if (itemInstanceId == null) {
+      setLocalNotice("Macro item is not available right now");
+      return false;
+    }
+
+    if (
+      !isFoodItemInSnapshots({
+        inventoryIndex,
+        equipmentSnapshot,
+        itemInstanceId,
+      })
+    ) {
+      setLocalNotice("Macro accepts only FOOD items");
+      return false;
+    }
+
+    const nextItemInstanceId = String(itemInstanceId);
+    setMacroFoodItemInstanceId(nextItemInstanceId);
+    const ok = onSetAutoFoodMacro?.({
+      itemInstanceId: nextItemInstanceId,
+      hungerThreshold: macroHungerThreshold,
+    });
+    setLocalNotice(ok ? null : "Macro update is not available right now");
+    return ok;
+  };
+
   const handleMacroFoodDrop = (event) => {
     event.preventDefault?.();
     event.stopPropagation?.();
@@ -24,21 +52,11 @@ export function createMacroHandlers({
     }
 
     if (!payload?.itemInstanceId) return;
-    if (!isFoodItem(inventoryIndex, payload.itemInstanceId)) {
-      setLocalNotice("Macro accepts only FOOD items");
-      clearDrag();
-      return;
-    }
-
-    const nextItemInstanceId = String(payload.itemInstanceId);
-    setMacroFoodItemInstanceId(nextItemInstanceId);
-    const ok = onSetAutoFoodMacro?.({
-      itemInstanceId: nextItemInstanceId,
-      hungerThreshold: macroHungerThreshold,
-    });
-    setLocalNotice(ok ? null : "Macro update is not available right now");
+    const ok = applyMacroFoodSelection(payload.itemInstanceId);
     clearDrag();
   };
 
-  return { handleMacroFoodDrop };
+  const handleMacroFoodHeldSelect = (itemInstanceId) => applyMacroFoodSelection(itemInstanceId);
+
+  return { handleMacroFoodDrop, handleMacroFoodHeldSelect };
 }

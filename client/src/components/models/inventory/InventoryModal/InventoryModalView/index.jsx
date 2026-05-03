@@ -105,9 +105,10 @@ export function InventoryModal(props) {
         onCraftRecipe={props.onCraftRecipe}
         onClaimCraftJob={props.onClaimCraftJob}
         setMacroHungerThreshold={state.setMacroHungerThreshold}
-        setMacroFoodItemInstanceId={state.setMacroFoodItemInstanceId}
-        onSetAutoFoodMacro={props.onSetAutoFoodMacro}
-        handleMacroFoodDrop={controller.macroHandlers.handleMacroFoodDrop}
+          setMacroFoodItemInstanceId={state.setMacroFoodItemInstanceId}
+          onSetAutoFoodMacro={props.onSetAutoFoodMacro}
+          handleMacroFoodDrop={controller.macroHandlers.handleMacroFoodDrop}
+          handleMacroFoodHeldSelect={controller.handleMacroFoodHeldSelect}
       />
       </div>
     </div>

@@ -36,6 +36,7 @@ export function SidebarPanel(props) {
       ) : props.activeSidebarTab === "macro" && !macroLocked ? (
         <MacroTab
           dragItem={props.dragItem}
+          heldStateActive={props.heldStateActive}
           selectedMacroFood={props.selectedMacroFood}
           selectedMacroFoodLabel={props.selectedMacroFoodLabel}
           macroFoodItemInstanceId={props.macroFoodItemInstanceId}
@@ -47,6 +48,7 @@ export function SidebarPanel(props) {
           onSetAutoFoodMacro={props.onSetAutoFoodMacro}
           setLocalNotice={props.setLocalNotice}
           handleMacroFoodDrop={props.handleMacroFoodDrop}
+          handleMacroFoodHeldSelect={props.handleMacroFoodHeldSelect}
         />
       ) : props.activeSidebarTab === "macro" ? (
         <PlaceholderTab

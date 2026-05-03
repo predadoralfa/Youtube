@@ -12,6 +12,7 @@ const { assertCanAddItemWeight } = require("../../../../state/inventory/weight")
 const { ensureEquipmentLoaded } = require("../../../../state/equipment/loader");
 const { ensureResearchLoaded } = require("../../../../service/researchService");
 const { awardSkillXp } = require("../../../../service/skillProgressionService");
+const { INV_ERR } = require("../../../../state/inventory/validate/errors");
 const {
   removeGrantedContainerForItem,
   removeGrantedContainersForUnequippedItemCode,
@@ -20,6 +21,7 @@ const { emitFullAndAck, resolveUserOrAck } = require("../context");
 const { safeAck } = require("../shared");
 const { getRuntime } = require("../../../../state/runtimeStore");
 const { resolveFeverDebuffTempoMultiplier } = require("../../../../state/conditions/fever");
+const { getGrantedContainerSlotRole } = require("../../../../service/equipmentService/grantsContainer");
 
 function toNumber(value, fallback = 0) {
   const n = Number(value);
@@ -68,6 +70,9 @@ function findCraftDef(invRt, craftCode) {
 function collectIngredientSlots(invRt, itemDefId, quantity) {
   let remaining = Number(quantity);
   const matches = [];
+  const itemDef = invRt.itemDefsById?.get?.(String(itemDefId)) ?? null;
+  const requiresEmptyGrantedContainer = Boolean(itemDef && hasGrantedContainerComponent(itemDef));
+  let sawBlockedGrantedContainer = false;
 
   for (const container of invRt.containers ?? []) {
     for (const slot of container.slots ?? []) {
@@ -78,6 +83,21 @@ function collectIngredientSlots(invRt, itemDefId, quantity) {
       const instanceItemDefId = instance?.itemDefId ?? instance?.item_def_id ?? null;
       if (!instance || Number(instanceItemDefId) !== Number(itemDefId)) continue;
 
+      if (requiresEmptyGrantedContainer) {
+        const slotRole = String(container?.slotRole ?? "").trim();
+        const grantedRole = getGrantedContainerSlotRole(itemDef, slotRole);
+        const grantedContainer = invRt.containersByRole?.get?.(grantedRole) ?? null;
+        const grantedSlots = Array.isArray(grantedContainer?.slots) ? grantedContainer.slots : [];
+        const grantedIsEmpty = grantedSlots.every(
+          (grantedSlot) => grantedSlot?.itemInstanceId == null || Number(grantedSlot.qty ?? 0) <= 0
+        );
+
+        if (!grantedIsEmpty) {
+          sawBlockedGrantedContainer = true;
+          continue;
+        }
+      }
+
       const take = Math.min(remaining, Number(slot.qty ?? 0));
       matches.push({ container, slot, take });
       remaining -= take;
@@ -85,6 +105,12 @@ function collectIngredientSlots(invRt, itemDefId, quantity) {
   }
 
   if (remaining > 0) {
+    if (requiresEmptyGrantedContainer && sawBlockedGrantedContainer) {
+      const err = new Error("The basket must be empty before crafting this tier.");
+      err.code = INV_ERR.GRANTED_CONTAINER_NOT_EMPTY;
+      throw err;
+    }
+
     const err = new Error("Put the required items anywhere in your inventory first.");
     err.code = "CRAFT_MISSING_INGREDIENTS";
     throw err;

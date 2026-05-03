@@ -64,15 +64,17 @@ export function useGameShellInventoryActions({ emitInventoryAction, emitEquipmen
   );
 
   const onMoveInventoryItem = useCallback(
-    ({ fromRole, fromSlotIndex, toRole, toSlotIndex, qty }) =>
+    ({ fromRole, fromContainerId, fromSlotIndex, toRole, toContainerId, toSlotIndex, qty }) =>
       emitInventoryAction("inv:move", {
         from: {
           role: String(fromRole),
+          containerId: fromContainerId == null ? null : String(fromContainerId),
           slot: Number(fromSlotIndex),
           slotIndex: Number(fromSlotIndex),
         },
         to: {
           role: String(toRole),
+          containerId: toContainerId == null ? null : String(toContainerId),
           slot: Number(toSlotIndex),
           slotIndex: Number(toSlotIndex),
         },

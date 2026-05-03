@@ -125,11 +125,11 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
 
     applyDayNightCycle({
       scene: runtime.scene,
-      renderer: runtime.renderer,
       hemiLight: runtime.lightRig.hemiLight,
       dirLight: runtime.lightRig.dirLight,
       worldTime: state.worldTimeRef.current,
     });
+    runtime.skyDome?.updateByWorldClock?.(state.worldTimeRef.current);
 
     runtime.renderer.render(runtime.scene, runtime.cameraApi.camera);
     runtime.statsPanel?.stats?.update?.();

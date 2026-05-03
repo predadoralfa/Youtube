@@ -147,6 +147,46 @@ export function getInventoryItemContext(inventoryIndex, itemInstanceId) {
   return { inst, def };
 }
 
+export function getInventoryOrEquipmentItemContext({ inventoryIndex, equipmentSnapshot, itemInstanceId }) {
+  const inventoryCtx = getInventoryItemContext(inventoryIndex, itemInstanceId);
+  if (inventoryCtx) return inventoryCtx;
+
+  const targetId = itemInstanceId == null ? null : String(itemInstanceId);
+  if (!targetId) return null;
+
+  const equipmentSlots = Array.isArray(equipmentSnapshot?.slots) ? equipmentSnapshot.slots : [];
+  for (const slot of equipmentSlots) {
+    const slotItemInstanceId =
+      slot?.itemInstanceId ??
+      slot?.item_instance_id ??
+      slot?.item?.itemInstanceId ??
+      slot?.item?.item_instance_id ??
+      null;
+    if (String(slotItemInstanceId ?? "") !== targetId) continue;
+
+    const slotItem = slot?.item ?? null;
+    const defId =
+      slotItem?.itemDefId ??
+      slotItem?.item_def_id ??
+      slotItem?.id ??
+      slot?.itemDefId ??
+      slot?.item_def_id ??
+      null;
+    const def = defId != null ? inventoryIndex.defMap.get(String(defId)) ?? null : null;
+    return {
+      inst: {
+        id: targetId,
+        itemDefId: defId != null ? String(defId) : null,
+        item_def_id: defId != null ? String(defId) : null,
+        defId: defId != null ? String(defId) : null,
+      },
+      def,
+    };
+  }
+
+  return null;
+}
+
 function findEdibleComponent(def) {
   const components = Array.isArray(def?.components) ? def.components : [];
   return (
@@ -175,6 +215,17 @@ function isFoodLikeCategory(def) {
 
 export function isFoodItem(inventoryIndex, itemInstanceId) {
   const ctx = getInventoryItemContext(inventoryIndex, itemInstanceId);
+  const def = ctx?.def ?? null;
+  if (!def || !isFoodLikeCategory(def)) return false;
+
+  const edibleComponent = findEdibleComponent(def);
+  if (!edibleComponent) return String(def?.category ?? "").toUpperCase() === "FOOD";
+
+  return hasRestoreHungerEffect(edibleComponent);
+}
+
+export function isFoodItemInSnapshots({ inventoryIndex, equipmentSnapshot, itemInstanceId }) {
+  const ctx = getInventoryOrEquipmentItemContext({ inventoryIndex, equipmentSnapshot, itemInstanceId });
   const def = ctx?.def ?? null;
   if (!def || !isFoodLikeCategory(def)) return false;
 

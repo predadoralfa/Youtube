@@ -9,7 +9,7 @@ function normalizeKeyPart(value) {
 
 function hasGrantedContainerComponent(def) {
   const code = String(def?.code ?? "").trim().toUpperCase();
-  if (code === "BASKET") return true;
+  if (code === "BASKET" || code.startsWith("BASKET_")) return true;
 
   const components = Array.isArray(def?.components) ? def.components : [];
   return components.some((component) => {
@@ -18,11 +18,11 @@ function hasGrantedContainerComponent(def) {
   });
 }
 
-function getGrantedContainerRole(itemDef, slotCode) {
-  const itemCode = normalizeKeyPart(itemDef?.code ?? "");
+function getGrantedContainerRole(itemCode, slotCode) {
+  const itemCodeValue = normalizeKeyPart(itemCode ?? "");
   const handCode = normalizeKeyPart(slotCode ?? "");
-  if (!itemCode || !handCode) return null;
-  return `GRANTED:${itemCode}:${handCode}`;
+  if (!itemCodeValue || !handCode) return null;
+  return `GRANTED:${itemCodeValue}:${handCode}`;
 }
 
 function getGrantedContainerKey(container) {
@@ -50,6 +50,13 @@ function readComponentData(component) {
   }
 }
 
+function getBasketFamilySlotCount(itemDef) {
+  const code = String(itemDef?.code ?? "").trim().toUpperCase();
+  if (code === "BASKET" || code === "BASKET_T2") return 1;
+  if (code === "BASKET_T3" || code === "BASKET_T4") return 2;
+  return null;
+}
+
 function getGrantedContainerSlotCountStrict({ itemDef, slot, matchingInventoryContainer }) {
   const fromContainerDef = readStrictPositiveInt(
     matchingInventoryContainer?.def?.slotCount ?? matchingInventoryContainer?.def?.slot_count ?? null
@@ -71,10 +78,13 @@ function getGrantedContainerSlotCountStrict({ itemDef, slot, matchingInventoryCo
       null
   );
 
-  const resolved = fromContainerDef ?? fromContainerSlots ?? fromEquipmentPayload ?? fromItemDef;
-  if (resolved == null) {
-    throw new Error(`GRANTED_CONTAINER_SLOTCOUNT_INVALID:${String(itemDef?.code ?? "UNKNOWN")}`);
-  }
+  const resolved =
+    fromContainerDef ??
+    fromContainerSlots ??
+    fromEquipmentPayload ??
+    fromItemDef ??
+    getBasketFamilySlotCount(itemDef) ??
+    1;
 
   if (fromContainerDef != null && fromContainerSlots != null && fromContainerDef !== fromContainerSlots) {
     throw new Error(
@@ -140,10 +150,11 @@ export function InventoryPanel(props) {
   for (const slot of equipmentSlots) {
     const itemDefId = slot?.itemDefId ?? slot?.item_def_id ?? slot?.item?.itemDefId ?? slot?.item?.item_def_id ?? null;
     const itemDef = itemDefId == null ? null : props.inventoryIndex?.defMap?.get(String(itemDefId)) ?? null;
-    if (!hasGrantedContainerComponent(itemDef)) continue;
+    const equippedItemCode = itemDef?.code ?? slot?.item?.code ?? null;
+    if (!hasGrantedContainerComponent(itemDef) && !hasGrantedContainerComponent(slot?.item ?? null)) continue;
 
     const role =
-      getGrantedContainerRole(itemDef, slot?.slotCode ?? slot?.sourceRole ?? slot?.source_role ?? null) ||
+      getGrantedContainerRole(equippedItemCode, slot?.slotCode ?? slot?.sourceRole ?? slot?.source_role ?? null) ||
       String(slot?.sourceRole ?? slot?.slotCode ?? slot?.source_role ?? "").trim();
     const normalizedRole = String(role ?? "").trim().toUpperCase();
     if (!normalizedRole) continue;
@@ -171,9 +182,9 @@ export function InventoryPanel(props) {
         state: "ACTIVE",
         rev: 1,
         def: {
-          id: `synthetic:${itemDefId}`,
-          code: itemDef?.code ?? null,
-          name: itemDef?.name ?? itemDef?.code ?? role,
+          id: `synthetic:${String(itemDefId ?? equippedItemCode ?? role)}`,
+          code: itemDef?.code ?? slot?.item?.code ?? null,
+          name: itemDef?.name ?? slot?.item?.name ?? itemDef?.code ?? slot?.item?.code ?? role,
           slotCount: grantedSlotCount,
           maxWeight: 0,
           allowedCategoriesMask: null,

@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import GUI from "lil-gui";
+import { getSocket } from "@/services/Socket";
+import { mergeSnapshotActor } from "@/world/GameShell/helpers";
 
 const WORLD_DEBUG_GUI_MARKER = "world-debug-gui";
 
@@ -50,10 +52,22 @@ function applyObjectTransform(object, transform) {
   object.updateMatrixWorld?.(true);
 }
 
-function bindVector3Folder(folder, vector, labelPrefix, min = -500, max = 500, step = 0.01) {
-  folder.add(vector, "x", min, max, step).name(`${labelPrefix}.x`).listen();
-  folder.add(vector, "y", min, max, step).name(`${labelPrefix}.y`).listen();
-  folder.add(vector, "z", min, max, step).name(`${labelPrefix}.z`).listen();
+function bindVector3Folder(folder, vector, labelPrefix, min = -500, max = 500, step = 0.01, onChange = null) {
+  folder
+    .add(vector, "x", min, max, step)
+    .name(`${labelPrefix}.x`)
+    .listen()
+    .onChange(() => onChange?.());
+  folder
+    .add(vector, "y", min, max, step)
+    .name(`${labelPrefix}.y`)
+    .listen()
+    .onChange(() => onChange?.());
+  folder
+    .add(vector, "z", min, max, step)
+    .name(`${labelPrefix}.z`)
+    .listen()
+    .onChange(() => onChange?.());
 }
 
 function bindRotationFolder(folder, euler, labelPrefix) {
@@ -66,6 +80,71 @@ function bindScaleFolder(folder, scale, labelPrefix) {
   folder.add(scale, "x", 0.01, 50, 0.01).name(`${labelPrefix}.x`).listen();
   folder.add(scale, "y", 0.01, 50, 0.01).name(`${labelPrefix}.y`).listen();
   folder.add(scale, "z", 0.01, 50, 0.01).name(`${labelPrefix}.z`).listen();
+}
+
+function resolveActorId(object) {
+  const rawActorId = object?.userData?.actorId ?? object?.userData?.actor_id ?? null;
+  if (rawActorId == null) return null;
+
+  const actorId = String(rawActorId).trim();
+  return actorId.length > 0 ? actorId : null;
+}
+
+function readObjectPosition(object) {
+  return {
+    x: Number(object?.position?.x ?? 0),
+    y: Number(object?.position?.y ?? 0),
+    z: Number(object?.position?.z ?? 0),
+  };
+}
+
+function createActorPositionCommitter(state, object) {
+  const actorId = resolveActorId(object);
+  if (!actorId) return null;
+
+  return () => {
+    const position = readObjectPosition(object);
+    const sampleGroundHeight = state?.sampleGroundHeight;
+    const groundY = typeof sampleGroundHeight === "function" ? Number(sampleGroundHeight(position.x, position.z) ?? 0) : 0;
+    const actorPosition = {
+      x: position.x,
+      y: Number.isFinite(groundY) ? position.y - groundY : position.y,
+      z: position.z,
+    };
+
+    if (Array.isArray(state?.actorsRef?.current)) {
+      state.actorsRef.current = state.actorsRef.current.map((actor) =>
+        String(actor?.id ?? "") === actorId
+          ? {
+              ...actor,
+              pos: {
+                ...(actor?.pos ?? {}),
+                ...actorPosition,
+              },
+            }
+          : actor
+      );
+    }
+
+    if (typeof state?.setSnapshot === "function") {
+      state.setSnapshot((prev) =>
+        mergeSnapshotActor(prev, {
+          id: actorId,
+          actor: {
+            pos: actorPosition,
+          },
+        })
+      );
+    }
+
+    const socket = getSocket();
+    socket?.emit?.("actor:update_position", {
+      actorId,
+      pos: actorPosition,
+    });
+
+    object?.updateMatrixWorld?.(true);
+  };
 }
 
 export function createWorldDebugGui({ scene, camera, renderer, refs = {}, flags = {}, onFlagsChange = null, container = null }) {
@@ -233,7 +312,7 @@ export function createWorldDebugGui({ scene, camera, renderer, refs = {}, flags 
       return;
     }
 
-    bindVector3Folder(selectedFolder, object.position, "position");
+    bindVector3Folder(selectedFolder, object.position, "position", -500, 500, 0.01, createActorPositionCommitter(refs.state ?? null, object));
     bindRotationFolder(selectedFolder, object.rotation, "rotation");
     bindScaleFolder(selectedFolder, object.scale, "scale");
 

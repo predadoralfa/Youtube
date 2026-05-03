@@ -8,6 +8,16 @@ function getContainerByRole(invRt, role) {
   return invRt.containersByRole.get(role) || null;
 }
 
+function getContainerRef(invRt, ref = {}) {
+  const containerId = ref?.containerId != null ? String(ref.containerId) : null;
+  const role = ref?.role != null ? String(ref.role) : null;
+  return (
+    (containerId ? invRt?.containersById?.get?.(containerId) ?? null : null) ||
+    (role ? getContainerByRole(invRt, role) : null) ||
+    null
+  );
+}
+
 function move(invRt, intent) {
   if (invRt?.heldState) {
     throw invError(INV_ERR.HELD_STATE_ACTIVE, "cannot move while holding an item");
@@ -32,8 +42,8 @@ function move(invRt, intent) {
     });
   }
 
-  const srcC = getContainerByRole(invRt, fromRole);
-  const dstC = getContainerByRole(invRt, toRole);
+  const srcC = getContainerRef(invRt, intent?.from ?? {});
+  const dstC = getContainerRef(invRt, intent?.to ?? {});
 
   assertContainerActive(srcC);
   assertContainerActive(dstC);

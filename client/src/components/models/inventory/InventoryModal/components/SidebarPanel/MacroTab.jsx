@@ -2,6 +2,7 @@ import { InventoryItemIcon } from "../../InventoryItemIconBridge";
 
 export function MacroTab({
   dragItem,
+  heldStateActive,
   selectedMacroFood,
   selectedMacroFoodLabel,
   macroFoodItemInstanceId,
@@ -12,16 +13,31 @@ export function MacroTab({
   onSetAutoFoodMacro,
   setLocalNotice,
   handleMacroFoodDrop,
+  handleMacroFoodHeldSelect,
 }) {
   return (
     <div className="inv-tab-placeholder inv-tab-placeholder--macro">
       <div className="macro-card">
         <div
-          className={["macro-food-slot", selectedMacroFood ? "is-occupied" : "is-empty", dragItem ? "is-drop-ready" : ""].filter(Boolean).join(" ")}
+          className={[
+            "macro-food-slot",
+            selectedMacroFood ? "is-occupied" : "is-empty",
+            dragItem || heldStateActive ? "is-drop-ready" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
           onDragOver={(event) => {
             if (dragItem) event.preventDefault();
           }}
           onDrop={handleMacroFoodDrop}
+          onMouseUp={(event) => {
+            if (!heldStateActive) return;
+            if (event.button != null && event.button !== 0) return;
+            event.preventDefault?.();
+            event.stopPropagation?.();
+
+            handleMacroFoodHeldSelect?.();
+          }}
         >
           <div className="macro-food-slot-top">
             <div className="macro-food-slot-body">

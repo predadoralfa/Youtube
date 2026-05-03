@@ -5,9 +5,9 @@ import {
   buildInventoryIndex,
   buildSlotList,
   formatWeight,
-  getInventoryItemContext,
+  getInventoryOrEquipmentItemContext,
   getItemLabel,
-  isFoodItem,
+  isFoodItemInSnapshots,
 } from "../../helpers";
 
 function resolveNoticeTone(text) {
@@ -285,7 +285,11 @@ export function useInventoryModalDerivedState({
       })
     : [];
   const selectedMacroFood = macroFoodItemInstanceId
-    ? getInventoryItemContext(inventoryIndex, macroFoodItemInstanceId)
+    ? getInventoryOrEquipmentItemContext({
+        inventoryIndex,
+        equipmentSnapshot,
+        itemInstanceId: macroFoodItemInstanceId,
+      })
     : null;
   const selectedMacroFoodLabel = selectedMacroFood
     ? getItemLabel(selectedMacroFood.inst, selectedMacroFood.def)
@@ -319,6 +323,7 @@ export function useInventoryModalDerivedState({
     craftRecipes,
     selectedMacroFood,
     selectedMacroFoodLabel,
-    isFoodItemAvailable: (itemInstanceId) => isFoodItem(inventoryIndex, itemInstanceId),
+    isFoodItemAvailable: (itemInstanceId) =>
+      isFoodItemInSnapshots({ inventoryIndex, equipmentSnapshot, itemInstanceId }),
   };
 }

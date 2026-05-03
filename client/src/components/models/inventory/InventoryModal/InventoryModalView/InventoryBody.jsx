@@ -68,6 +68,7 @@ export function InventoryBody(props) {
         <SidebarColumn
           containers={props.containers}
           handSlots={props.handSlots}
+          heldState={props.heldState}
           dragItem={props.dragItem}
           heldStateActive={props.heldStateActive}
           isSlotCompatible={props.isSlotCompatible}
@@ -94,6 +95,7 @@ export function InventoryBody(props) {
           onSetAutoFoodMacro={props.onSetAutoFoodMacro}
           setLocalNotice={props.setLocalNotice}
           handleMacroFoodDrop={props.handleMacroFoodDrop}
+          handleMacroFoodHeldSelect={props.handleMacroFoodHeldSelect}
         />
       </div>
     </div>

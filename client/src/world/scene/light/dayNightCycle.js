@@ -5,7 +5,6 @@ const DAY_START_HOUR = 5;
 const DUSK_START_HOUR = 18.5;
 const NIGHT_START_HOUR = 20;
 
-const CLEAR_SKY_COLOR = new THREE.Color("#8fd3ff");
 const DARK_SKY_COLOR = new THREE.Color("#050816");
 const CLEAR_FOG_COLOR = new THREE.Color("#b7e7ff");
 const DARK_FOG_COLOR = new THREE.Color("#03050c");
@@ -61,12 +60,11 @@ export function resolveDayNightFactor(worldTime) {
 
 export function applyDayNightCycle({
   scene,
-  renderer,
   hemiLight,
   dirLight,
   worldTime,
 }) {
-  if (!scene || !renderer || !hemiLight || !dirLight) return;
+  if (!scene || !hemiLight || !dirLight) return;
 
   const factor = resolveDayNightFactor(worldTime);
 
@@ -74,7 +72,6 @@ export function applyDayNightCycle({
     scene.fog = new THREE.Fog(CLEAR_FOG_COLOR.clone(), 45, 180);
   }
 
-  scene.background = CLEAR_SKY_COLOR.clone().lerp(DARK_SKY_COLOR, factor);
   scene.fog.color.copy(CLEAR_FOG_COLOR).lerp(DARK_FOG_COLOR, factor);
   scene.fog.near = mixNumber(45, 20, factor);
   scene.fog.far = mixNumber(180, 85, factor);
@@ -86,8 +83,6 @@ export function applyDayNightCycle({
   dirLight.color.copy(CLEAR_SUN_COLOR).lerp(DARK_SUN_COLOR, factor);
   dirLight.intensity = mixNumber(1.0, 0.12, factor);
   dirLight.position.copy(CLEAR_SUN_POSITION).lerp(DARK_SUN_POSITION, factor);
-
-  renderer.toneMappingExposure = mixNumber(1.0, 0.42, factor);
 
   return factor;
 }

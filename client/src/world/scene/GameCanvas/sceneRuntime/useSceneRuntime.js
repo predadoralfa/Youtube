@@ -52,10 +52,12 @@ export function useSceneRuntime({ snapshot, worldStoreRef, onInputIntent, onTarg
       renderer: runtime.renderer,
       container,
       refs: {
+        state,
         selectedObjectRef: state.selectedObjectRef,
         groundMesh: runtime.groundMesh,
         boundsLine: runtime.boundsLine,
         lightRig: runtime.lightRig,
+        sampleGroundHeight: runtime.sampleGroundHeight,
       },
       flags: {},
       onFlagsChange: null,

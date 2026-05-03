@@ -52,6 +52,7 @@ Estrutura atual:
   `-- implementacoes/
       |-- estudo-arquitetural-actors-spawn.md
        |-- implementacao-ciclo-visual-dia-noite.md
+       |-- guia-fps-terreno-luz.md
        |-- implementacao-sistema-de-fome.md
        |-- plano-sistema-de-status.md
        |-- painel-fps-desempenho.md
@@ -113,6 +114,7 @@ Atalhos:
 - painel de fps/desempenho: [painel-fps-desempenho.md](/D:/JS-Projects/Youtube/MD/implementacoes/painel-fps-desempenho.md)
 - builder materials: [plano-tecnico-builder-materiais.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-builder-materiais.md) (fase de deposito e input manual ja implantados)
 - ciclo visual: [implementacao-ciclo-visual-dia-noite.md](/D:/JS-Projects/Youtube/MD/implementacoes/implementacao-ciclo-visual-dia-noite.md)
+- guia unificado fps/terreno/luz: [guia-fps-terreno-luz.md](/D:/JS-Projects/Youtube/MD/implementacoes/guia-fps-terreno-luz.md)
 - regeneracao de recursos: [plano-regeneracao-recursos.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-regeneracao-recursos.md)
 - respawn por instancia: [plano-tecnico-respawn-inimigos-por-instancia.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-tecnico-respawn-inimigos-por-instancia.md)
 - sistema de status: [plano-sistema-de-status.md](/D:/JS-Projects/Youtube/MD/implementacoes/plano-sistema-de-status.md)

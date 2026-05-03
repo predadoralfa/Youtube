@@ -49,6 +49,7 @@ export function createInventoryModalController(state, props) {
 
   const macroHandlers = createMacroHandlers({
     inventoryIndex: state.inventoryIndex,
+    equipmentSnapshot: state.equipmentSnapshot,
     macroHungerThreshold: state.macroHungerThreshold,
     setMacroFoodItemInstanceId: state.setMacroFoodItemInstanceId,
     setLocalNotice: state.setLocalNotice,
@@ -56,6 +57,18 @@ export function createInventoryModalController(state, props) {
     clearDrag: dragHandlers.clearDrag,
     dropHandledRef: state.dropHandledRef,
   });
+
+  const handleMacroFoodHeldSelect = () => {
+    const heldItem = state.heldState?.item ?? null;
+    const itemInstanceId =
+      state.heldState?.itemInstanceId ??
+      heldItem?.itemInstanceId ??
+      heldItem?.item_instance_id ??
+      heldItem?.id ??
+      null;
+
+    return macroHandlers.handleMacroFoodHeldSelect?.(itemInstanceId);
+  };
 
   const requestCloseInventory = () => {
     if (state.splitDraft) return state.setSplitDraft(null);
@@ -75,6 +88,7 @@ export function createInventoryModalController(state, props) {
     dragHandlers,
     menuHandlers,
     macroHandlers,
+    handleMacroFoodHeldSelect,
     requestCloseInventory,
     closeFromBackdrop,
   };

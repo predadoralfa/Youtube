@@ -45,6 +45,7 @@ export function SidebarColumn(props) {
         onSetAutoFoodMacro={props.onSetAutoFoodMacro}
         setLocalNotice={props.setLocalNotice}
         handleMacroFoodDrop={props.handleMacroFoodDrop}
+        handleMacroFoodHeldSelect={props.handleMacroFoodHeldSelect}
       />
     </div>
   );

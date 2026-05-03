@@ -6,6 +6,7 @@ export function cleanupSceneRuntime({
   boundsGeometry,
   boundsMaterial,
   proceduralWorldGroup,
+  skyDome,
   onResize,
   statsPanel,
   state,
@@ -73,6 +74,10 @@ export function cleanupSceneRuntime({
       }
     });
   }
+
+  try {
+    skyDome?.dispose?.();
+  } catch {}
 
   renderer.dispose();
   groundMesh.geometry.dispose();
