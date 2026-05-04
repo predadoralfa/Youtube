@@ -28,6 +28,7 @@ const { ensureItemDefModelSchema } = require("./state/runtime/itemSchema");
 
 const authRouter = require("./router/authRouter");
 const worldRouter = require("./router/worldRouter");
+const worldEditorRouter = require("./router/worldEditorRouter");
 const { registerSocket } = require("./socket");
 
 const app = express();
@@ -41,6 +42,7 @@ app.use(express.json());
 
 app.use("/auth", authRouter);
 app.use("/world", worldRouter);
+app.use("/world/editor", worldEditorRouter);
 
 async function bootstrap() {
   let httpServer = null;

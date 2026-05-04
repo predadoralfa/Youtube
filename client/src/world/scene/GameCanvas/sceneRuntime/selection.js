@@ -12,6 +12,8 @@ export function createSelectionTools({
   onInputIntent,
   onTargetSelect,
   onTargetClear,
+  allowObjectSelection = false,
+  disableGroundMove = false,
 }) {
   const raycaster = new THREE.Raycaster();
   const mouseNdc = new THREE.Vector2();
@@ -30,6 +32,7 @@ export function createSelectionTools({
 
     const candidates = [
       ...state.meshByActorIdRef.current.values(),
+      ...(allowObjectSelection ? state.meshBySceneObjectIdRef.current.values() : []),
       ...state.meshByEnemyIdRef.current.values(),
       ...state.meshByEntityIdRef.current.values(),
     ];
@@ -39,7 +42,7 @@ export function createSelectionTools({
     if (!hits?.length) return null;
 
     const hitObject = hits[0].object;
-    const target = pickTargetFromHitObject(hitObject);
+    const target = pickTargetFromHitObject(hitObject, { allowObjectSelection });
     if (!target) return null;
 
     if (target.kind === "PLAYER") {
@@ -91,9 +94,6 @@ export function createSelectionTools({
   }
 
   function emitClick(clientX, clientY, moveDir) {
-    const socket = getSocket();
-    if (!socket) return;
-
     const buildPlacement = state.buildPlacementRef?.current ?? null;
     if (buildPlacement?.visible) {
       const ground = tryPickGround(clientX, clientY);
@@ -112,6 +112,10 @@ export function createSelectionTools({
     }
 
     clearSelection();
+    if (disableGroundMove) return;
+
+    const socket = getSocket();
+    if (!socket) return;
     if (!(moveDir.x === 0 && moveDir.z === 0)) return;
 
     setMouseFromClientToNdc(clientX, clientY);

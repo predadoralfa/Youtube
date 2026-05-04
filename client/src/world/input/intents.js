@@ -51,10 +51,11 @@ export function intentCameraOrbit(dx, dy) {
   };
 }
 
-export function intentMoveDirection(x, z) {
+export function intentMoveDirection(x, z, speedScale = 1) {
   return {
     type: IntentType.MOVE_DIRECTION,
     dir: { x, z },
+    speedScale: Number.isFinite(Number(speedScale)) ? Number(speedScale) : 1,
     ts: performance.now(),
   };
 }

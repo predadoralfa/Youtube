@@ -29,6 +29,11 @@ const {
   addActor,
   clearInstance: clearActorsInstance,
 } = require("../../state/actorsRuntimeStore");
+const { loadSceneObjectsForInstance } = require("../sceneObjectLoader");
+const {
+  addSceneObject,
+  clearInstance: clearSceneObjectsInstance,
+} = require("../../state/sceneObjectsRuntimeStore");
 const { loadEnemiesForInstance } = require("../enemyLoader");
 const {
   addEnemy,
@@ -60,6 +65,9 @@ module.exports = {
   loadActorsForInstance,
   addActor,
   clearActorsInstance,
+  loadSceneObjectsForInstance,
+  addSceneObject,
+  clearSceneObjectsInstance,
   loadEnemiesForInstance,
   addEnemy,
   getEnemiesForInstance,

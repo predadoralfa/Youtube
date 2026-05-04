@@ -8,6 +8,7 @@ export function setupSceneInput(renderer, cameraApi, tools, onInputIntent, state
   const bus = createInputBus();
   const unbindInputs = bindInputs(renderer.domElement, bus);
   let moveInputDir = { x: 0, z: 0 };
+  let moveSpeedScale = 1;
 
   function emitMoveIntent(dir, { bumpSeq = false } = {}) {
     const socket = getSocket();
@@ -115,6 +116,8 @@ export function setupSceneInput(renderer, cameraApi, tools, onInputIntent, state
     }
     if (intent.type === IntentType.MOVE_DIRECTION) {
       moveInputDir = intent?.dir ?? { x: 0, z: 0 };
+      moveSpeedScale = Number.isFinite(Number(intent?.speedScale)) ? Number(intent.speedScale) : 1;
+      onInputIntent?.(intent);
       emitMoveIntent(moveInputDir, { bumpSeq: true });
       return;
     }
@@ -146,11 +149,14 @@ export function setupSceneInput(renderer, cameraApi, tools, onInputIntent, state
     onInputIntent?.(intent);
   });
 
-  return {
-    off,
-    unbindInputs,
-    getMoveDir() {
-      return toWorldDir(moveInputDir, cameraApi.getState().yaw);
+    return {
+      off,
+      unbindInputs,
+    getMoveState() {
+      return {
+        dir: toWorldDir(moveInputDir, cameraApi.getState().yaw),
+        speedScale: moveSpeedScale,
+      };
     },
   };
 }

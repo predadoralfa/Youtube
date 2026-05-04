@@ -1,0 +1,963 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
+import { GameCanvas } from "@/world/scene/GameCanvas";
+import { mergeSnapshotActor, mergeSnapshotSceneObject } from "@/world/GameShell/helpers";
+import { isEditorCharacter } from "../Character/editorCharacter";
+import { createEditorCharacterMovementController } from "../Character/movement/createEditorCharacterMovementController";
+import { projectWorldToScreenPx } from "@/world/scene/GameCanvas/helpers";
+import {
+  disableActor,
+  disableSceneObject,
+  spawnActor,
+  spawnSceneObject,
+  updateActor,
+  updateSceneObject,
+} from "@editor/services/WorldEditor";
+
+const TOKEN_KEY = "token";
+
+function formatNumber(value, digits = 2) {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n.toFixed(digits) : "0.00";
+}
+
+function readSelectedEntity(snapshot, selectedTarget) {
+  if (!selectedTarget?.kind || selectedTarget?.id == null) return null;
+
+  if (selectedTarget.kind === "ACTOR") {
+    const actor = (snapshot?.actors ?? []).find((entry) => String(entry?.id) === String(selectedTarget.id)) ?? null;
+    if (!actor) return null;
+    return {
+      kind: "ACTOR",
+      entity: actor,
+      type: actor.actorDefCode ?? actor.actorType ?? null,
+      pos: actor.pos ?? { x: 0, y: 0, z: 0 },
+      yaw: Number(actor.yaw ?? 0),
+      scale: actor.scale ?? { x: 1, y: 1, z: 1 },
+    };
+  }
+
+  if (selectedTarget.kind === "OBJECT") {
+    const sceneObject =
+      (snapshot?.sceneObjects ?? []).find((entry) => String(entry?.id) === String(selectedTarget.id)) ?? null;
+    if (!sceneObject || isEditorCharacter(sceneObject)) return null;
+    return {
+      kind: "OBJECT",
+      entity: sceneObject,
+      type: sceneObject.objectDefCode ?? sceneObject.objectType ?? null,
+      pos: sceneObject.pos ?? { x: 0, y: 0, z: 0 },
+      yaw: Number(sceneObject.yaw ?? 0),
+      scale: sceneObject.scale ?? { x: 1, y: 1, z: 1 },
+    };
+  }
+
+  return null;
+}
+
+function buildSelectableTargets(snapshot) {
+  const actors = (snapshot?.actors ?? []).map((entry) => ({
+    kind: "ACTOR",
+    id: String(entry?.id ?? ""),
+    type: entry?.actorDefCode ?? entry?.actorType ?? null,
+    label: `Actor #${entry?.id ?? "?"} - ${entry?.actorDefCode ?? entry?.actorType ?? "Sem tipo"}`,
+  }));
+  const objects = (snapshot?.sceneObjects ?? [])
+    .filter((entry) => !isEditorCharacter(entry))
+    .map((entry) => ({
+      kind: "OBJECT",
+      id: String(entry?.id ?? ""),
+      type: entry?.objectDefCode ?? entry?.objectType ?? null,
+      label: `Object #${entry?.id ?? "?"} - ${entry?.objectDefCode ?? entry?.objectType ?? "Sem tipo"}`,
+    }));
+
+  return [...actors, ...objects];
+}
+
+function buildSelectedFormFromEntry(selectedEntry) {
+  if (!selectedEntry) return null;
+  return {
+    posX: String(selectedEntry.pos?.x ?? 0),
+    posY: String(selectedEntry.pos?.y ?? 0),
+    posZ: String(selectedEntry.pos?.z ?? 0),
+    yaw: String(selectedEntry.yaw ?? 0),
+    scaleX: String(selectedEntry.scale?.x ?? 1),
+    scaleY: String(selectedEntry.scale?.y ?? 1),
+    scaleZ: String(selectedEntry.scale?.z ?? 1),
+  };
+}
+
+function toDraftNumber(value, fallback) {
+  if (value === "" || value == null) return fallback;
+  const next = Number(value);
+  return Number.isFinite(next) ? next : fallback;
+}
+
+function applySelectedDraftToSnapshot(prevSnapshot, selectedTarget, draft) {
+  if (!prevSnapshot || !selectedTarget?.kind || selectedTarget?.id == null || !draft) return prevSnapshot;
+
+  const patch = {
+    pos: {
+      x: toDraftNumber(draft.posX, 0),
+      y: toDraftNumber(draft.posY, 0),
+      z: toDraftNumber(draft.posZ, 0),
+    },
+    yaw: toDraftNumber(draft.yaw, 0),
+    scale: {
+      x: Math.max(0.01, toDraftNumber(draft.scaleX, 1)),
+      y: Math.max(0.01, toDraftNumber(draft.scaleY, 1)),
+      z: Math.max(0.01, toDraftNumber(draft.scaleZ, 1)),
+    },
+  };
+
+  if (selectedTarget.kind === "ACTOR") {
+    return mergeSnapshotActor(prevSnapshot, {
+      id: selectedTarget.id,
+      ...patch,
+    });
+  }
+
+  if (selectedTarget.kind === "OBJECT") {
+    return mergeSnapshotSceneObject(prevSnapshot, {
+      id: selectedTarget.id,
+      ...patch,
+    });
+  }
+
+  return prevSnapshot;
+}
+
+function CollapsibleSection({ title, children, defaultOpen = false }) {
+  return (
+    <details
+      open={defaultOpen}
+      style={{
+        borderRadius: 14,
+        background: "rgba(255,255,255,0.05)",
+        overflow: "hidden",
+      }}
+    >
+      <summary
+        style={{
+          cursor: "pointer",
+          padding: "12px 14px",
+          fontWeight: 700,
+          listStyle: "none",
+        }}
+      >
+        {title}
+      </summary>
+      <div style={{ padding: "0 14px 14px", display: "grid", gap: 10 }}>{children}</div>
+    </details>
+  );
+}
+
+function LabeledInput({ label, value, onChange, type = "text", step = "any", min = undefined }) {
+  return (
+    <label style={{ display: "grid", gap: 6 }}>
+      <span style={{ fontSize: 12, opacity: 0.82 }}>{label}</span>
+      <input
+        type={type}
+        value={value}
+        min={min}
+        step={step}
+        onChange={onChange}
+        style={{
+          borderRadius: 10,
+          border: "1px solid rgba(255,255,255,0.14)",
+          background: "rgba(8,12,18,0.9)",
+          color: "#f3f2eb",
+          padding: "10px 12px",
+        }}
+      />
+    </label>
+  );
+}
+
+function SectionButton({ children, onClick, tone = "primary", disabled = false }) {
+  const palette =
+    tone === "danger"
+      ? { background: "#d95d39", color: "#fff4ef" }
+      : tone === "muted"
+        ? { background: "rgba(255,255,255,0.08)", color: "#f3f2eb" }
+        : { background: "#f4b942", color: "#18212a" };
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        border: 0,
+        borderRadius: 12,
+        padding: "11px 14px",
+        cursor: disabled ? "not-allowed" : "pointer",
+        fontWeight: 700,
+        opacity: disabled ? 0.6 : 1,
+        ...palette,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function EditorCharacterLabel({ state }) {
+  const [labelState, setLabelState] = useState({
+    visible: false,
+    x: 0,
+    y: 0,
+    text: "0.00, 0.00, 0.00",
+  });
+
+  useEffect(() => {
+    let alive = true;
+    const step = () => {
+      if (!alive) return;
+      const camera = state.cameraRef?.current ?? null;
+      const cameraApi = state.cameraApiRef?.current ?? null;
+      const canvas = state.containerRef?.current?.querySelector("canvas") ?? null;
+      const pos = state.editorCharacterRef?.current?.pos ?? null;
+      if (camera && canvas && pos) {
+        const projected = projectWorldToScreenPx(
+          new THREE.Vector3(Number(pos.x ?? 0), Number(pos.y ?? 0) + 2.4, Number(pos.z ?? 0)),
+          camera,
+          canvas
+        );
+        if (projected) {
+          setLabelState({
+            visible: true,
+            x: projected.x,
+            y: projected.y,
+            text: `${formatNumber(pos.x)}, ${formatNumber(pos.y)}, ${formatNumber(pos.z)}`,
+          });
+        } else {
+          setLabelState((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+        }
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    return () => {
+      alive = false;
+    };
+  }, [state]);
+
+  if (!labelState.visible) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: labelState.x,
+        top: labelState.y,
+        transform: "translate(-50%, -110%)",
+        zIndex: 1260,
+        pointerEvents: "none",
+        display: "grid",
+        gap: 4,
+        padding: "10px 12px",
+        borderRadius: 12,
+        background: "rgba(16, 18, 22, 0.45)",
+        border: "1px solid rgba(244, 185, 66, 0.22)",
+        justifyItems: "center",
+        color: "#f4b942",
+        textShadow: "0 2px 10px rgba(0,0,0,0.8)",
+      }}
+    >
+      <div
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: "50%",
+          border: "2px solid #f4b942",
+          background: "rgba(244,185,66,0.2)",
+          boxShadow: "0 0 0 5px rgba(244,185,66,0.12)",
+        }}
+      />
+      <div style={{ fontSize: 12, fontWeight: 800 }}>GM Character</div>
+      <div style={{ fontSize: 10, opacity: 0.9 }}>
+        XYZ {labelState.text}
+      </div>
+    </div>
+  );
+}
+
+function EditorFpsBadge() {
+  const [fps, setFps] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    let lastAt = performance.now();
+    let frameCount = 0;
+
+    const step = () => {
+      if (!alive) return;
+      frameCount += 1;
+      const now = performance.now();
+      const elapsed = now - lastAt;
+
+      if (elapsed >= 500) {
+        const nextFps = Math.round((frameCount * 1000) / elapsed);
+        setFps(nextFps);
+        frameCount = 0;
+        lastAt = now;
+      }
+
+      requestAnimationFrame(step);
+    };
+
+    requestAnimationFrame(step);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 10,
+        right: 10,
+        zIndex: 5200,
+        padding: "8px 12px",
+        borderRadius: 999,
+        background: "rgba(10, 14, 18, 0.82)",
+        color: "#f4b942",
+        fontWeight: 900,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        boxShadow: "0 12px 24px rgba(0,0,0,0.35)",
+        pointerEvents: "none",
+      }}
+    >
+      FPS {fps || "--"}
+    </div>
+  );
+}
+
+function EditorMotionDebugPanel({ state }) {
+  const [debugState, setDebugState] = useState({
+    cameraYaw: 0,
+    cameraRotationY: 0,
+    characterYaw: 0,
+    moveInput: 0,
+    strafeInput: 0,
+    focusX: 0,
+    focusZ: 0,
+    keydownCount: 0,
+    keyupCount: 0,
+    orbitCount: 0,
+    zoomCount: 0,
+    lastEvent: "idle",
+    activeElementTag: "none",
+    lastKey: "none",
+    lastCode: "none",
+    lastRepeat: false,
+    keys: { w: false, a: false, s: false, d: false, ctrl: false },
+  });
+
+  useEffect(() => {
+    let alive = true;
+    const step = () => {
+      if (!alive) return;
+
+      const camera = state.cameraRef?.current ?? null;
+      const cameraApi = state.cameraApiRef?.current ?? null;
+      const character = state.editorCharacterRef?.current ?? null;
+      const focus = state.editorCameraFocusRef?.current ?? null;
+      const keys = state.editorInputStateRef?.current ?? null;
+      const forward = new THREE.Vector3();
+      let cameraYaw = Number(cameraApi?.getState?.().yaw ?? 0);
+      let cameraRotationY = 0;
+
+      if (cameraApi?.getState) {
+        const cameraState = cameraApi.getState();
+        if (Number.isFinite(Number(cameraState?.yaw))) {
+          cameraYaw = Number(cameraState.yaw);
+        }
+      }
+
+      if (camera) {
+        cameraRotationY = Number(camera.rotation?.y ?? 0);
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        if (forward.lengthSq() > 0.000001) {
+          forward.normalize();
+          if (!Number.isFinite(cameraYaw)) {
+            cameraYaw = Math.atan2(-forward.x, -forward.z);
+          }
+        }
+      }
+
+      setDebugState({
+        cameraYaw,
+        cameraRotationY,
+        characterYaw: Number(character?.yaw ?? 0),
+        moveInput: Number(keys?.moveInput ?? 0),
+        strafeInput: Number(keys?.strafeInput ?? 0),
+        focusX: Number(focus?.x ?? 0),
+        focusZ: Number(focus?.z ?? 0),
+        keydownCount: Number(keys?.keydownCount ?? 0),
+        keyupCount: Number(keys?.keyupCount ?? 0),
+        orbitCount: Number(keys?.orbitCount ?? 0),
+        zoomCount: Number(keys?.zoomCount ?? 0),
+        lastEvent: String(keys?.lastEvent ?? "idle"),
+        activeElementTag: String(keys?.activeElementTag ?? "none"),
+        lastKey: String(keys?.lastKey ?? "none"),
+        lastCode: String(keys?.lastCode ?? "none"),
+        lastRepeat: Boolean(keys?.lastRepeat ?? false),
+        keys: {
+          w: Boolean(keys?.w),
+          a: Boolean(keys?.a),
+          s: Boolean(keys?.s),
+          d: Boolean(keys?.d),
+          ctrl: Boolean(keys?.ctrl),
+        },
+      });
+
+      requestAnimationFrame(step);
+    };
+
+    requestAnimationFrame(step);
+    return () => {
+      alive = false;
+    };
+  }, [state]);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        right: 16,
+        bottom: 16,
+        zIndex: 1270,
+        pointerEvents: "none",
+        minWidth: 280,
+        padding: "10px 12px",
+        borderRadius: 12,
+        background: "rgba(10, 14, 18, 0.72)",
+        border: "1px solid rgba(244, 185, 66, 0.22)",
+        color: "#f6f1df",
+        fontSize: 12,
+        lineHeight: 1.45,
+        boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+      }}
+    >
+      <div style={{ fontWeight: 800, color: "#f4b942", marginBottom: 8 }}>Scene Creator Debug</div>
+      <div>camYaw: {formatNumber(debugState.cameraYaw, 3)}</div>
+      <div>camRotY: {formatNumber(debugState.cameraRotationY, 3)}</div>
+      <div>charYaw: {formatNumber(debugState.characterYaw, 3)}</div>
+      <div>move: {formatNumber(debugState.moveInput, 1)} strafe: {formatNumber(debugState.strafeInput, 1)}</div>
+      <div>focus: {formatNumber(debugState.focusX, 2)}, {formatNumber(debugState.focusZ, 2)}</div>
+      <div>keydown: {debugState.keydownCount} keyup: {debugState.keyupCount}</div>
+      <div>orbit: {debugState.orbitCount} zoom: {debugState.zoomCount}</div>
+      <div>last: {debugState.lastEvent}</div>
+      <div>key: {debugState.lastKey} code: {debugState.lastCode} repeat: {debugState.lastRepeat ? "1" : "0"}</div>
+      <div>focusEl: {debugState.activeElementTag}</div>
+      <div>
+        keys: W={debugState.keys.w ? "1" : "0"} A={debugState.keys.a ? "1" : "0"} S={debugState.keys.s ? "1" : "0"} D=
+        {debugState.keys.d ? "1" : "0"} Ctrl={debugState.keys.ctrl ? "1" : "0"}
+      </div>
+    </div>
+  );
+}
+
+function SidePanel({ state, onLogout }) {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const operator = state.editorMeta?.editor?.operator ?? null;
+  const instance = state.editorMeta?.instance ?? null;
+  const selectedEntry = useMemo(
+    () => readSelectedEntity(state.snapshot, state.selectedTarget),
+    [state.selectedTarget, state.snapshot]
+  );
+  const selectableTargets = useMemo(
+    () => buildSelectableTargets(state.snapshot),
+    [state.snapshot]
+  );
+  const selectedTargetKey = state.selectedTarget?.kind && state.selectedTarget?.id != null
+    ? `${state.selectedTarget.kind}:${state.selectedTarget.id}`
+    : "";
+
+  const [spawnActorDefId, setSpawnActorDefId] = useState("");
+  const [spawnObjectDefId, setSpawnObjectDefId] = useState("");
+  const [useCurrentPositionActor, setUseCurrentPositionActor] = useState(true);
+  const [useCurrentPositionObject, setUseCurrentPositionObject] = useState(true);
+  const [spawnActorPos, setSpawnActorPos] = useState({ x: "0", y: "0", z: "0" });
+  const [spawnObjectPos, setSpawnObjectPos] = useState({ x: "0", y: "0", z: "0" });
+  const [moveStep, setMoveStep] = useState("5");
+  const [selectedForm, setSelectedForm] = useState(null);
+  const lastSelectedTargetKeyRef = useRef("");
+
+  useEffect(() => {
+    if (!selectedEntry) {
+      setSelectedForm(null);
+      lastSelectedTargetKeyRef.current = "";
+      return;
+    }
+
+    if (lastSelectedTargetKeyRef.current === selectedTargetKey) return;
+    lastSelectedTargetKeyRef.current = selectedTargetKey;
+    setSelectedForm(buildSelectedFormFromEntry(selectedEntry));
+  }, [selectedEntry, selectedTargetKey]);
+
+  useEffect(() => {
+    if (!state.flashMessage) return undefined;
+    const timeoutId = window.setTimeout(() => state.setFlashMessage(null), 2600);
+    return () => window.clearTimeout(timeoutId);
+  }, [state, state.flashMessage]);
+
+  useEffect(() => {
+    state.editorMoveSpeedRef.current = Math.max(0.1, Number(moveStep) || 10);
+  }, [moveStep, state.editorMoveSpeedRef]);
+
+  const handleSelectTarget = useCallback((value) => {
+    if (!value) {
+      state.setSelectedTarget(null);
+      return;
+    }
+
+    const [kind, ...rest] = String(value).split(":");
+    const id = rest.join(":");
+    if (!kind || !id) return;
+    state.setSelectedTarget({ kind, id });
+  }, [state]);
+
+  const handleSelectedFormChange = useCallback((field, value) => {
+    setSelectedForm((prev) => {
+      const base =
+        prev ??
+        buildSelectedFormFromEntry(selectedEntry) ?? {
+          posX: "0",
+          posY: "0",
+          posZ: "0",
+          yaw: "0",
+          scaleX: "1",
+          scaleY: "1",
+          scaleZ: "1",
+        };
+      const next = {
+        ...base,
+        [field]: value,
+      };
+      state.setSnapshot((prevSnapshot) => applySelectedDraftToSnapshot(prevSnapshot, state.selectedTarget, next));
+      return next;
+    });
+  }, [selectedEntry, state]);
+
+  const handleSpawnActor = useCallback(async () => {
+    if (!token || !spawnActorDefId) return;
+    const payload = {
+      actorDefId: Number(spawnActorDefId),
+      useCurrentPosition: useCurrentPositionActor,
+      pos: {
+        x: Number(spawnActorPos.x ?? 0),
+        y: Number(spawnActorPos.y ?? 0),
+        z: Number(spawnActorPos.z ?? 0),
+      },
+    };
+    const result = await spawnActor(token, payload);
+    if (result?.error) {
+      state.setFlashMessage(`Falha ao spawnar actor: ${result.message}`);
+      return;
+    }
+    state.setSnapshot((prev) => mergeSnapshotActor(prev, result.actor));
+    state.setSelectedTarget({ kind: "ACTOR", id: String(result.actor?.id ?? "") });
+    state.setFlashMessage(`Actor #${result.actor?.id ?? "?"} criado`);
+  }, [spawnActorDefId, spawnActorPos, state, token, useCurrentPositionActor]);
+
+  const handleSpawnObject = useCallback(async () => {
+    if (!token || !spawnObjectDefId) return;
+    const payload = {
+      sceneObjectDefId: Number(spawnObjectDefId),
+      useCurrentPosition: useCurrentPositionObject,
+      pos: {
+        x: Number(spawnObjectPos.x ?? 0),
+        y: Number(spawnObjectPos.y ?? 0),
+        z: Number(spawnObjectPos.z ?? 0),
+      },
+    };
+    const result = await spawnSceneObject(token, payload);
+    if (result?.error) {
+      state.setFlashMessage(`Falha ao spawnar object: ${result.message}`);
+      return;
+    }
+    state.setSnapshot((prev) => mergeSnapshotSceneObject(prev, result.sceneObject));
+    state.setSelectedTarget({ kind: "OBJECT", id: String(result.sceneObject?.id ?? "") });
+    state.setFlashMessage(`Object #${result.sceneObject?.id ?? "?"} criado`);
+  }, [spawnObjectDefId, spawnObjectPos, state, token, useCurrentPositionObject]);
+
+  const handleSaveSelected = useCallback(async () => {
+    if (!token || !selectedEntry || !selectedForm) return;
+    const payload = {
+      pos: {
+        x: Number(selectedForm.posX ?? 0),
+        y: Number(selectedForm.posY ?? 0),
+        z: Number(selectedForm.posZ ?? 0),
+      },
+      yaw: Number(selectedForm.yaw ?? 0),
+      scale: {
+        x: Number(selectedForm.scaleX ?? 1),
+        y: Number(selectedForm.scaleY ?? 1),
+        z: Number(selectedForm.scaleZ ?? 1),
+      },
+    };
+
+    if (selectedEntry.kind === "ACTOR") {
+      const result = await updateActor(token, selectedEntry.entity.id, payload);
+      if (result?.error) {
+        state.setFlashMessage(`Falha ao atualizar actor: ${result.message}`);
+        return;
+      }
+      state.setSnapshot((prev) => mergeSnapshotActor(prev, result.actor));
+      state.setFlashMessage(`Actor #${result.actor?.id ?? "?"} atualizado`);
+      return;
+    }
+
+    const result = await updateSceneObject(token, selectedEntry.entity.id, payload);
+    if (result?.error) {
+      state.setFlashMessage(`Falha ao atualizar object: ${result.message}`);
+      return;
+    }
+    state.setSnapshot((prev) => mergeSnapshotSceneObject(prev, result.sceneObject));
+    state.setFlashMessage(`Object #${result.sceneObject?.id ?? "?"} atualizado`);
+  }, [selectedEntry, selectedForm, state, token]);
+
+  const handleDisableSelected = useCallback(async () => {
+    if (!token || !selectedEntry) return;
+
+    if (selectedEntry.kind === "ACTOR") {
+      const result = await disableActor(token, selectedEntry.entity.id);
+      if (result?.error) {
+        state.setFlashMessage(`Falha ao desativar actor: ${result.message}`);
+        return;
+      }
+      state.setSnapshot((prev) => mergeSnapshotActor(prev, result.actor));
+      state.setSelectedTarget(null);
+      state.setFlashMessage(`Actor #${result.actor?.id ?? "?"} desativado`);
+      return;
+    }
+
+    const result = await disableSceneObject(token, selectedEntry.entity.id);
+    if (result?.error) {
+      state.setFlashMessage(`Falha ao desativar object: ${result.message}`);
+      return;
+    }
+    state.setSnapshot((prev) => mergeSnapshotSceneObject(prev, result.sceneObject));
+    state.setSelectedTarget(null);
+    state.setFlashMessage(`Object #${result.sceneObject?.id ?? "?"} desativado`);
+  }, [selectedEntry, state, token]);
+
+  const actorDefs = state.catalogs?.actorDefs ?? [];
+  const objectDefs = state.catalogs?.objectDefs ?? [];
+
+  return (
+    <aside
+      data-scene-creator-scroll-panel="true"
+      style={{
+        position: "fixed",
+        top: 16,
+        left: 16,
+        zIndex: 1200,
+        width: 360,
+        maxHeight: "calc(100vh - 32px)",
+        overflow: "auto",
+        padding: 16,
+        borderRadius: 18,
+        background: "rgba(13, 20, 28, 0.9)",
+        color: "#f3f2eb",
+        backdropFilter: "blur(14px)",
+        boxShadow: "0 18px 45px rgba(0, 0, 0, 0.28)",
+        border: "1px solid rgba(255, 255, 255, 0.08)",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+        display: "grid",
+        gap: 12,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 12, letterSpacing: "0.18em", textTransform: "uppercase", opacity: 0.7 }}>
+            Scene Creator
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>
+            Editor de Cena
+          </div>
+        </div>
+        <SectionButton onClick={onLogout}>Sair</SectionButton>
+      </div>
+
+      {state.flashMessage ? (
+        <div
+          style={{
+            padding: 12,
+            borderRadius: 12,
+            background: "rgba(244, 185, 66, 0.14)",
+            color: "#f6d98d",
+            fontSize: 13,
+            fontWeight: 700,
+          }}
+        >
+          {state.flashMessage}
+        </div>
+      ) : null}
+
+      <CollapsibleSection title="Resumo" defaultOpen>
+        <div>ID da instancia: {instance?.id ?? "-"}</div>
+        <div>Status: {instance?.status ?? "-"}</div>
+        <div>Actors: {state.counts.actors}</div>
+        <div>Objects: {state.counts.sceneObjects}</div>
+        <div>
+          Posicao GM: {formatNumber(operator?.pos?.x)}, {formatNumber(operator?.pos?.y)}, {formatNumber(operator?.pos?.z)}
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Locomocao GM" defaultOpen>
+        <LabeledInput label="Velocidade de movimento" value={moveStep} type="number" min="0.1" step="0.1" onChange={(e) => setMoveStep(e.target.value)} />
+        <label style={{ display: "grid", gap: 6 }}>
+          <span style={{ fontSize: 12, opacity: 0.82 }}>Selecionar actor ou object</span>
+          <select
+            value={selectedTargetKey}
+            onChange={(e) => handleSelectTarget(e.target.value)}
+            style={{
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(8,12,18,0.9)",
+              color: "#f3f2eb",
+              padding: "10px 12px",
+            }}
+          >
+            <option value="">Selecione um actor ou object</option>
+            {selectableTargets.map((entry) => (
+              <option key={`${entry.kind}:${entry.id}`} value={`${entry.kind}:${entry.id}`}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.4 }}>
+          Use `WASD` para mover o pivô invisível e `Ctrl` para acelerar. O seletor acima serve para recuperar entidades fora do raycast.
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Spawn Actor" defaultOpen>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span style={{ fontSize: 12, opacity: 0.82 }}>Tipo de actor</span>
+          <select
+            value={spawnActorDefId}
+            onChange={(e) => setSpawnActorDefId(e.target.value)}
+            style={{
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(8,12,18,0.9)",
+              color: "#f3f2eb",
+              padding: "10px 12px",
+            }}
+          >
+            <option value="">Selecione um actor</option>
+            {actorDefs.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.code} - {entry.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" checked={useCurrentPositionActor} onChange={(e) => setUseCurrentPositionActor(e.target.checked)} />
+          <span>Usar posicao atual do GM</span>
+        </label>
+        {!useCurrentPositionActor ? (
+          <>
+            <LabeledInput label="Position X" value={spawnActorPos.x} type="number" onChange={(e) => setSpawnActorPos((prev) => ({ ...prev, x: e.target.value }))} />
+            <LabeledInput label="Position Y" value={spawnActorPos.y} type="number" onChange={(e) => setSpawnActorPos((prev) => ({ ...prev, y: e.target.value }))} />
+            <LabeledInput label="Position Z" value={spawnActorPos.z} type="number" onChange={(e) => setSpawnActorPos((prev) => ({ ...prev, z: e.target.value }))} />
+          </>
+        ) : null}
+        <SectionButton onClick={handleSpawnActor} disabled={!spawnActorDefId}>OK</SectionButton>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Spawn Object" defaultOpen>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span style={{ fontSize: 12, opacity: 0.82 }}>Tipo de object</span>
+          <select
+            value={spawnObjectDefId}
+            onChange={(e) => setSpawnObjectDefId(e.target.value)}
+            style={{
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(8,12,18,0.9)",
+              color: "#f3f2eb",
+              padding: "10px 12px",
+            }}
+          >
+            <option value="">Selecione um object</option>
+            {objectDefs.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.code} - {entry.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" checked={useCurrentPositionObject} onChange={(e) => setUseCurrentPositionObject(e.target.checked)} />
+          <span>Usar posicao atual do GM</span>
+        </label>
+        {!useCurrentPositionObject ? (
+          <>
+            <LabeledInput label="Position X" value={spawnObjectPos.x} type="number" onChange={(e) => setSpawnObjectPos((prev) => ({ ...prev, x: e.target.value }))} />
+            <LabeledInput label="Position Y" value={spawnObjectPos.y} type="number" onChange={(e) => setSpawnObjectPos((prev) => ({ ...prev, y: e.target.value }))} />
+            <LabeledInput label="Position Z" value={spawnObjectPos.z} type="number" onChange={(e) => setSpawnObjectPos((prev) => ({ ...prev, z: e.target.value }))} />
+          </>
+        ) : null}
+        <SectionButton onClick={handleSpawnObject} disabled={!spawnObjectDefId}>OK</SectionButton>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Selected" defaultOpen>
+        {!selectedEntry || !selectedForm ? (
+          <div style={{ opacity: 0.78 }}>Nenhuma entidade selecionada.</div>
+        ) : (
+          <>
+            <div>Kind: <strong>{selectedEntry.kind}</strong></div>
+            <div>ID: <strong>{selectedEntry.entity?.id}</strong></div>
+            <div>Type: <strong>{selectedEntry.type ?? "-"}</strong></div>
+             <LabeledInput label="Position X" value={selectedForm.posX} type="number" onChange={(e) => handleSelectedFormChange("posX", e.target.value)} />
+             <LabeledInput label="Position Y" value={selectedForm.posY} type="number" onChange={(e) => handleSelectedFormChange("posY", e.target.value)} />
+             <LabeledInput label="Position Z" value={selectedForm.posZ} type="number" onChange={(e) => handleSelectedFormChange("posZ", e.target.value)} />
+             <LabeledInput label="Yaw" value={selectedForm.yaw} type="number" onChange={(e) => handleSelectedFormChange("yaw", e.target.value)} />
+             <LabeledInput label="Scale X" value={selectedForm.scaleX} type="number" min="0.01" onChange={(e) => handleSelectedFormChange("scaleX", e.target.value)} />
+             <LabeledInput label="Scale Y" value={selectedForm.scaleY} type="number" min="0.01" onChange={(e) => handleSelectedFormChange("scaleY", e.target.value)} />
+             <LabeledInput label="Scale Z" value={selectedForm.scaleZ} type="number" min="0.01" onChange={(e) => handleSelectedFormChange("scaleZ", e.target.value)} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <SectionButton onClick={handleSaveSelected}>Salvar</SectionButton>
+              <SectionButton tone="danger" onClick={handleDisableSelected}>Disable</SectionButton>
+            </div>
+          </>
+        )}
+      </CollapsibleSection>
+    </aside>
+  );
+}
+
+export function WorldCreatorView({ state, onLogout }) {
+  const editorCameraOptions = useMemo(
+    () => ({
+      pivotHeight: 1.35,
+      defaultPitch: THREE.MathUtils.degToRad(24),
+      defaultDistance: 12,
+      minPitch: THREE.MathUtils.degToRad(5),
+      maxPitch: THREE.MathUtils.degToRad(86),
+    }),
+    []
+  );
+
+  const handleTargetSelect = useCallback((target) => state.setSelectedTarget(target), [state]);
+  const handleTargetClear = useCallback(() => state.setSelectedTarget(null), [state]);
+  const handleLogoutClick = useCallback(() => onLogout(), [onLogout]);
+  const handleEditorTick = useCallback(
+    ({ pos, yaw }) => {
+      const nextPos = {
+        x: Number(pos?.x ?? 0),
+        y: Number(pos?.y ?? 0),
+        z: Number(pos?.z ?? 0),
+      };
+      const cameraYaw = Number(yaw ?? 0);
+      const nextYaw = cameraYaw + Math.PI;
+
+      if (state.editorCameraFocusRef?.current) {
+        state.editorCameraFocusRef.current = nextPos;
+      }
+      if (state.editorAnchorRef?.current) {
+        state.editorAnchorRef.current = nextPos;
+      }
+      if (state.editorCharacterRef?.current) {
+        state.editorCharacterRef.current.pos = nextPos;
+        state.editorCharacterRef.current.yaw = nextYaw;
+      }
+      if (state.editorInputStateRef?.current) {
+        state.editorInputStateRef.current = {
+          ...state.editorInputStateRef.current,
+          cameraYaw,
+          characterYaw: nextYaw,
+          focusX: nextPos.x,
+          focusY: nextPos.y,
+          focusZ: nextPos.z,
+        };
+      }
+    },
+    [state]
+  );
+
+  useEffect(() => {
+    const hideStatsPanel = () => {
+      const container = state.containerRef?.current ?? null;
+      const statsPanel = container?.querySelector?.('[data-debug-panel="game-canvas-stats-panel"]') ?? null;
+      if (!statsPanel) return false;
+
+      statsPanel.style.display = "none";
+      return true;
+    };
+
+    const timer = window.setInterval(() => {
+      hideStatsPanel();
+    }, 250);
+
+    hideStatsPanel();
+
+    return () => window.clearInterval(timer);
+  }, [state]);
+
+  useEffect(() => {
+    return createEditorCharacterMovementController({ state });
+  }, [state]);
+
+  return (
+    <>
+      <EditorFpsBadge />
+      <div
+        style={{
+          position: "fixed",
+          top: 10,
+          left: 10,
+          zIndex: 4000,
+          padding: "8px 12px",
+          borderRadius: 999,
+          background: "rgba(244, 185, 66, 0.95)",
+          color: "#18212a",
+          fontWeight: 900,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          boxShadow: "0 12px 24px rgba(0,0,0,0.35)",
+          pointerEvents: "none",
+        }}
+      >
+        Scene Creator Live
+      </div>
+      <EditorCharacterLabel state={state} />
+      <GameCanvas
+        containerRef={state.containerRef}
+        snapshot={state.snapshot}
+        worldClock={state.editorMeta?.worldClock ?? state.snapshot?.worldClock ?? null}
+        worldStoreRef={state.worldStoreRef}
+        setSnapshot={state.setSnapshot}
+        exposeRuntimeRef={state.runtimeRef}
+        exposeCameraRef={state.cameraRef}
+        exposeCameraApiRef={state.cameraApiRef}
+        editorCameraFocusRef={state.editorCameraFocusRef}
+        editorMoveSpeedRef={state.editorMoveSpeedRef}
+        editorMoveStateRef={state.editorMoveStateRef}
+        editorInputStateRef={state.editorInputStateRef}
+        onEditorTick={handleEditorTick}
+        disableSceneInput={true}
+        buildPlacement={null}
+        inventorySnapshot={null}
+        onInputIntent={null}
+        disableInput={true}
+        onTargetSelect={handleTargetSelect}
+        onTargetClear={handleTargetClear}
+        allowObjectSelection={true}
+        disableGroundMove={true}
+        disableWorldEntities={true}
+        cameraOptions={editorCameraOptions}
+      />
+      <SidePanel state={state} onLogout={onLogout} />
+    </>
+  );
+}

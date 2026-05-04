@@ -115,3 +115,46 @@ export function mergeSnapshotActor(prevSnapshot, actorUpdate) {
     actors: nextActors,
   };
 }
+
+export function mergeSnapshotSceneObject(prevSnapshot, sceneObjectUpdate) {
+  if (!prevSnapshot || !sceneObjectUpdate) return prevSnapshot;
+
+  const sceneObjectId = toId(
+    sceneObjectUpdate?.id ??
+      sceneObjectUpdate?.sceneObjectId ??
+      sceneObjectUpdate?.sceneObject?.id ??
+      null
+  );
+  if (!sceneObjectId) return prevSnapshot;
+
+  const nextPatch = sceneObjectUpdate?.sceneObject ?? sceneObjectUpdate;
+  const sceneObjects = Array.isArray(prevSnapshot.sceneObjects) ? prevSnapshot.sceneObjects : [];
+  let changed = false;
+  let found = false;
+
+  const nextSceneObjects = sceneObjects.map((sceneObject) => {
+    if (toId(sceneObject?.id ?? null) !== sceneObjectId) return sceneObject;
+    found = true;
+    changed = true;
+    return {
+      ...sceneObject,
+      ...nextPatch,
+      id: sceneObject?.id ?? nextPatch?.id ?? sceneObjectId,
+    };
+  });
+
+  if (!found) {
+    changed = true;
+    nextSceneObjects.push({
+      id: nextPatch?.id ?? sceneObjectId,
+      ...nextPatch,
+    });
+  }
+
+  if (!changed) return prevSnapshot;
+
+  return {
+    ...prevSnapshot,
+    sceneObjects: nextSceneObjects,
+  };
+}

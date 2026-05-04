@@ -8,9 +8,12 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
   const proceduralMapRef = useRef(null);
   const versionRef = useRef(null);
   const actorsRef = useRef([]);
+  const sceneObjectsRef = useRef([]);
   const cameraRef = useRef(null);
+  const cameraApiRef = useRef(null);
   const meshByEntityIdRef = useRef(new Map());
   const meshByActorIdRef = useRef(new Map());
+  const meshBySceneObjectIdRef = useRef(new Map());
   const meshByEnemyIdRef = useRef(new Map());
   const lastSelfIdRef = useRef(null);
   const selectedTargetRef = useRef(null);
@@ -21,6 +24,9 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
   const predictedEnemyVitalsRef = useRef(new Map());
   const inventorySnapshotRef = useRef(null);
   const buildPlacementRef = useRef(buildPlacement);
+  const editorCameraFocusRef = useRef({ x: 0, y: 0, z: 0 });
+  const editorMoveSpeedRef = useRef(10);
+  const editorMoveStateRef = useRef({ dir: { x: 0, z: 0 }, speedScale: 1 });
   const movementVisualRef = useRef({
     seq: 0,
     mode: "STOP",
@@ -60,9 +66,12 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
       proceduralMapRef,
       versionRef,
       actorsRef,
+      sceneObjectsRef,
       cameraRef,
+      cameraApiRef,
       meshByEntityIdRef,
       meshByActorIdRef,
+      meshBySceneObjectIdRef,
       meshByEnemyIdRef,
       lastSelfIdRef,
       selectedTargetRef,
@@ -73,6 +82,9 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
       predictedEnemyVitalsRef,
       inventorySnapshotRef,
       buildPlacementRef,
+      editorCameraFocusRef,
+      editorMoveSpeedRef,
+      editorMoveStateRef,
       movementVisualRef,
       debugSelfMeshLoggedRef,
       setMarker,
@@ -103,6 +115,7 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
   stateRef.current.selfHpBar = selfHpBar;
   stateRef.current.buildPlacementMarker = buildPlacementMarker;
   stateRef.current.buildPlacementRef.current = buildPlacement;
+  stateRef.current.cameraApiRef = cameraApiRef;
 
   return stateRef.current;
 }

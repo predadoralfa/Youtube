@@ -1,924 +1,740 @@
-# Plano de Implementação — Sistema Separado de Scene Objects e Object Respawn
+# Plano de Implementacao - Scene Creator e Scene Objects
 
 ## 1. Objetivo
 
-Implementar um sistema novo e independente para objetos de cenário, separado do sistema de Actors.
+Substituir a direcao anterior de editar `Actor` e futuros `SceneObject` dentro do cliente jogavel por uma arquitetura nova:
 
-O objetivo é permitir que o painel de debug/editor do mundo consiga:
+- `client/` continua sendo o jogo;
+- `scene-creator/` vira a aplicacao de edicao de cena;
+- `server/` continua sendo a autoridade unica;
+- `SceneObject` passa a existir como dominio separado de `Actor`;
+- toda persistencia de edicao continua passando pelo servidor atual.
 
-- spawnar objetos decorativos/ambientais no cenário;
-- spawnar actors de gameplay pelo mesmo painel, mas por fluxo separado;
-- selecionar entidades colocadas no mundo;
-- exibir claramente o tipo e o ID da entidade selecionada;
-- editar posição, rotação e escala;
-- persistir essas alterações no banco de dados;
-- carregar os objetos salvos no bootstrap do mundo;
-- renderizar os objetos em uma camada própria no frontend.
+O foco deste plano e montar uma ferramenta dedicada para:
 
-Este sistema deve ser construído sem transformar `Actor` em um repositório genérico de tudo que aparece no mapa.
+- spawnar `SceneObject`;
+- spawnar `Actor`;
+- selecionar entidades de cena;
+- editar posicao, `yaw` e escala;
+- desativar/remover entidades;
+- persistir tudo no banco de dados;
+- manter o jogo principal limpo de ferramentas de edicao.
 
 ---
 
-## 2. Princípio arquitetural
+## 2. Decisao arquitetural
 
-A separação conceitual deve ser rígida:
+### Regra principal
+
+Nao evoluir o editor de cena dentro do cliente jogavel.
+
+Em vez disso:
+
+- remover `lil-gui` e fluxo de edicao do `client/`;
+- criar um frontend novo em `scene-creator/`;
+- reaproveitar o backend atual para bootstrap e persistencia;
+- reaproveitar o maximo possivel dos modulos visuais e contratos ja existentes.
+
+### Autoridade
+
+O `scene-creator` nao acessa o banco diretamente.
+
+Toda leitura e escrita passa pelo `server/`.
+
+Isso evita:
+
+- incoerencia de contrato;
+- duplicacao de logica autoritativa;
+- segundo canal de escrita fora do backend;
+- risco de seguranca desnecessario.
+
+---
+
+## 3. Separacao de dominios
 
 ```txt
-Actor  = entidade de gameplay
-Object = entidade de composição visual/cenário
+Actor       = entidade de gameplay
+SceneObject = entidade de cenario/composicao visual
 ```
 
 ### Actor
 
-Actors continuam representando entidades que podem ter papel de gameplay, por exemplo:
+Continua representando:
 
 - NPC;
-- baú;
-- árvore coletável;
-- rocha minerável;
-- ponto de extração;
-- entidade com container;
-- entidade com interação;
-- entidade com estado funcional.
+- container;
+- recurso coletavel;
+- estrutura funcional;
+- entidade com interacao;
+- entidade com estado de gameplay.
 
-Actors podem participar de lógicas de interação, coleta, regras de recurso, containers e eventos autoritativos.
+### SceneObject
 
-### Object / Scene Object
-
-Objects representam objetos de cenário, por exemplo:
+Passa a representar:
 
 - pedra decorativa;
 - banco;
 - poste;
+- ruina;
+- vegetacao decorativa;
 - cerca;
-- tronco;
-- vegetação decorativa;
-- placa;
-- ruína;
-- item ambiental sem interação.
+- item de composicao visual sem gameplay.
 
-Objects não devem usar a lógica de Actor.
+### Regra
 
-Objects não devem possuir container.
+`SceneObject` nao:
 
-Objects não devem participar de coleta.
-
-Objects não devem ser tratados como entidades de gameplay.
-
-Objects podem ter colisão futuramente, mas isso deve ser tratado como propriedade estrutural do objeto de cena, não como interação de Actor.
+- participa de coleta;
+- recebe container;
+- entra em `interact:start`;
+- vira entidade de gameplay.
 
 ---
 
-## 3. Motivo da separação
+## 4. Mudanca de escopo do cliente jogavel
 
-Não reutilizar Actors para objetos decorativos.
+O `client/` deve permanecer apenas com comportamento de jogo.
 
-Motivos:
+### Sai do client
 
-1. Evita confusão visual e semântica para o jogador.
-2. Evita misturar objetos interativos com objetos não interativos.
-3. Evita carregar o sistema de Actors com entidades que não precisam de gameplay.
-4. Evita poluir runtime, eventos e stores com objetos estáticos.
-5. Mantém o backend autoritativo e organizado por domínio.
-6. Permite evoluir o editor de mundo sem comprometer coleta, NPCs, containers ou combate.
+- painel `lil-gui`;
+- edicao manual de `Actor`;
+- fluxo de spawn para manutencao de cena;
+- qualquer ferramenta de autoracao de mapa.
 
-Mesmo que um Object e um Actor pareçam visualmente similares, eles devem ter assets separados sempre que isso evitar ambiguidade.
+### Fica no client
 
-Exemplo:
+- bootstrap do mundo;
+- renderizacao do mundo;
+- leitura de `actors`;
+- leitura de `sceneObjects`;
+- gameplay normal;
+- UI de jogo;
+- selecao/interacao apenas do que faz sentido no jogo.
+
+---
+
+## 5. Nova aplicacao `scene-creator`
+
+Criar uma nova pasta na raiz:
 
 ```txt
-Pedra minerável    -> Actor
-Pedra decorativa   -> Object
-Árvore coletável   -> Actor
-Árvore decorativa  -> Object
+scene-creator/
 ```
 
-A implementação deve favorecer essa leitura clara.
+Ela sera um frontend dedicado para manejo de cena.
+
+### Responsabilidades
+
+- carregar o mundo pelo servidor atual;
+- renderizar `Actor` e `SceneObject`;
+- permitir spawn de ambos;
+- permitir selecao de ambos;
+- permitir edicao de transform;
+- permitir delete/disable;
+- oferecer locomocao rapida para operador GM;
+- nao carregar HUDs e sistemas de gameplay desnecessarios.
+
+### Nao deve carregar
+
+- fome;
+- sede;
+- stamina;
+- inventario;
+- combate;
+- research;
+- build de gameplay;
+- modais de jogo;
+- overlays de jogador.
 
 ---
 
-## 4. Nome do painel no debug/editor
+## 6. Bootstrap do `scene-creator`
 
-No topo do painel atual existe uma seção expansível relacionada ao debug do mundo.
+O `scene-creator` deve ler a cena a partir do `server/`.
 
-Criar uma nova seção expansível acima ou junto das seções atuais, usando o mesmo padrão visual e comportamental já existente no painel.
+### Direcao recomendada
 
-Nome da seção:
+Criar um bootstrap especifico de editor, derivado do atual.
+
+Exemplo conceitual:
 
 ```txt
-Object Respawn
+GET /world/editor/bootstrap
 ```
 
-A seção deve abrir e fechar no mesmo estilo das seções atuais.
+Esse payload deve conter apenas o necessario para edicao:
 
-O nome foi escolhido para deixar claro que esta área serve para invocar/spawnar entidades de edição no mundo.
+- instance;
+- localTemplate;
+- proceduralMap;
+- actors;
+- sceneObjects;
+- catalogos de defs;
+- dados minimos do operador GM.
+
+### Nao deve depender
+
+O `scene-creator` nao deve montar o mundo lendo o banco por fora do backend.
 
 ---
 
-## 5. Estrutura esperada do painel `Object Respawn`
+## 7. Permissao de acesso
 
-A seção deve conter dois blocos separados:
+O `scene-creator` e as rotas de editor devem exigir permissao especial.
+
+### Direcao recomendada
+
+Usar o mesmo usuario/autenticacao existente e adicionar permissao de editor/GM.
+
+Exemplos conceituais:
 
 ```txt
-Object Respawn
+role = PLAYER | GM
+```
+
+ou:
+
+```txt
+can_edit_world = true
+```
+
+### Evitar neste momento
+
+- autenticacao totalmente separada;
+- frontend acessando banco direto;
+- liberar editor para qualquer usuario autenticado.
+
+---
+
+## 8. Painel do Scene Creator
+
+O painel continua simples, no estilo dropdown/retratil, mas agora dentro do `scene-creator`.
+
+Nao depende mais de `lil-gui` do cliente jogavel.
+
+Pode usar:
+
+- `lil-gui` novamente dentro do `scene-creator`; ou
+- uma UI propria simples.
+
+Para MVP, e valido continuar com um painel no estilo do que ja existe hoje.
+
+### Estrutura esperada
+
+```txt
+Scene Creator
 ├── Spawn Object
-└── Spawn Actor
+├── Spawn Actor
+└── Selected
 ```
 
-### 5.1 Spawn Object
+### Spawn Object
 
-Bloco responsável por criar objetos de cenário.
+Campos minimos:
 
-Deve conter:
+- select de `SceneObjectDef`;
+- toggle `useCurrentPosition`;
+- `posX`;
+- `posY`;
+- `posZ`;
+- botao `OK`.
 
-- select/lista de tipos de objects disponíveis;
-- botão para spawnar o object selecionado;
-- ao spawnar, o object deve aparecer próximo ao jogador;
-- o object criado deve ficar automaticamente selecionado;
-- o painel deve exibir o ID da instância criada.
+### Spawn Actor
 
-### 5.2 Spawn Actor
+Campos minimos:
 
-Bloco responsável por criar actors.
+- select de `ActorDef`;
+- toggle `useCurrentPosition`;
+- `posX`;
+- `posY`;
+- `posZ`;
+- botao `OK`.
 
-Deve conter:
+### Selected
 
-- select/lista de tipos de actors disponíveis;
-- botão para spawnar o actor selecionado;
-- ao spawnar, o actor deve aparecer próximo ao jogador;
-- o actor criado deve ficar automaticamente selecionado;
-- o painel deve exibir o ID da instância criada.
-
-Importante: o painel pode compartilhar a mesma interface visual, mas a lógica de criação, persistência e atualização deve ser separada.
-
----
-
-## 6. Seleção de entidade
-
-Quando uma entidade for selecionada no editor, o painel deve exibir claramente:
+Campos minimos:
 
 ```txt
-Selected
 Kind: OBJECT | ACTOR
-ID: número da instância
-Type: código/tipo da entidade
+ID
+Type
+Position X/Y/Z
+Yaw
+Scale X/Y/Z
+Delete / Disable
 ```
-
-Exemplo para Object:
-
-```txt
-Selected
-Kind: OBJECT
-ID: 43
-Type: DECOR_ROCK_01
-```
-
-Exemplo para Actor:
-
-```txt
-Selected
-Kind: ACTOR
-ID: 12
-Type: NPC_BASIC
-```
-
-Isso é necessário porque podem existir várias instâncias iguais no mapa.
-
-Exemplo: se existirem 50 pedras, o editor precisa mostrar exatamente que a pedra selecionada é a instância `43`, evitando que o usuário altere a instância errada.
 
 ---
 
-## 7. Edição de transform
+## 9. Transform padrao
 
-O painel deve permitir editar o transform da entidade selecionada.
+A rotacao deve seguir o padrao atual de `Actor`.
 
-Campos mínimos:
+### Decisao
 
-```txt
-Position X
-Position Y
-Position Z
+Nao usar `rot_x`, `rot_y`, `rot_z` nesta etapa.
 
-Rotation X
-Rotation Y
-Rotation Z
+Usar:
 
-Scale X
-Scale Y
-Scale Z
-```
+- `Position X/Y/Z`
+- `Yaw`
+- `Scale X/Y/Z`
 
-O mesmo bloco visual de transform pode ser usado para Object e Actor, desde que a aplicação da alteração use fluxos separados.
+### Regra
 
-```txt
-Se Kind = OBJECT -> salvar em tabela/API de objects
-Se Kind = ACTOR  -> salvar em tabela/API de actors
-```
+`SceneObject` copia o mesmo contrato operacional de transform do `Actor` no MVP.
 
-Escala default pode seguir o padrão atual do projeto.
+Isso reduz:
 
-Não implementar regra especial de escala se o projeto já possui padrão definido.
+- mudanca de schema;
+- mudanca de renderer;
+- mudanca de editor;
+- superficie de bugs.
 
 ---
 
-## 8. Spawn próximo ao jogador
+## 10. Locomocao do operador GM
 
-Ao clicar para spawnar Object ou Actor, a entidade deve nascer próxima ao jogador.
+O `scene-creator` deve oferecer deslocamento rapido.
 
-A entidade não deve nascer exatamente no centro do player.
+### Requisitos
 
-A posição inicial deve usar a posição atual do jogador como referência e aplicar um pequeno offset seguro.
+- velocidade alta;
+- sem stamina;
+- sem fome;
+- sem sede;
+- sem travas de gameplay;
+- util em mapas grandes.
 
-A implementação pode usar o padrão já existente no projeto para posição, direção, câmera ou player runtime.
+### Opcoes aceitas
 
-O objetivo é evitar spawn em cima do player e reduzir risco de bug visual ou colisão.
+#### Opcao A - personagem GM rapido
 
----
+- controla um personagem no mundo;
+- usa mesma nocao espacial do jogo;
+- bom para posicionamento por referencia visual.
 
-## 9. Frontend — estrutura separada para Objects
+#### Opcao B - camera livre
 
-Criar uma nova pasta separada para Objects.
+- voo livre;
+- navegacao rapida;
+- melhor para edicao ampla.
 
-Sugestão:
+### Recomendacao
 
-```txt
-cliente/src/World/entities/objects/
-```
+Implementar de forma incremental:
 
-Estrutura esperada:
-
-```txt
-objects/
-├── ObjectsLayer.jsx
-├── ObjectFactory.js
-├── ObjectMappings.js
-├── DefaultObject.jsx
-└── objectCatalog.js
-```
-
-A estrutura pode variar conforme o padrão atual do projeto, mas deve respeitar os seguintes princípios:
-
-- não colocar objects dentro da pasta de actors;
-- não reutilizar `ActorsLayer` como camada de objects;
-- não misturar factory de Actor com factory de Object;
-- não misturar mappings de Actor com mappings de Object;
-- não usar lógica de interação de Actor para Object;
-- não tratar Object como Actor no frontend.
-
-A camada de render deve ser independente:
-
-```jsx
-<ObjectsLayer objects={snapshot.sceneObjects} />
-<ActorsLayer actors={snapshot.actors} />
-```
-
-A ordem pode seguir o padrão atual do `GameCanvas`.
+1. personagem GM rapido no MVP;
+2. camera livre como etapa futura se fizer falta.
 
 ---
 
-## 10. Assets de Objects
+## 11. Modelagem de banco para SceneObject
 
-Objects devem ter assets próprios.
+Criar modelagem separada para `SceneObject`.
 
-Não usar assets de Actor para Objects quando isso puder causar confusão de leitura para o jogador.
-
-A implementação deve deixar o catálogo de Objects separado do catálogo/mapping de Actors.
-
-O Codex deve usar os padrões já existentes do projeto para carregar/renderizar assets, mas mantendo a separação lógica.
-
-Não hardcodar Objects dentro da lógica de Actors.
-
----
-
-## 11. Banco de dados — modelagem necessária
-
-Criar um sistema de banco separado para Objects, inspirado no padrão usado por Actor, mas sem carregar regras de gameplay que pertencem a Actor.
-
-A modelagem deve conter pelo menos:
+### Tabelas
 
 ```txt
 ga_scene_object_def
 ga_scene_object
 ```
 
-O nome pode ser ajustado se o projeto já tiver uma convenção mais específica, mas a intenção é:
+### `ga_scene_object_def`
 
-```txt
-Definição do objeto  -> catálogo/tipo
-Instância do objeto  -> objeto colocado no mundo
-```
+Representa o catalogo de tipos disponiveis.
 
----
-
-## 12. Tabela `ga_scene_object_def`
-
-Tabela de definição/catálogo dos objetos disponíveis para spawn.
-
-Representa o tipo do objeto.
-
-Exemplos:
-
-```txt
-DECOR_ROCK_01
-WOOD_BENCH_01
-LAMP_POST_01
-FENCE_WOOD_01
-TREE_DECORATIVE_01
-```
-
-Campos sugeridos:
+Campos minimos sugeridos:
 
 ```txt
 id
 code
 name
 category
-status
-mesh_template_id
-render_material_id
+asset_key
 default_state_json
+is_active
 created_at
 updated_at
 ```
 
-### Regras
+### Observacao
 
-- `code` deve ser único.
-- `status` deve permitir ativar/desativar defs sem apagar histórico.
-- `mesh_template_id` deve apontar para o sistema visual/asset já usado pelo projeto, se aplicável.
-- `render_material_id` deve seguir o padrão visual já existente, se aplicável.
-- `default_state_json` pode guardar metadados leves do objeto, sem virar regra de gameplay.
+Para o MVP, `asset_key` e mais coerente com o projeto atual do que `mesh_template_id` e `render_material_id`, porque o frontend existente ainda resolve muito do visual por `asset_key` e mappings.
 
-Não criar campos de coleta, container, recurso ou interação nessa tabela.
+### `ga_scene_object`
 
----
+Representa uma instancia posicionada no mundo.
 
-## 13. Tabela `ga_scene_object`
-
-Tabela de instâncias colocadas no mundo.
-
-Cada linha representa um objeto específico posicionado em uma instância do mapa.
-
-Exemplo:
-
-```txt
-Pedra decorativa #43 na instância 1
-Banco #12 na instância 1
-Poste #5 na instância 2
-```
-
-Campos sugeridos:
+Campos minimos sugeridos:
 
 ```txt
 id
 scene_object_def_id
 instance_id
-
 pos_x
 pos_y
 pos_z
-
-rot_x
-rot_y
-rot_z
-
+yaw
 scale_x
 scale_y
 scale_z
-
-status
 state_json
-
+status
+rev
 created_at
 updated_at
 ```
 
-### Regras
+### Status
 
-- `scene_object_def_id` referencia `ga_scene_object_def.id`.
-- `instance_id` referencia `ga_instance.id`.
-- posição, rotação e escala devem ser persistidas.
-- `status` deve permitir pelo menos `ACTIVE` e `DISABLED`.
-- `state_json` deve ser reservado para dados leves e versionáveis, sem substituir colunas principais.
-- cada instância precisa ter ID próprio, pois o editor deve mostrar e manipular a instância exata.
+Minimo:
+
+- `ACTIVE`
+- `DISABLED`
 
 ---
 
-## 14. Campos de colisão
+## 12. Backend para editor
 
-A implementação pode preparar campos de colisão se isso encaixar bem no padrão atual.
+Criar um modulo de editor dentro do `server/`.
 
-Sugestão mínima:
-
-Na definição:
+Exemplo conceitual:
 
 ```txt
-default_collision_kind
-default_collision_radius
+server/service/worldEditorService/
+server/service/sceneObjectService/
+server/router/worldEditorRouter.js
 ```
 
-Na instância:
+### Responsabilidades do editor backend
 
-```txt
-collision_kind
-collision_radius
-```
-
-Ou alternativamente:
-
-```txt
-collision_json
-```
-
-A colisão não deve ser confundida com interação.
-
-Uma pedra decorativa pode ser bloqueante sem ser coletável.
-
-Para o MVP, colisão pode ser apenas armazenada/declarada se ainda não houver aplicação autoritativa no movimento.
-
-Não criar física complexa nesta etapa se o projeto ainda não exige isso.
+- bootstrap leve do editor;
+- listar `ActorDef`;
+- listar `SceneObjectDef`;
+- spawnar `Actor`;
+- spawnar `SceneObject`;
+- atualizar transform;
+- deletar/desativar entidade;
+- validar permissao GM/editor.
 
 ---
 
-## 15. Backend — models Sequelize
+## 13. Transporte: HTTP ou socket
 
-Criar models Sequelize para as novas tabelas seguindo o padrão atual do projeto.
+Para o `scene-creator`, o mais simples e mais claro e usar API HTTP para operacoes de editor.
 
-Models esperados:
+### Leitura
 
-```txt
-GaSceneObjectDef
-GaSceneObject
-```
+- bootstrap por HTTP
+- listagem de defs por HTTP
 
-Associações esperadas:
+### Escrita
 
-```txt
-GaSceneObjectDef.hasMany(GaSceneObject)
-GaSceneObject.belongsTo(GaSceneObjectDef)
+- spawn por HTTP
+- update por HTTP
+- delete por HTTP
 
-GaInstance.hasMany(GaSceneObject)
-GaSceneObject.belongsTo(GaInstance)
-```
+### Observacao
 
-Se o projeto usar `GaMeshTemplate` e `GaRenderMaterial` para visual, associar também:
+O jogo atual pode continuar usando socket para gameplay.
 
-```txt
-GaSceneObjectDef.belongsTo(GaMeshTemplate)
-GaSceneObjectDef.belongsTo(GaRenderMaterial)
-```
-
-Ou equivalente conforme padrão atual.
+O `scene-creator` nao precisa reproduzir a estrategia de socket do jogo se HTTP atender bem a ferramenta.
 
 ---
 
-## 16. Backend — migrations
-
-Criar migrations para:
+## 14. Rotas sugeridas
 
 ```txt
-ga_scene_object_def
-ga_scene_object
-```
-
-As migrations devem respeitar o estilo do projeto:
-
-- nomes de tabela com prefixo `ga_`;
-- timestamps conforme padrão atual;
-- `underscored`;
-- índices nos campos de busca;
-- FK com `onUpdate` e `onDelete` coerentes;
-- `code` único em def;
-- índices por `instance_id`, `status`, `scene_object_def_id`.
-
-Índices mínimos sugeridos:
-
-```txt
-ga_scene_object_def:
-- unique(code)
-- status
-- category
-
-ga_scene_object:
-- instance_id
-- scene_object_def_id
-- status
-- instance_id + status
-```
-
----
-
-## 17. Backend — seed inicial
-
-Criar seed inicial com alguns Objects de teste.
-
-Exemplos:
-
-```txt
-DECOR_ROCK_01
-DECOR_ROCK_02
-WOOD_BENCH_01
-LAMP_POST_01
-```
-
-O seed deve seguir o padrão do projeto.
-
-Não misturar seed de Actor com seed de Object.
-
----
-
-## 18. Backend — service de Objects
-
-Criar service próprio para Objects.
-
-Sugestão:
-
-```txt
-server/service/sceneObjectService.js
-```
-
-Responsabilidades:
-
-- listar defs disponíveis;
-- carregar objects ativos da instância;
-- criar object próximo ao jogador;
-- atualizar transform de object;
-- desativar/deletar object;
-- montar payload de sceneObjects para o snapshot.
-
-O service não deve depender de lógica de Actor.
-
-O service não deve chamar regras de coleta.
-
-O service não deve criar container.
-
----
-
-## 19. Backend — integração com bootstrap
-
-Atualizar o bootstrap do mundo para incluir:
-
-```txt
-snapshot.sceneObjects
-```
-
-O payload deve conter as instâncias ativas de Objects da instância atual.
-
-Formato conceitual:
-
-```js
-{
-  id,
-  objectType,
-  defId,
-  pos,
-  rot,
-  scale,
-  status,
-  visual,
-  state
-}
-```
-
-O formato final deve seguir os padrões reais do projeto.
-
-O importante é que o frontend consiga renderizar os objects sem consultar lógica de Actor.
-
----
-
-## 20. Backend — rotas/API do editor
-
-Criar rotas separadas para editor de Objects e Actors.
-
-Sugestão conceitual:
-
-```txt
-GET    /world/editor/object-defs
-POST   /world/editor/objects
-PATCH  /world/editor/objects/:id
-DELETE /world/editor/objects/:id
+GET    /world/editor/bootstrap
 
 GET    /world/editor/actor-defs
 POST   /world/editor/actors
 PATCH  /world/editor/actors/:id
 DELETE /world/editor/actors/:id
+
+GET    /world/editor/object-defs
+POST   /world/editor/objects
+PATCH  /world/editor/objects/:id
+DELETE /world/editor/objects/:id
 ```
 
-Os nomes finais podem seguir o padrão já existente no projeto.
+### Regras
 
-### Regras importantes
-
-- Spawn de Object usa service de Object.
-- Spawn de Actor usa service de Actor.
-- Update de Object altera `ga_scene_object`.
-- Update de Actor altera `ga_actor`.
-- Delete pode ser hard delete ou status `DISABLED`, conforme padrão atual do projeto.
-- Preferir status `DISABLED` se o projeto já usa esse padrão para manter histórico/consistência.
+- todas exigem autenticacao;
+- todas exigem permissao GM/editor;
+- `Actor` continua usando dominio de actor;
+- `SceneObject` usa dominio proprio;
+- `DELETE` pode ser soft delete por `DISABLED`.
 
 ---
 
-## 21. Permissão de editor
+## 15. Integracao com Actor existente
 
-As rotas do editor não devem ficar abertas para qualquer jogador comum.
+O editor de actor deve reaproveitar o que ja existe no backend sempre que possivel.
 
-Implementar ou reaproveitar uma validação mínima de permissão.
+### Reaproveitar
 
-Regras mínimas:
+- `ga_actor_def`
+- `ga_actor_runtime`
+- `createRuntimeActor`
+- payload de actor
+- loaders existentes
+
+### Evitar
+
+- reescrever fluxo inteiro de actor sem necessidade;
+- criar schema paralelo de actor para o editor.
+
+---
+
+## 16. Loader e payload de SceneObject
+
+Criar fluxo proprio para `SceneObject`, inspirado em `Actor`, mas sem regras de gameplay.
+
+### Modulos esperados
 
 ```txt
-usuário autenticado
-usuário autorizado a usar ferramenta de editor/debug
+server/service/sceneObjectLoader/
+server/service/sceneObjectLoader/payload.js
+server/state/sceneObjectsRuntimeStore.js
 ```
 
-Se o projeto ainda não tiver sistema de role/admin, deixar a validação preparada no service/router conforme padrão atual, sem espalhar bypass pelo código.
-
----
-
-## 22. Frontend — services
-
-Criar service separado para o editor, se ainda não existir.
-
-Sugestão:
-
-```txt
-cliente/src/services/WorldEditor.js
-```
-
-Responsabilidades:
-
-- buscar object defs;
-- buscar actor defs;
-- criar object;
-- criar actor;
-- atualizar transform;
-- deletar/desativar entidade.
-
-Não misturar isso no service de bootstrap normal se isso sujar o contrato do jogo.
-
----
-
-## 23. Frontend — estado de seleção
-
-Criar ou reaproveitar um estado de seleção que diferencie claramente:
+### Payload conceitual
 
 ```js
 {
-  kind: "OBJECT" | "ACTOR",
-  id: number,
-  type: string
+  id,
+  objectType,
+  objectDefCode,
+  displayName,
+  assetKey,
+  instanceId,
+  pos: { x, y, z },
+  yaw,
+  scale: { x, y, z },
+  status,
+  rev,
+  state
 }
 ```
 
-Nunca depender apenas do tipo visual.
+---
 
-Nunca selecionar por índice de array.
+## 17. Bootstrap do jogo principal
 
-Sempre selecionar por ID persistido.
+Mesmo com o editor separado, o jogo principal ainda precisa carregar `SceneObject`.
+
+### Atualizacao esperada
+
+Adicionar ao bootstrap do jogo:
+
+```txt
+snapshot.sceneObjects
+```
+
+### Objetivo
+
+O `client/` jogavel continua renderizando o cenario corretamente, mesmo sem nenhuma ferramenta de edicao embutida.
 
 ---
 
-## 24. Frontend — userData dos meshes
+## 18. Frontend do jogo principal para SceneObject
 
-Todo mesh criado para Object deve receber `userData` próprio.
+Criar renderizacao separada para `SceneObject` no `client/`.
+
+### Estrutura sugerida
+
+```txt
+client/src/world/entities/objects/
+├── ObjectFactory.js
+├── ObjectMappings.js
+├── DefaultObject.jsx
+└── ObjectsLayer.jsx
+```
+
+### Principios
+
+- nao misturar com `actors/`;
+- nao depender de interacao de actor;
+- nao entrar em fluxo de coleta;
+- nao poluir gameplay.
+
+---
+
+## 19. Target no jogo principal
+
+`SceneObject` nao deve ser targetavel no cliente jogavel normal.
+
+### Regra
+
+No `client/`:
+
+- `Actor` continua clicavel conforme gameplay;
+- `Enemy` continua clicavel;
+- `Player` continua clicavel quando fizer sentido;
+- `SceneObject` nao entra no fluxo de target de gameplay.
+
+### Importante
+
+O fato de `SceneObject` existir na cena nao significa que ele participa da selecao do jogo.
+
+---
+
+## 20. Target no Scene Creator
+
+No `scene-creator`, `SceneObject` e `Actor` devem ser selecionaveis.
+
+### Regra
+
+O editor precisa distinguir claramente:
+
+```txt
+Kind: OBJECT | ACTOR
+ID
+Type
+```
+
+### Nunca fazer
+
+- selecionar por indice de array;
+- inferir entidade apenas pelo mesh;
+- usar mesma chave sem distinguir dominio.
+
+---
+
+## 21. Reaproveitamento de codigo
+
+O ponto central desta arquitetura e reaproveitar codigo entre `client/` e `scene-creator`.
+
+### Reaproveitar sempre que possivel
+
+- assets;
+- factories;
+- mappings;
+- helpers de leitura de payload;
+- normalizadores;
+- helpers de posicionamento;
+- leitura de terreno;
+- contrato de bootstrap.
+
+### Evitar
+
+- copiar e colar `ActorFactory`;
+- copiar e colar `pickTargetFromHitObject` sem modularizar;
+- manter duas versoes diferentes do mesmo normalizer;
+- duplicar contratos de payload.
+
+### Direcao recomendada
+
+Extrair modulos compartilhaveis para uma area comum do frontend.
 
 Exemplo conceitual:
 
-```js
-mesh.userData = {
-  kind: "OBJECT",
-  id,
-  objectType
-}
+```txt
+shared-world/
 ```
 
-Actor deve continuar usando seu próprio `userData`.
-
-Exemplo conceitual:
-
-```js
-mesh.userData = {
-  kind: "ACTOR",
-  id,
-  actorType
-}
-```
-
-O sistema de clique/seleção deve conseguir distinguir os dois.
+ou reorganizar trechos do `client/src/world` para importacao segura pelos dois frontends.
 
 ---
 
-## 25. Frontend — renderização de Objects
+## 22. Ordem de implementacao
 
-Criar `ObjectsLayer`.
+### Fase A - Backend base
 
-Responsabilidades:
+1. Criar tabelas `ga_scene_object_def` e `ga_scene_object`
+2. Criar models Sequelize
+3. Criar seeds iniciais de `SceneObjectDef`
+4. Criar loader/payload/runtime store de `SceneObject`
+5. Incluir `sceneObjects` no bootstrap do jogo
 
-- receber `snapshot.sceneObjects`;
-- criar/remover meshes conforme payload;
-- usar `ObjectFactory`;
-- aplicar posição, rotação e escala;
-- manter `userData` correto;
-- não registrar handlers de interação de Actor;
-- não emitir eventos de coleta/interação.
+### Fase B - Jogo principal
+
+1. Renderizar `sceneObjects` no `client/`
+2. Garantir que nao entram no target de gameplay
+3. Remover fluxo antigo de edicao do cliente jogavel
+
+### Fase C - Backend de editor
+
+1. Criar rotas de editor
+2. Criar bootstrap leve do editor
+3. Criar spawn/update/delete de actor e object
+4. Validar permissao GM/editor
+
+### Fase D - Nova aplicacao `scene-creator`
+
+1. Scaffold da nova aplicacao
+2. Integracao com bootstrap do backend
+3. Render da cena
+4. Painel de spawn e selecao
+5. Edicao de transform
+6. Delete/disable
+7. Locomocao GM
+
+### Fase E - Limpeza final
+
+1. Remover `lil-gui` do `client/`
+2. Remover socket de edicao do jogo principal
+3. Revisar imports compartilhados
+4. Validar fluxo completo de persistencia
 
 ---
 
-## 26. Frontend — `ObjectFactory`
+## 23. Criterios de aceite
 
-Criar factory própria para Objects.
+O plano sera considerado implementado corretamente se:
 
-Responsabilidades:
-
-- resolver o visual do object;
-- aplicar fallback visual se necessário;
-- criar mesh;
-- aplicar transform;
-- retornar objeto pronto para a cena.
-
-Não importar factory de Actors como base rígida.
-
-Pode reaproveitar helpers genéricos se eles forem realmente genéricos, mas não acoplar Object ao domínio de Actor.
+- existir uma aplicacao `scene-creator/` separada;
+- o `scene-creator` usar o `server/` atual para leitura e escrita;
+- `SceneObject` existir como dominio separado de `Actor`;
+- o jogo principal carregar `sceneObjects` no bootstrap;
+- o jogo principal renderizar `sceneObjects`;
+- o jogo principal nao expor ferramentas de edicao de cena;
+- o jogo principal nao permitir target de `SceneObject` no gameplay;
+- o `scene-creator` permitir target de `SceneObject` e `Actor`;
+- o `scene-creator` permitir spawn de `SceneObject` e `Actor`;
+- o `scene-creator` permitir editar `Position`, `Yaw` e `Scale`;
+- o `scene-creator` persistir no banco pelo backend atual;
+- o `scene-creator` permitir delete/disable;
+- as rotas de editor exigirem permissao GM/editor;
+- o `client/` nao depender mais de `lil-gui` para manutencao de cena.
 
 ---
 
-## 27. Fluxo de Spawn Object
+## 24. O que nao fazer
 
-Fluxo esperado:
+Nao fazer:
 
 ```txt
-1. Usuário abre Object Respawn.
-2. Usuário escolhe um Object no select.
-3. Usuário clica em Spawn Object.
-4. Frontend envia request ao backend.
-5. Backend valida usuário/permissão.
-6. Backend calcula posição próxima ao jogador.
-7. Backend cria registro em ga_scene_object.
-8. Backend retorna payload do novo object.
-9. Frontend adiciona object ao snapshot local ou força refresh controlado.
-10. Frontend seleciona automaticamente o novo object.
-11. Painel mostra Kind OBJECT, ID e Type.
+- acessar o banco diretamente do frontend do scene-creator
+- manter o jogo principal como editor de cena improvisado
+- salvar SceneObject em ga_actor_runtime
+- liberar editor para qualquer conta autenticada
+- duplicar payloads sem necessidade
+- copiar factories inteiras para outro frontend sem modularizar
+- deixar o client jogavel continuar com painel de edicao
+- misturar SceneObject com fluxos de coleta/interacao
 ```
 
 ---
 
-## 28. Fluxo de Spawn Actor
+## 25. Resultado esperado
 
-Fluxo esperado:
+Ao final:
+
+- o jogo principal fica focado em gameplay;
+- o `scene-creator` vira a ferramenta de manutencao e composicao de cena;
+- `Actor` continua sendo dominio de gameplay;
+- `SceneObject` passa a compor o cenario de forma persistente;
+- a equipe pode editar mapa e entidades sem poluir o cliente do jogo;
+- a arquitetura fica preparada para futuro empacotamento do jogo sem levar o editor junto.
+
+Regra final:
 
 ```txt
-1. Usuário abre Object Respawn.
-2. Usuário escolhe um Actor no select.
-3. Usuário clica em Spawn Actor.
-4. Frontend envia request ao backend.
-5. Backend valida usuário/permissão.
-6. Backend calcula posição próxima ao jogador.
-7. Backend cria registro em ga_actor, usando padrão atual de Actor.
-8. Backend retorna payload do novo actor.
-9. Frontend adiciona actor ao snapshot local ou força refresh controlado.
-10. Frontend seleciona automaticamente o novo actor.
-11. Painel mostra Kind ACTOR, ID e Type.
+client/        = jogar
+scene-creator/ = editar cena
+server/        = autoridade unica
 ```
-
----
-
-## 29. Fluxo de edição de transform
-
-Fluxo esperado:
-
-```txt
-1. Usuário seleciona Object ou Actor na cena.
-2. Painel mostra Kind, ID e Type.
-3. Usuário altera posição, rotação ou escala.
-4. Frontend envia PATCH para rota correta.
-5. Backend valida bounds/entidade/permissão.
-6. Backend persiste alteração.
-7. Frontend atualiza snapshot local com retorno confirmado.
-```
-
-Não deixar o cliente ser fonte definitiva da posição salva.
-
-O cliente envia intenção de edição.
-
-O backend confirma o estado persistido.
-
----
-
-## 30. Snapshot local após criação/edição
-
-Após criar ou editar Object/Actor, o frontend pode:
-
-1. aplicar o payload retornado diretamente no snapshot local; ou
-2. solicitar resync/bootstrap parcial.
-
-Preferir aplicar o payload retornado se o padrão atual do projeto já trabalha com atualização local confirmada.
-
-Não deixar o objeto existir somente no Three.js sem persistência.
-
----
-
-## 31. Exclusão/desativação
-
-O painel deve permitir remover/desativar a entidade selecionada.
-
-A ação deve mostrar o ID e o tipo da entidade selecionada.
-
-Exemplo:
-
-```txt
-Delete OBJECT #43 — DECOR_ROCK_01
-Delete ACTOR #12 — NPC_BASIC
-```
-
-Evitar botões genéricos que possam apagar a entidade errada.
-
-Se o projeto já usa `status = DISABLED`, preferir seguir esse padrão.
-
----
-
-## 32. Duplicação
-
-Implementar duplicação se for simples dentro do fluxo.
-
-Fluxo:
-
-```txt
-1. Seleciona Object ou Actor.
-2. Clica Duplicate.
-3. Backend cria nova entidade com mesmo tipo e transform semelhante.
-4. Nova entidade recebe pequeno offset.
-5. Nova entidade vira a seleção atual.
-```
-
-Se for muito custoso, deixar preparado para uma segunda etapa.
-
----
-
-## 33. Critérios de aceite
-
-A implementação será considerada correta se:
-
-- existir sistema de Objects separado de Actors;
-- existir pasta própria no frontend para Objects;
-- existir modelagem/tabelas separadas no banco para Objects;
-- Objects forem carregados no bootstrap em `snapshot.sceneObjects` ou equivalente;
-- Objects forem renderizados por camada própria;
-- o painel tiver seção expansível `Object Respawn`;
-- o painel tiver select separado para Object;
-- o painel tiver select separado para Actor;
-- Spawn Object criar uma instância persistida;
-- Spawn Actor continuar usando domínio de Actor;
-- entidade criada aparecer próxima ao jogador;
-- entidade criada ficar automaticamente selecionada;
-- painel mostrar `Kind`, `ID` e `Type`;
-- alterações de posição/rotação/escala forem persistidas no banco;
-- seleção por clique diferenciar `OBJECT` e `ACTOR`;
-- nenhum Object depender de lógica de coleta, container ou interação de Actor.
-
----
-
-## 34. O que não fazer
-
-Não fazer:
-
-```txt
-- colocar Objects dentro de actors/
-- usar ActorFactory para Objects de forma acoplada
-- salvar Objects em ga_actor
-- criar container para Object decorativo
-- tratar pedra decorativa como actor coletável
-- misturar select de Object e Actor em um único tipo indistinto
-- selecionar entidades por índice de array
-- spawnar entidade sem persistir no banco
-- deixar o cliente como fonte final da posição salva
-- hardcodar lógica de gameplay em Object
-```
-
----
-
-## 35. Resultado esperado
-
-Ao final, o editor deve permitir montar cenário visual de forma segura e persistente.
-
-O usuário deve conseguir:
-
-```txt
-1. abrir o painel;
-2. expandir Object Respawn;
-3. escolher um Object decorativo;
-4. spawnar esse Object perto do player;
-5. ver o ID exato do Object selecionado;
-6. mover, rotacionar e escalar;
-7. salvar a alteração no banco;
-8. escolher um Actor em outro select;
-9. spawnar esse Actor separadamente;
-10. editar Actor sem misturar com Object.
-```
-
-A arquitetura final deve manter a separação:
-
-```txt
-Objects constroem cenário.
-Actors executam gameplay.
-```
-
-Essa é a regra principal da implementação.

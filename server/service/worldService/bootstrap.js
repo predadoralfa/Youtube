@@ -23,6 +23,9 @@ const {
   loadActorsForInstance,
   addActor,
   clearActorsInstance,
+  loadSceneObjectsForInstance,
+  addSceneObject,
+  clearSceneObjectsInstance,
   loadEnemiesForInstance,
   addEnemy,
   getEnemiesForInstance,
@@ -270,6 +273,7 @@ const bootstrap = async (req, res) => {
     };
     const equipment = inventory.equipment;
     const actors = await loadActorsForInstance(resolvedInstanceId);
+    const sceneObjects = await loadSceneObjectsForInstance(resolvedInstanceId);
 
     clearActorsInstance(resolvedInstanceId);
     for (const a of actors) {
@@ -299,6 +303,33 @@ const bootstrap = async (req, res) => {
           state: a.state ?? null,
         containers: a.containers ?? [],
         lootSummary: a.lootSummary ?? null,
+      });
+    }
+
+    clearSceneObjectsInstance(resolvedInstanceId);
+    for (const sceneObject of sceneObjects) {
+      addSceneObject({
+        id: sceneObject.id,
+        objectType: sceneObject.objectType,
+        objectDefCode: sceneObject.objectDefCode ?? sceneObject.objectType,
+        displayName: sceneObject.displayName ?? null,
+        assetKey: sceneObject.assetKey ?? null,
+        category: sceneObject.category ?? null,
+        instanceId: resolvedInstanceId,
+        pos: {
+          x: sceneObject.pos?.x ?? 0,
+          y: sceneObject.pos?.y ?? 0,
+          z: sceneObject.pos?.z ?? 0,
+        },
+        yaw: Number(sceneObject.yaw ?? 0),
+        scale: {
+          x: Number(sceneObject.scale?.x ?? 1),
+          y: Number(sceneObject.scale?.y ?? 1),
+          z: Number(sceneObject.scale?.z ?? 1),
+        },
+        status: sceneObject.status ?? "ACTIVE",
+        rev: sceneObject.rev ?? 0,
+        state: sceneObject.state ?? null,
       });
     }
 
@@ -503,6 +534,7 @@ const bootstrap = async (req, res) => {
         proceduralMap: getProceduralMapProfile(instance.id) ?? getProceduralMapProfile(local.id),
         worldClock,
         actors,
+        sceneObjects,
       },
       inventory,
       equipment,

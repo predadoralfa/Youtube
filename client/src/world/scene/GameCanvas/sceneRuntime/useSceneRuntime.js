@@ -2,11 +2,19 @@ import { useEffect, useRef } from "react";
 import { applySceneTemplate, setupSceneRuntime } from "./setup";
 import { createSelectionTools } from "./selection";
 import { cleanupSceneRuntime } from "./cleanup";
-import { createWorldDebugGui } from "../../debug/createWorldDebugGui";
 import { setupSceneInput } from "./useSceneRuntime/input";
 import { startSceneTick } from "./useSceneRuntime/tick";
+import { toWorldDir } from "../helpers";
 
-export function useSceneRuntime({ snapshot, worldStoreRef, onInputIntent, onTargetSelect, onTargetClear, state }) {
+export function useSceneRuntime({
+  snapshot,
+  worldStoreRef,
+  onInputIntent,
+  onTargetSelect,
+  onTargetClear,
+  state,
+  cameraOptions = {},
+}) {
   const runtimeInstanceId = snapshot?.runtime?.instance_id ?? null;
   const localTemplateVersion = snapshot?.localTemplateVersion ?? null;
   const sceneRuntimeRef = useRef(null);
@@ -18,6 +26,14 @@ export function useSceneRuntime({ snapshot, worldStoreRef, onInputIntent, onTarg
       state.proceduralMapRef.current = snapshot.proceduralMap ?? null;
       state.versionRef.current = snapshot.localTemplateVersion ?? null;
       state.actorsRef.current = snapshot.actors ?? [];
+      state.sceneObjectsRef.current = snapshot.sceneObjects ?? [];
+      if (state.editorCameraFocusRef?.current) {
+        state.editorCameraFocusRef.current = {
+          x: Number(snapshot.runtime?.pos?.x ?? 0),
+          y: Number(snapshot.runtime?.pos?.y ?? 0),
+          z: Number(snapshot.runtime?.pos?.z ?? 0),
+        };
+      }
     }
   }, [snapshot, state]);
 
@@ -32,8 +48,21 @@ export function useSceneRuntime({ snapshot, worldStoreRef, onInputIntent, onTarg
       proceduralMapRef: state.proceduralMapRef,
       worldTimeRef: state.worldTimeRef,
       cameraRef: state.cameraRef,
+      cameraOptions,
     });
     sceneRuntimeRef.current = runtime;
+    if (state.cameraApiRef) {
+      state.cameraApiRef.current = runtime.cameraApi;
+    }
+    if (state.exposeRuntimeRef) {
+      state.exposeRuntimeRef.current = runtime;
+    }
+    if (state.exposeCameraRef) {
+      state.exposeCameraRef.current = runtime.cameraApi?.camera ?? null;
+    }
+    if (state.exposeCameraApiRef) {
+      state.exposeCameraApiRef.current = runtime.cameraApi;
+    }
 
     const tools = createSelectionTools({
       renderer: runtime.renderer,
@@ -44,41 +73,36 @@ export function useSceneRuntime({ snapshot, worldStoreRef, onInputIntent, onTarg
       onInputIntent,
       onTargetSelect,
       onTargetClear,
+      allowObjectSelection: Boolean(state.allowObjectSelection ?? false),
+      disableGroundMove: Boolean(state.disableGroundMove ?? false),
     });
 
-    const worldDebugGui = createWorldDebugGui({
-      scene: runtime.scene,
-      camera: runtime.cameraApi.camera,
-      renderer: runtime.renderer,
-      container,
-      refs: {
-        state,
-        selectedObjectRef: state.selectedObjectRef,
-        groundMesh: runtime.groundMesh,
-        boundsLine: runtime.boundsLine,
-        lightRig: runtime.lightRig,
-        sampleGroundHeight: runtime.sampleGroundHeight,
-      },
-      flags: {},
-      onFlagsChange: null,
-    });
-    runtime.worldDebugGui = worldDebugGui;
-
-    const input = setupSceneInput(runtime.renderer, runtime.cameraApi, tools, onInputIntent, state);
+    const input = state.disableSceneInput
+      ? {
+          off() {},
+          unbindInputs() {},
+          getMoveState() {
+            const localMoveState = state.editorMoveStateRef?.current ?? { dir: { x: 0, z: 0 }, speedScale: 1 };
+            const cameraYaw = Number(runtime.cameraApi?.getState?.().yaw ?? 0);
+            return {
+              dir: toWorldDir(localMoveState.dir ?? { x: 0, z: 0 }, cameraYaw),
+              speedScale: Number(localMoveState.speedScale ?? 1),
+            };
+          },
+        }
+      : setupSceneInput(runtime.renderer, runtime.cameraApi, tools, onInputIntent, state);
     const stopTick = startSceneTick({
       runtime,
       tools,
       state,
       worldStoreRef,
-      getMoveDir: input.getMoveDir,
+      getMoveState: input.getMoveState,
     });
 
     return () => {
       stopTick();
       input.off();
       input.unbindInputs();
-      worldDebugGui?.dispose?.();
-      runtime.worldDebugGui = null;
       cleanupSceneRuntime({
         scene: runtime.scene,
         renderer: runtime.renderer,
@@ -91,8 +115,32 @@ export function useSceneRuntime({ snapshot, worldStoreRef, onInputIntent, onTarg
         statsPanel: runtime.statsPanel,
         state,
       });
+      if (state.cameraApiRef) {
+        state.cameraApiRef.current = null;
+      }
+      if (state.exposeRuntimeRef) {
+        state.exposeRuntimeRef.current = null;
+      }
+      if (state.exposeCameraRef) {
+        state.exposeCameraRef.current = null;
+      }
+      if (state.exposeCameraApiRef) {
+        state.exposeCameraApiRef.current = null;
+      }
     };
-  }, [onInputIntent, onTargetSelect, onTargetClear, state, worldStoreRef, runtimeInstanceId, localTemplateVersion]);
+  }, [
+    onInputIntent,
+    onTargetSelect,
+    onTargetClear,
+    state,
+    worldStoreRef,
+    runtimeInstanceId,
+    localTemplateVersion,
+    state.allowObjectSelection,
+    state.disableGroundMove,
+    state.cameraApiRef,
+    cameraOptions,
+  ]);
 
   useEffect(() => {
     const runtime = sceneRuntimeRef.current;

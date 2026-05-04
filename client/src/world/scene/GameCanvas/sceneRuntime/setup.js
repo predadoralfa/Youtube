@@ -81,6 +81,7 @@ export function setupSceneRuntime({
   proceduralMapRef,
   worldTimeRef,
   cameraRef,
+  cameraOptions = {},
 }) {
   const tpl = templateRef.current;
   const sizeX = Number(tpl?.geometry?.size_x ?? 100);
@@ -103,7 +104,11 @@ export function setupSceneRuntime({
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
 
-  const cameraApi = setupCamera(container, readCameraStateFromRuntime(runtimeRef.current));
+  const cameraApi = setupCamera(
+    container,
+    readCameraStateFromRuntime(runtimeRef.current),
+    cameraOptions
+  );
   cameraRef.current = cameraApi.camera;
 
   const lightRig = setupLight(scene);

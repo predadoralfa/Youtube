@@ -5,9 +5,14 @@ import { useSceneRuntime } from "./sceneRuntime/useSceneRuntime";
 import { useGameCanvasState } from "./useGameCanvasState";
 import { GameCanvasView } from "./view";
 
+const EMPTY_CAMERA_OPTIONS = {};
+
 export function GameCanvas(props) {
   const currentWorldTime = useWorldClock(props.worldClock);
   const state = useGameCanvasState(currentWorldTime, props.buildPlacement ?? null);
+  const cameraOptions = props.cameraOptions ?? EMPTY_CAMERA_OPTIONS;
+  const disableInput = props.disableInput ?? false;
+  const disableSceneInput = props.disableSceneInput ?? false;
   state.worldStoreRef = props.worldStoreRef ?? null;
   state.setSnapshot = props.setSnapshot ?? null;
   state.clearBuildPlacement = props.onClearBuildPlacement ?? null;
@@ -18,6 +23,18 @@ export function GameCanvas(props) {
   state.depositBuildMaterial = props.onDepositBuildMaterial ?? null;
   state.startSleep = props.onStartSleep ?? null;
   state.stopSleep = props.onStopSleep ?? null;
+  state.allowObjectSelection = props.allowObjectSelection ?? false;
+  state.disableGroundMove = props.disableGroundMove ?? false;
+  state.disableWorldEntities = props.disableWorldEntities ?? false;
+  state.disableSceneInput = disableSceneInput;
+  state.exposeRuntimeRef = props.exposeRuntimeRef ?? null;
+  state.exposeCameraRef = props.exposeCameraRef ?? null;
+  state.exposeCameraApiRef = props.exposeCameraApiRef ?? null;
+  state.editorCameraFocusRef = props.editorCameraFocusRef ?? state.editorCameraFocusRef;
+  state.editorMoveSpeedRef = props.editorMoveSpeedRef ?? state.editorMoveSpeedRef;
+  state.editorMoveStateRef = props.editorMoveStateRef ?? state.editorMoveStateRef;
+  state.editorInputStateRef = props.editorInputStateRef ?? state.editorInputStateRef ?? null;
+  state.onEditorTick = props.onEditorTick ?? null;
   const clearTargetBuildCard = useCallback(() => {
     state.selectedTargetRef.current = null;
     state.selectedObjectRef.current = null;
@@ -48,10 +65,11 @@ export function GameCanvas(props) {
   useSceneRuntime({
     snapshot: props.snapshot,
     worldStoreRef: props.worldStoreRef,
-    onInputIntent: props.onInputIntent,
+    onInputIntent: disableInput ? null : props.onInputIntent,
     onTargetSelect: props.onTargetSelect,
     onTargetClear: props.onTargetClear,
     state,
+    cameraOptions,
   });
 
   return (

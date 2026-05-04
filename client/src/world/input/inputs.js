@@ -34,12 +34,13 @@ export function bindInputs(domElement, bus) {
     a: false,
     s: false,
     d: false,
+    ctrl: false,
   };
 
   function emitMove() {
     const x = (keys.d ? -1 : 0) + (keys.a ? 1 : 0);
     const z = (keys.s ? 1 : 0) + (keys.w ? -1 : 0);
-    bus.emit(intentMoveDirection(x, z));
+    bus.emit(intentMoveDirection(x, z, keys.ctrl ? 2 : 1));
   }
 
   function isTypingTarget(target) {
@@ -155,6 +156,13 @@ export function bindInputs(domElement, bus) {
       return;
     }
 
+    if (k === "control") {
+      keys.ctrl = true;
+      emitMove();
+      e.preventDefault();
+      return;
+    }
+
     // I = inventário
     if (k === "i") {
       bus.emit(intentUiToggleInventory());
@@ -226,6 +234,13 @@ export function bindInputs(domElement, bus) {
 
     if (k === "d") {
       keys.d = false;
+      emitMove();
+      e.preventDefault();
+      return;
+    }
+
+    if (k === "control") {
+      keys.ctrl = false;
       emitMove();
       e.preventDefault();
       return;

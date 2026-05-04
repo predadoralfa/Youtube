@@ -8,11 +8,11 @@ const MAX_DISTANCE = 55;
 const MIN_PITCH = THREE.MathUtils.degToRad(15);
 const MAX_PITCH = THREE.MathUtils.degToRad(80);
 
-function clampPitch(value) {
+function clampPitch(value, minPitch = MIN_PITCH, maxPitch = MAX_PITCH) {
   return THREE.MathUtils.clamp(
     Number.isFinite(Number(value)) ? Number(value) : DEFAULT_PITCH,
-    MIN_PITCH,
-    MAX_PITCH
+    minPitch,
+    maxPitch
   );
 }
 
@@ -24,8 +24,10 @@ function clampDistance(value) {
   );
 }
 
-export function setupCamera(container, initialState = {}) {
+export function setupCamera(container, initialState = {}, options = {}) {
   if (!container) throw new Error("setupCamera: container e obrigatorio");
+  const safeOptions = options ?? {};
+  const safeInitialState = initialState ?? {};
 
   const camera = new THREE.PerspectiveCamera(
     65,
@@ -36,11 +38,32 @@ export function setupCamera(container, initialState = {}) {
 
   // ===== Rig (Unreal-like) =====
   const pivot = new THREE.Vector3(); // "bone" alvo (cabeca)
-  let yaw = Number.isFinite(Number(initialState.yaw))
-    ? Number(initialState.yaw)
+  const pivotHeight = Number.isFinite(Number(safeOptions.pivotHeight))
+    ? Number(safeOptions.pivotHeight)
+    : 2.2;
+  const defaultPitch = Number.isFinite(Number(safeOptions.defaultPitch))
+    ? Number(safeOptions.defaultPitch)
+    : DEFAULT_PITCH;
+  const defaultDistance = Number.isFinite(Number(safeOptions.defaultDistance))
+    ? Number(safeOptions.defaultDistance)
+    : DEFAULT_DISTANCE;
+  const minPitch = Number.isFinite(Number(safeOptions.minPitch))
+    ? Number(safeOptions.minPitch)
+    : MIN_PITCH;
+  const maxPitch = Number.isFinite(Number(safeOptions.maxPitch))
+    ? Number(safeOptions.maxPitch)
+    : MAX_PITCH;
+  let yaw = Number.isFinite(Number(safeInitialState.yaw))
+    ? Number(safeInitialState.yaw)
     : 0;
-  let pitch = clampPitch(initialState.pitch);
-  let distance = clampDistance(initialState.distance);
+  let pitch = clampPitch(
+    Number.isFinite(Number(safeInitialState.pitch)) ? safeInitialState.pitch : defaultPitch,
+    minPitch,
+    maxPitch
+  );
+  let distance = clampDistance(
+    Number.isFinite(Number(safeInitialState.distance)) ? safeInitialState.distance : defaultDistance
+  );
   let targetDistance = distance;
 
   const orbitSensitivity = 0.004; // ajuste fino
@@ -78,7 +101,7 @@ export function setupCamera(container, initialState = {}) {
   function applyOrbit(deltaX, deltaY) {
     yaw -= deltaX * orbitSensitivity;
     pitch -= deltaY * orbitSensitivity;
-    pitch = clampPitch(pitch);
+    pitch = clampPitch(pitch, minPitch, maxPitch);
   }
 
   function update(hero, dt = 0) {
@@ -93,7 +116,7 @@ export function setupCamera(container, initialState = {}) {
 
     // "bone": cabeca do cilindro (ajuste fino)
     pivot.copy(hero.position);
-    pivot.y += 2.2;
+    pivot.y += pivotHeight;
 
     // offset esferico (orbit)
     const cosP = Math.cos(pitch);

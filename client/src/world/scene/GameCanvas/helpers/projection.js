@@ -17,16 +17,30 @@ export function applySelfColor(mesh, isSelf) {
   }
 }
 
-export function pickTargetFromHitObject(obj) {
+export function pickTargetFromHitObject(obj, options = {}) {
+  const allowObjectSelection = options?.allowObjectSelection === true;
   let current = obj;
   while (current) {
     const userData = current.userData || {};
+
+    if (userData.editorOnly || userData.localOnly) {
+      current = current.parent;
+      continue;
+    }
 
     if (userData.actorId != null) {
       return {
         kind: "ACTOR",
         id: String(userData.actorId),
         actorType: userData.actorType ? String(userData.actorType) : null,
+      };
+    }
+
+    if (allowObjectSelection && userData.objectId != null) {
+      return {
+        kind: "OBJECT",
+        id: String(userData.objectId),
+        objectType: userData.objectType ? String(userData.objectType) : null,
       };
     }
 

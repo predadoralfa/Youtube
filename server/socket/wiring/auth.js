@@ -1,5 +1,6 @@
 // server/socket/wiring/auth.js
 const jwt = require("jsonwebtoken");
+const { canUserEditWorld } = require("../../auth/worldEditorAccess");
 
 function installAuthMiddleware(io) {
   io.use((socket, next) => {
@@ -27,6 +28,8 @@ function installAuthMiddleware(io) {
 
       socket.data.userId = decoded.id;
       socket.data.displayName = decoded.display_name ?? null;
+      socket.data.canEditWorld =
+        decoded.can_edit_world === true || canUserEditWorld(decoded.id);
 
       return next();
     } catch (_err) {

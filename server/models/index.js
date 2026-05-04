@@ -69,6 +69,8 @@ const defineGaContainerOwner = require("./ga_container_owner");
 const defineGaActorDef = require("./ga_actor_def");
 const defineGaActorSpawn = require("./ga_actor_spawn");
 const defineGaActorRuntime = require("./ga_actor_runtime");
+const defineGaSceneObjectDef = require("./ga_scene_object_def");
+const defineGaSceneObject = require("./ga_scene_object");
 
 // =====================================
 // 2. Definições de modelos
@@ -139,6 +141,8 @@ const GaContainerOwner = defineGaContainerOwner(sequelize, DataTypes);
 const GaActorDef = defineGaActorDef(sequelize, DataTypes);
 const GaActorSpawn = defineGaActorSpawn(sequelize, DataTypes);
 const GaActorRuntime = defineGaActorRuntime(sequelize, DataTypes);
+const GaSceneObjectDef = defineGaSceneObjectDef(sequelize, DataTypes);
+const GaSceneObject = defineGaSceneObject(sequelize, DataTypes);
 
 
 // =====================================
@@ -181,6 +185,8 @@ const models = {
   GaActorDef,
   GaActorSpawn,
   GaActorRuntime,
+  GaSceneObjectDef,
+  GaSceneObject,
 
   // WORLD
   GaLocal,

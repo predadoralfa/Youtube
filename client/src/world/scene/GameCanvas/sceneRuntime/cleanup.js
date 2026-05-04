@@ -61,6 +61,23 @@ export function cleanupSceneRuntime({
   }
   state.meshByActorIdRef.current.clear();
 
+  for (const [, mesh] of state.meshBySceneObjectIdRef.current.entries()) {
+    scene.remove(mesh);
+    try {
+      mesh.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((material) => material.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      });
+    } catch {}
+  }
+  state.meshBySceneObjectIdRef.current.clear();
+
   if (proceduralWorldGroup) {
     scene.remove(proceduralWorldGroup);
     proceduralWorldGroup.traverse((child) => {

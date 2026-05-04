@@ -2,6 +2,7 @@
 
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const { canUserEditWorld } = require("../../auth/worldEditorAccess");
 const {
   GaUser,
   GaUserProfile,
@@ -34,16 +35,17 @@ const login = async (req, res) => {
     }
 
     const displayName = user.profile?.display_name ?? null;
+    const canEditWorld = canUserEditWorld(user.id);
 
     const token = jwt.sign(
-      { id: user.id, display_name: displayName },
+      { id: user.id, display_name: displayName, can_edit_world: canEditWorld },
       process.env.JWT_SECRET || "chave_mestra_extrema",
       { expiresIn: "24h" }
     );
 
     return res.json({
       token,
-      usuario: { id: user.id, display_name: displayName },
+      usuario: { id: user.id, display_name: displayName, can_edit_world: canEditWorld },
     });
   } catch (error) {
     console.error("Erro no login:", error);

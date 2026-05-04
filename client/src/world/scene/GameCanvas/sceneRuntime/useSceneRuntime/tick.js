@@ -1,12 +1,13 @@
 import * as THREE from "three";
 import { applyDayNightCycle } from "../../../light/dayNightCycle";
 import { syncActorMeshes } from "../syncActors";
+import { syncSceneObjectMeshes } from "../syncSceneObjects";
 import { syncEnemyMeshes } from "../syncEnemies";
 import { syncPlayerMeshes } from "../syncPlayers";
 import { syncProceduralWorld } from "../procedural";
 import { updateOverlayState } from "../overlay";
 
-export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
+export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveState }) {
   let alive = true;
   const clock = new THREE.Clock();
   const fallbackTarget = new THREE.Object3D();
@@ -14,6 +15,7 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
   const tmpWorld = new THREE.Vector3();
   let markerAccum = 0;
   let loggedInitialState = false;
+  let lastEditorSyncSignature = "";
 
   const tick = () => {
     if (!alive) return;
@@ -22,6 +24,14 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
     markerAccum += dt;
 
     const actors = state.actorsRef.current ?? [];
+    const sceneObjects = state.sceneObjectsRef.current ?? [];
+    syncSceneObjectMeshes({
+      sceneObjects,
+      scene: runtime.scene,
+      state,
+      sampleGroundHeight: runtime.sampleGroundHeight,
+    });
+
     syncActorMeshes({
       actors,
       scene: runtime.scene,
@@ -31,7 +41,7 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
     });
 
     const store = worldStoreRef?.current ?? null;
-    const entities = store?.getSnapshot?.() ?? null;
+    const entities = state.disableWorldEntities ? null : store?.getSnapshot?.() ?? null;
     const selfKey = store?.selfId == null ? null : String(store.selfId);
     const entityPositions = state.entityPositionsRef.current;
     entityPositions.clear();
@@ -93,19 +103,74 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
         focusPos?.z ?? 0
       );
     } else {
+      const editorFocus = state.editorCameraFocusRef?.current ?? null;
+      const moveState = getMoveState?.() ?? { dir: { x: 0, z: 0 }, speedScale: 1 };
+      const moveDir = moveState.dir ?? { x: 0, z: 0 };
+      const moveSpeed = Number(state.editorMoveSpeedRef?.current ?? 10) * Number(moveState.speedScale ?? 1);
       const rt = state.runtimeRef.current;
+
+      if (editorFocus) {
+        if (Math.abs(moveDir.x) > 0.0001 || Math.abs(moveDir.z) > 0.0001) {
+          editorFocus.x += Number(moveDir.x ?? 0) * moveSpeed * dt;
+          editorFocus.z += Number(moveDir.z ?? 0) * moveSpeed * dt;
+        }
+        editorFocus.y = 0;
+        runtime.proceduralFocus = {
+          x: Number(editorFocus.x ?? 0),
+          z: Number(editorFocus.z ?? 0),
+        };
+        syncProceduralWorld(
+          runtime,
+          state.proceduralMapRef.current ?? null,
+          Number(editorFocus.x ?? 0),
+          Number(editorFocus.z ?? 0)
+        );
+        fallbackTarget.position.set(
+          Number(editorFocus.x ?? 0),
+          Number(runtime.sampleGroundHeight(editorFocus.x ?? 0, editorFocus.z ?? 0) ?? 0) +
+            Number(editorFocus.y ?? 0),
+          Number(editorFocus.z ?? 0)
+        );
+        runtime.cameraApi.update(fallbackTarget, dt);
+        const cameraYaw = Number(runtime.cameraApi?.getState?.().yaw ?? 0);
+        const nextEditorSignature = [
+          Number(editorFocus.x ?? 0).toFixed(3),
+          Number(editorFocus.y ?? 0).toFixed(3),
+          Number(editorFocus.z ?? 0).toFixed(3),
+          Number(cameraYaw ?? 0).toFixed(3),
+        ].join("|");
+        if (nextEditorSignature !== lastEditorSyncSignature) {
+          lastEditorSyncSignature = nextEditorSignature;
+          state.onEditorTick?.({
+            pos: {
+              x: Number(editorFocus.x ?? 0),
+              y: Number(editorFocus.y ?? 0),
+              z: Number(editorFocus.z ?? 0),
+            },
+            yaw: cameraYaw,
+          });
+        }
+        if (rt?.pos) {
+          rt.pos.x = Number(editorFocus.x ?? 0);
+          rt.pos.y = 0;
+          rt.pos.z = Number(editorFocus.z ?? 0);
+        }
+      }
+
       if (!loggedInitialState) {
         loggedInitialState = true;
         console.log(
           `[CLIENT_TICK] entities=0 selfKey=${String(selfKey ?? "null")} ` +
-            `runtime=(${Number(rt?.pos?.x ?? NaN)}, ${Number(rt?.pos?.z ?? NaN)})`
+          `runtime=(${Number(rt?.pos?.x ?? NaN)}, ${Number(rt?.pos?.z ?? NaN)})`
         );
       }
-      if (rt?.pos) {
+      if (rt?.pos && !editorFocus) {
         const x = Number(rt.pos?.x ?? 0);
+        const y = Number(rt.pos?.y ?? 0);
         const z = Number(rt.pos?.z ?? 0);
         runtime.proceduralFocus = { x, z };
         syncProceduralWorld(runtime, state.proceduralMapRef.current ?? null, x, z);
+        fallbackTarget.position.set(x, Number(runtime.sampleGroundHeight(x, z) ?? 0) + y, z);
       }
       runtime.cameraApi.update(fallbackTarget, dt);
     }
@@ -120,8 +185,6 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef }) {
         state,
       });
     }
-
-    runtime.worldDebugGui?.syncSelectedObject?.(state.selectedObjectRef.current ?? null);
 
     applyDayNightCycle({
       scene: runtime.scene,
