@@ -15,6 +15,7 @@ export function useWorldCreatorState() {
   const stateRef = useRef(null);
   const editorCameraFocusRef = useRef({ x: 0, y: 0, z: 0 });
   const editorMoveSpeedRef = useRef(10);
+  const editorCharacterVisibleRef = useRef(true);
   const editorAnchorRef = useRef({ x: 0, y: 0, z: 0 });
   const editorCharacterRef = useRef(null);
   const editorMoveStateRef = useRef({ dir: { x: 0, z: 0 }, speedScale: 1 });
@@ -78,6 +79,7 @@ export function useWorldCreatorState() {
       setFlashMessage,
       editorCameraFocusRef,
       editorMoveSpeedRef,
+      editorCharacterVisibleRef,
       editorAnchorRef,
       editorCharacterRef,
       editorMoveStateRef,
@@ -100,6 +102,7 @@ export function useWorldCreatorState() {
   stateRef.current.flashMessage = flashMessage;
   stateRef.current.editorCameraFocusRef = editorCameraFocusRef;
   stateRef.current.editorMoveSpeedRef = editorMoveSpeedRef;
+  stateRef.current.editorCharacterVisibleRef = editorCharacterVisibleRef;
   stateRef.current.editorAnchorRef = editorAnchorRef;
   stateRef.current.editorCharacterRef = editorCharacterRef;
   stateRef.current.editorMoveStateRef = editorMoveStateRef;

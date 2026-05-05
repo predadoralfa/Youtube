@@ -13,12 +13,30 @@ import {
   updateActor,
   updateSceneObject,
 } from "@editor/services/WorldEditor";
+import {
+  loadSceneCreatorSettings,
+  saveSceneCreatorSettings,
+} from "@editor/worldCreator/persistence";
+import {
+  applyTerrainDraftToSnapshot,
+  buildTerrainDraftFromSnapshot,
+  getTerrainDraftSignature,
+  getTerrainSignature,
+} from "./terrainPanel";
 
 const TOKEN_KEY = "token";
 
 function formatNumber(value, digits = 2) {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n.toFixed(digits) : "0.00";
+}
+
+function radToDeg(value) {
+  return THREE.MathUtils.radToDeg(Number(value ?? 0));
+}
+
+function degToRad(value) {
+  return THREE.MathUtils.degToRad(Number(value ?? 0));
 }
 
 function readSelectedEntity(snapshot, selectedTarget) {
@@ -33,6 +51,8 @@ function readSelectedEntity(snapshot, selectedTarget) {
       type: actor.actorDefCode ?? actor.actorType ?? null,
       pos: actor.pos ?? { x: 0, y: 0, z: 0 },
       yaw: Number(actor.yaw ?? 0),
+      rotX: Number(actor.rotX ?? 0),
+      rotZ: Number(actor.rotZ ?? 0),
       scale: actor.scale ?? { x: 1, y: 1, z: 1 },
     };
   }
@@ -47,6 +67,8 @@ function readSelectedEntity(snapshot, selectedTarget) {
       type: sceneObject.objectDefCode ?? sceneObject.objectType ?? null,
       pos: sceneObject.pos ?? { x: 0, y: 0, z: 0 },
       yaw: Number(sceneObject.yaw ?? 0),
+      rotX: Number(sceneObject.rotX ?? 0),
+      rotZ: Number(sceneObject.rotZ ?? 0),
       scale: sceneObject.scale ?? { x: 1, y: 1, z: 1 },
     };
   }
@@ -79,7 +101,9 @@ function buildSelectedFormFromEntry(selectedEntry) {
     posX: String(selectedEntry.pos?.x ?? 0),
     posY: String(selectedEntry.pos?.y ?? 0),
     posZ: String(selectedEntry.pos?.z ?? 0),
-    yaw: String(selectedEntry.yaw ?? 0),
+    rotXDeg: String(radToDeg(selectedEntry.rotX ?? 0)),
+    rotYDeg: String(radToDeg(selectedEntry.yaw ?? 0)),
+    rotZDeg: String(radToDeg(selectedEntry.rotZ ?? 0)),
     scaleX: String(selectedEntry.scale?.x ?? 1),
     scaleY: String(selectedEntry.scale?.y ?? 1),
     scaleZ: String(selectedEntry.scale?.z ?? 1),
@@ -101,7 +125,9 @@ function applySelectedDraftToSnapshot(prevSnapshot, selectedTarget, draft) {
       y: toDraftNumber(draft.posY, 0),
       z: toDraftNumber(draft.posZ, 0),
     },
-    yaw: toDraftNumber(draft.yaw, 0),
+    yaw: degToRad(toDraftNumber(draft.rotYDeg ?? draft.yaw, 0)),
+    rotX: degToRad(toDraftNumber(draft.rotXDeg, 0)),
+    rotZ: degToRad(toDraftNumber(draft.rotZDeg, 0)),
     scale: {
       x: Math.max(0.01, toDraftNumber(draft.scaleX, 1)),
       y: Math.max(0.01, toDraftNumber(draft.scaleY, 1)),
@@ -213,16 +239,18 @@ function EditorCharacterLabel({ state }) {
     let alive = true;
     const step = () => {
       if (!alive) return;
+      const isVisible = state.editorCharacterVisibleRef?.current !== false;
       const camera = state.cameraRef?.current ?? null;
-      const cameraApi = state.cameraApiRef?.current ?? null;
       const canvas = state.containerRef?.current?.querySelector("canvas") ?? null;
       const pos = state.editorCharacterRef?.current?.pos ?? null;
-      if (camera && canvas && pos) {
+
+      if (isVisible && camera && canvas && pos) {
         const projected = projectWorldToScreenPx(
           new THREE.Vector3(Number(pos.x ?? 0), Number(pos.y ?? 0) + 2.4, Number(pos.z ?? 0)),
           camera,
           canvas
         );
+
         if (projected) {
           setLabelState({
             visible: true,
@@ -233,9 +261,13 @@ function EditorCharacterLabel({ state }) {
         } else {
           setLabelState((prev) => (prev.visible ? { ...prev, visible: false } : prev));
         }
+      } else {
+        setLabelState((prev) => (prev.visible ? { ...prev, visible: false } : prev));
       }
+
       requestAnimationFrame(step);
     };
+
     requestAnimationFrame(step);
     return () => {
       alive = false;
@@ -264,16 +296,6 @@ function EditorCharacterLabel({ state }) {
         textShadow: "0 2px 10px rgba(0,0,0,0.8)",
       }}
     >
-      <div
-        style={{
-          width: 18,
-          height: 18,
-          borderRadius: "50%",
-          border: "2px solid #f4b942",
-          background: "rgba(244,185,66,0.2)",
-          boxShadow: "0 0 0 5px rgba(244,185,66,0.12)",
-        }}
-      />
       <div style={{ fontSize: 12, fontWeight: 800 }}>GM Character</div>
       <div style={{ fontSize: 10, opacity: 0.9 }}>
         XYZ {labelState.text}
@@ -332,6 +354,400 @@ function EditorFpsBadge() {
     >
       FPS {fps || "--"}
     </div>
+  );
+}
+
+function LabeledSliderInput({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step = "1",
+}) {
+  return (
+    <label style={{ display: "grid", gap: 6 }}>
+      <span style={{ fontSize: 12, opacity: 0.82 }}>{label}</span>
+      <input
+        type="range"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={onChange}
+        style={{ width: "100%" }}
+      />
+      <input
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={onChange}
+        style={{
+          borderRadius: 10,
+          border: "1px solid rgba(255,255,255,0.14)",
+          background: "rgba(8,12,18,0.9)",
+          color: "#f3f2eb",
+          padding: "10px 12px",
+        }}
+      />
+    </label>
+  );
+}
+
+function GmPanel({ open, moveStep, onMoveStepChange, characterVisible, onCharacterVisibleChange }) {
+  if (!open) return null;
+
+  return (
+    <aside
+      data-scene-creator-scroll-panel="true"
+      style={{
+        position: "fixed",
+        top: 16,
+        right: 16,
+        zIndex: 1210,
+        width: 320,
+        maxHeight: "calc(100vh - 32px)",
+        overflow: "auto",
+        padding: 16,
+        borderRadius: 18,
+        background: "rgba(13, 20, 28, 0.9)",
+        color: "#f3f2eb",
+        backdropFilter: "blur(14px)",
+        boxShadow: "0 18px 45px rgba(0, 0, 0, 0.28)",
+        border: "1px solid rgba(255, 255, 255, 0.08)",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+        display: "grid",
+        gap: 12,
+      }}
+    >
+      <div>
+        <div style={{ fontSize: 12, letterSpacing: "0.18em", textTransform: "uppercase", opacity: 0.7 }}>
+          GM
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>
+          Painel do GM
+        </div>
+      </div>
+
+      <CollapsibleSection title="Locomocao" defaultOpen>
+        <LabeledInput
+          label="Velocidade de movimento"
+          value={moveStep}
+          type="number"
+          min="0.1"
+          step="0.1"
+          onChange={(e) => onMoveStepChange(e.target.value)}
+        />
+        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            type="checkbox"
+            checked={characterVisible}
+            onChange={(e) => onCharacterVisibleChange(e.target.checked)}
+          />
+          <span>GM visivel</span>
+        </label>
+        <div style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.4 }}>
+          Use `WASD` para mover, `Ctrl` para acelerar e `5` para abrir ou fechar este painel.
+        </div>
+      </CollapsibleSection>
+    </aside>
+  );
+}
+
+function SpawnPanel({
+  open,
+  actorDefs,
+  objectDefs,
+  spawnActorDefId,
+  onSpawnActorDefIdChange,
+  useCurrentPositionActor,
+  onUseCurrentPositionActorChange,
+  spawnActorPos,
+  onSpawnActorPosChange,
+  onSpawnActor,
+  spawnObjectDefId,
+  onSpawnObjectDefIdChange,
+  useCurrentPositionObject,
+  onUseCurrentPositionObjectChange,
+  spawnObjectPos,
+  onSpawnObjectPosChange,
+  onSpawnObject,
+  gmPanelOpen,
+}) {
+  if (!open) return null;
+
+  return (
+    <aside
+      data-scene-creator-scroll-panel="true"
+      style={{
+        position: "fixed",
+        top: 16,
+        right: gmPanelOpen ? 352 : 16,
+        zIndex: 1209,
+        width: 320,
+        maxHeight: "calc(100vh - 32px)",
+        overflow: "auto",
+        padding: 16,
+        borderRadius: 18,
+        background: "rgba(13, 20, 28, 0.9)",
+        color: "#f3f2eb",
+        backdropFilter: "blur(14px)",
+        boxShadow: "0 18px 45px rgba(0, 0, 0, 0.28)",
+        border: "1px solid rgba(255, 255, 255, 0.08)",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+        display: "grid",
+        gap: 12,
+      }}
+    >
+      <div>
+        <div style={{ fontSize: 12, letterSpacing: "0.18em", textTransform: "uppercase", opacity: 0.7 }}>
+          Spawn
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>
+          Painel de Spawn
+        </div>
+      </div>
+
+      <CollapsibleSection title="Spawn Actor" defaultOpen>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span style={{ fontSize: 12, opacity: 0.82 }}>Tipo de actor</span>
+          <select
+            value={spawnActorDefId}
+            onChange={(e) => onSpawnActorDefIdChange(e.target.value)}
+            style={{
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(8,12,18,0.9)",
+              color: "#f3f2eb",
+              padding: "10px 12px",
+            }}
+          >
+            <option value="">Selecione um actor</option>
+            {actorDefs.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.code} - {entry.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" checked={useCurrentPositionActor} onChange={(e) => onUseCurrentPositionActorChange(e.target.checked)} />
+          <span>Usar posicao atual do GM</span>
+        </label>
+        {!useCurrentPositionActor ? (
+          <>
+            <LabeledInput label="Position X" value={spawnActorPos.x} type="number" onChange={(e) => onSpawnActorPosChange((prev) => ({ ...prev, x: e.target.value }))} />
+            <LabeledInput label="Position Y" value={spawnActorPos.y} type="number" onChange={(e) => onSpawnActorPosChange((prev) => ({ ...prev, y: e.target.value }))} />
+            <LabeledInput label="Position Z" value={spawnActorPos.z} type="number" onChange={(e) => onSpawnActorPosChange((prev) => ({ ...prev, z: e.target.value }))} />
+          </>
+        ) : null}
+        <SectionButton onClick={onSpawnActor} disabled={!spawnActorDefId}>OK</SectionButton>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Spawn Object" defaultOpen>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span style={{ fontSize: 12, opacity: 0.82 }}>Tipo de object</span>
+          <select
+            value={spawnObjectDefId}
+            onChange={(e) => onSpawnObjectDefIdChange(e.target.value)}
+            style={{
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(8,12,18,0.9)",
+              color: "#f3f2eb",
+              padding: "10px 12px",
+            }}
+          >
+            <option value="">Selecione um object</option>
+            {objectDefs.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.code} - {entry.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" checked={useCurrentPositionObject} onChange={(e) => onUseCurrentPositionObjectChange(e.target.checked)} />
+          <span>Usar posicao atual do GM</span>
+        </label>
+        {!useCurrentPositionObject ? (
+          <>
+            <LabeledInput label="Position X" value={spawnObjectPos.x} type="number" onChange={(e) => onSpawnObjectPosChange((prev) => ({ ...prev, x: e.target.value }))} />
+            <LabeledInput label="Position Y" value={spawnObjectPos.y} type="number" onChange={(e) => onSpawnObjectPosChange((prev) => ({ ...prev, y: e.target.value }))} />
+            <LabeledInput label="Position Z" value={spawnObjectPos.z} type="number" onChange={(e) => onSpawnObjectPosChange((prev) => ({ ...prev, z: e.target.value }))} />
+          </>
+        ) : null}
+        <SectionButton onClick={onSpawnObject} disabled={!spawnObjectDefId}>OK</SectionButton>
+      </CollapsibleSection>
+    </aside>
+  );
+}
+
+function getDockRightOffset({ gmPanelOpen, spawnPanelOpen, terrainPanelOpen }) {
+  return 16 + (gmPanelOpen ? 336 : 0) + (spawnPanelOpen ? 336 : 0) + (terrainPanelOpen ? 336 : 0);
+}
+
+function TerrainPanel({
+  open,
+  snapshot,
+  terrainForm,
+  onTerrainChange,
+  gmPanelOpen,
+  spawnPanelOpen,
+}) {
+  if (!open) return null;
+
+  const template = snapshot?.localTemplate ?? {};
+  const visual = template?.visual ?? {};
+  const proceduralMap = snapshot?.proceduralMap ?? {};
+  const terrain = proceduralMap?.terrain ?? {};
+  const scatter = proceduralMap?.scatter ?? {};
+
+  return (
+    <aside
+      data-scene-creator-scroll-panel="true"
+      style={{
+        position: "fixed",
+        top: 16,
+        right: getDockRightOffset({
+          gmPanelOpen,
+          spawnPanelOpen,
+          terrainPanelOpen: false,
+        }),
+        zIndex: 1209,
+        width: 320,
+        maxHeight: "calc(100vh - 32px)",
+        overflow: "auto",
+        padding: 16,
+        borderRadius: 18,
+        background: "rgba(13, 20, 28, 0.9)",
+        color: "#f3f2eb",
+        backdropFilter: "blur(14px)",
+        boxShadow: "0 18px 45px rgba(0, 0, 0, 0.28)",
+        border: "1px solid rgba(255, 255, 255, 0.08)",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+        display: "grid",
+        gap: 12,
+      }}
+    >
+      <div>
+        <div style={{ fontSize: 12, letterSpacing: "0.18em", textTransform: "uppercase", opacity: 0.7 }}>
+          Terrain
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>
+          Painel de Terreno
+        </div>
+      </div>
+
+      <div style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.4 }}>
+        O editor usa `localTemplate.geometry`, `ground_render_material.base_color` e `proceduralMap` para montar o chão.
+        As alterações abaixo aplicam em tempo real no snapshot local.
+      </div>
+
+      <CollapsibleSection title="Base Visual" defaultOpen>
+        <div style={{ display: "grid", gap: 6, fontSize: 12, opacity: 0.88 }}>
+          <div>Ground material: <strong>{visual?.ground_material?.code ?? "-"}</strong></div>
+          <div>Ground mesh: <strong>{visual?.ground_mesh?.code ?? "-"}</strong></div>
+          <div>Render material: <strong>{visual?.ground_render_material?.code ?? "-"}</strong></div>
+        </div>
+        <LabeledInput label="Size X" value={terrainForm.sizeX} type="number" onChange={(e) => onTerrainChange("sizeX", e.target.value)} />
+        <LabeledInput label="Size Z" value={terrainForm.sizeZ} type="number" onChange={(e) => onTerrainChange("sizeZ", e.target.value)} />
+        <LabeledInput label="Ground color" value={terrainForm.groundColor} type="color" onChange={(e) => onTerrainChange("groundColor", e.target.value)} />
+        <LabeledInput label="World seed" value={terrainForm.worldSeed} type="number" onChange={(e) => onTerrainChange("worldSeed", e.target.value)} />
+        <LabeledInput label="Chunk size" value={terrainForm.chunkSize} type="number" min="64" step="1" onChange={(e) => onTerrainChange("chunkSize", e.target.value)} />
+        <LabeledInput label="Chunk radius" value={terrainForm.chunkRadius} type="number" min="0" step="1" onChange={(e) => onTerrainChange("chunkRadius", e.target.value)} />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Terrain" defaultOpen>
+        <LabeledSliderInput label="Height amplitude" value={terrainForm.heightAmplitude} min="0" max="6" step="0.1" onChange={(e) => onTerrainChange("heightAmplitude", e.target.value)} />
+        <LabeledSliderInput label="Roughness" value={terrainForm.roughness} min="0" max="3" step="0.01" onChange={(e) => onTerrainChange("roughness", e.target.value)} />
+        <LabeledSliderInput label="Plateau ratio" value={terrainForm.plateauRatio} min="0" max="2" step="0.01" onChange={(e) => onTerrainChange("plateauRatio", e.target.value)} />
+        <LabeledSliderInput label="Slope limit" value={terrainForm.slopeLimit} min="0" max="3" step="0.01" onChange={(e) => onTerrainChange("slopeLimit", e.target.value)} />
+        <LabeledSliderInput label="Valley depth" value={terrainForm.valleyDepth} min="0" max="3" step="0.01" onChange={(e) => onTerrainChange("valleyDepth", e.target.value)} />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Scatter" defaultOpen>
+        <LabeledSliderInput label="Grass density" value={terrainForm.grassDensity} min="0" max="2" step="0.01" onChange={(e) => onTerrainChange("grassDensity", e.target.value)} />
+        <LabeledSliderInput label="Tree density" value={terrainForm.treeDensity} min="0" max="2" step="0.01" onChange={(e) => onTerrainChange("treeDensity", e.target.value)} />
+        <LabeledSliderInput label="Rock density" value={terrainForm.rockDensity} min="0" max="2" step="0.01" onChange={(e) => onTerrainChange("rockDensity", e.target.value)} />
+        <LabeledSliderInput label="Max slope" value={terrainForm.maxSlope} min="0" max="2" step="0.01" onChange={(e) => onTerrainChange("maxSlope", e.target.value)} />
+        <div style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.4 }}>
+          `ground_material` e `ground_mesh` aparecem só como referência de origem. O editor renderiza o terreno por geometria + cor + procedural.
+        </div>
+      </CollapsibleSection>
+    </aside>
+  );
+}
+
+function SelectedPanel({
+  selectedEntry,
+  selectedForm,
+  onSelectedFormChange,
+  onSaveSelected,
+  onDisableSelected,
+  gmPanelOpen,
+  spawnPanelOpen,
+  terrainPanelOpen,
+}) {
+  if (!selectedEntry || !selectedForm) return null;
+
+  return (
+    <aside
+      data-scene-creator-scroll-panel="true"
+      style={{
+        position: "fixed",
+        top: 16,
+        right: getDockRightOffset({
+          gmPanelOpen,
+          spawnPanelOpen,
+          terrainPanelOpen,
+        }),
+        zIndex: 1209,
+        width: 320,
+        maxHeight: "calc(100vh - 32px)",
+        overflow: "auto",
+        padding: 16,
+        borderRadius: 18,
+        background: "rgba(13, 20, 28, 0.9)",
+        color: "#f3f2eb",
+        backdropFilter: "blur(14px)",
+        boxShadow: "0 18px 45px rgba(0, 0, 0, 0.28)",
+        border: "1px solid rgba(255, 255, 255, 0.08)",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+        display: "grid",
+        gap: 12,
+      }}
+    >
+      <div>
+        <div style={{ fontSize: 12, letterSpacing: "0.18em", textTransform: "uppercase", opacity: 0.7 }}>
+          Selected
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>
+          Entidade Selecionada
+        </div>
+      </div>
+
+      <CollapsibleSection title="Transform" defaultOpen>
+        <div>Kind: <strong>{selectedEntry.kind}</strong></div>
+        <div>ID: <strong>{selectedEntry.entity?.id}</strong></div>
+        <div>Type: <strong>{selectedEntry.type ?? "-"}</strong></div>
+        <LabeledInput label="Position X" value={selectedForm.posX} type="number" onChange={(e) => onSelectedFormChange("posX", e.target.value)} />
+        <LabeledInput label="Position Y" value={selectedForm.posY} type="number" onChange={(e) => onSelectedFormChange("posY", e.target.value)} />
+        <LabeledInput label="Position Z" value={selectedForm.posZ} type="number" onChange={(e) => onSelectedFormChange("posZ", e.target.value)} />
+        <LabeledSliderInput label="Rotation X (graus)" value={selectedForm.rotXDeg} min="-180" max="180" step="1" onChange={(e) => onSelectedFormChange("rotXDeg", e.target.value)} />
+        <LabeledSliderInput label="Rotation Y (graus)" value={selectedForm.rotYDeg} min="-180" max="180" step="1" onChange={(e) => onSelectedFormChange("rotYDeg", e.target.value)} />
+        <LabeledSliderInput label="Rotation Z (graus)" value={selectedForm.rotZDeg} min="-180" max="180" step="1" onChange={(e) => onSelectedFormChange("rotZDeg", e.target.value)} />
+        <LabeledSliderInput label="Scale X" value={selectedForm.scaleX} min="0.01" max="5" step="0.01" onChange={(e) => onSelectedFormChange("scaleX", e.target.value)} />
+        <LabeledSliderInput label="Scale Y" value={selectedForm.scaleY} min="0.01" max="5" step="0.01" onChange={(e) => onSelectedFormChange("scaleY", e.target.value)} />
+        <LabeledSliderInput label="Scale Z" value={selectedForm.scaleZ} min="0.01" max="5" step="0.01" onChange={(e) => onSelectedFormChange("scaleZ", e.target.value)} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <SectionButton onClick={onSaveSelected}>Salvar</SectionButton>
+          <SectionButton tone="danger" onClick={onDisableSelected}>Disable</SectionButton>
+        </div>
+      </CollapsibleSection>
+    </aside>
   );
 }
 
@@ -462,43 +878,19 @@ function EditorMotionDebugPanel({ state }) {
   );
 }
 
-function SidePanel({ state, onLogout }) {
-  const token = localStorage.getItem(TOKEN_KEY);
+function SidePanel({
+  state,
+  onLogout,
+  selectableTargets,
+  selectedTargetKey,
+  onSelectTarget,
+  open,
+  position,
+  onDragPointerDown,
+}) {
+  if (!open) return null;
   const operator = state.editorMeta?.editor?.operator ?? null;
   const instance = state.editorMeta?.instance ?? null;
-  const selectedEntry = useMemo(
-    () => readSelectedEntity(state.snapshot, state.selectedTarget),
-    [state.selectedTarget, state.snapshot]
-  );
-  const selectableTargets = useMemo(
-    () => buildSelectableTargets(state.snapshot),
-    [state.snapshot]
-  );
-  const selectedTargetKey = state.selectedTarget?.kind && state.selectedTarget?.id != null
-    ? `${state.selectedTarget.kind}:${state.selectedTarget.id}`
-    : "";
-
-  const [spawnActorDefId, setSpawnActorDefId] = useState("");
-  const [spawnObjectDefId, setSpawnObjectDefId] = useState("");
-  const [useCurrentPositionActor, setUseCurrentPositionActor] = useState(true);
-  const [useCurrentPositionObject, setUseCurrentPositionObject] = useState(true);
-  const [spawnActorPos, setSpawnActorPos] = useState({ x: "0", y: "0", z: "0" });
-  const [spawnObjectPos, setSpawnObjectPos] = useState({ x: "0", y: "0", z: "0" });
-  const [moveStep, setMoveStep] = useState("5");
-  const [selectedForm, setSelectedForm] = useState(null);
-  const lastSelectedTargetKeyRef = useRef("");
-
-  useEffect(() => {
-    if (!selectedEntry) {
-      setSelectedForm(null);
-      lastSelectedTargetKeyRef.current = "";
-      return;
-    }
-
-    if (lastSelectedTargetKeyRef.current === selectedTargetKey) return;
-    lastSelectedTargetKeyRef.current = selectedTargetKey;
-    setSelectedForm(buildSelectedFormFromEntry(selectedEntry));
-  }, [selectedEntry, selectedTargetKey]);
 
   useEffect(() => {
     if (!state.flashMessage) return undefined;
@@ -506,157 +898,13 @@ function SidePanel({ state, onLogout }) {
     return () => window.clearTimeout(timeoutId);
   }, [state, state.flashMessage]);
 
-  useEffect(() => {
-    state.editorMoveSpeedRef.current = Math.max(0.1, Number(moveStep) || 10);
-  }, [moveStep, state.editorMoveSpeedRef]);
-
-  const handleSelectTarget = useCallback((value) => {
-    if (!value) {
-      state.setSelectedTarget(null);
-      return;
-    }
-
-    const [kind, ...rest] = String(value).split(":");
-    const id = rest.join(":");
-    if (!kind || !id) return;
-    state.setSelectedTarget({ kind, id });
-  }, [state]);
-
-  const handleSelectedFormChange = useCallback((field, value) => {
-    setSelectedForm((prev) => {
-      const base =
-        prev ??
-        buildSelectedFormFromEntry(selectedEntry) ?? {
-          posX: "0",
-          posY: "0",
-          posZ: "0",
-          yaw: "0",
-          scaleX: "1",
-          scaleY: "1",
-          scaleZ: "1",
-        };
-      const next = {
-        ...base,
-        [field]: value,
-      };
-      state.setSnapshot((prevSnapshot) => applySelectedDraftToSnapshot(prevSnapshot, state.selectedTarget, next));
-      return next;
-    });
-  }, [selectedEntry, state]);
-
-  const handleSpawnActor = useCallback(async () => {
-    if (!token || !spawnActorDefId) return;
-    const payload = {
-      actorDefId: Number(spawnActorDefId),
-      useCurrentPosition: useCurrentPositionActor,
-      pos: {
-        x: Number(spawnActorPos.x ?? 0),
-        y: Number(spawnActorPos.y ?? 0),
-        z: Number(spawnActorPos.z ?? 0),
-      },
-    };
-    const result = await spawnActor(token, payload);
-    if (result?.error) {
-      state.setFlashMessage(`Falha ao spawnar actor: ${result.message}`);
-      return;
-    }
-    state.setSnapshot((prev) => mergeSnapshotActor(prev, result.actor));
-    state.setSelectedTarget({ kind: "ACTOR", id: String(result.actor?.id ?? "") });
-    state.setFlashMessage(`Actor #${result.actor?.id ?? "?"} criado`);
-  }, [spawnActorDefId, spawnActorPos, state, token, useCurrentPositionActor]);
-
-  const handleSpawnObject = useCallback(async () => {
-    if (!token || !spawnObjectDefId) return;
-    const payload = {
-      sceneObjectDefId: Number(spawnObjectDefId),
-      useCurrentPosition: useCurrentPositionObject,
-      pos: {
-        x: Number(spawnObjectPos.x ?? 0),
-        y: Number(spawnObjectPos.y ?? 0),
-        z: Number(spawnObjectPos.z ?? 0),
-      },
-    };
-    const result = await spawnSceneObject(token, payload);
-    if (result?.error) {
-      state.setFlashMessage(`Falha ao spawnar object: ${result.message}`);
-      return;
-    }
-    state.setSnapshot((prev) => mergeSnapshotSceneObject(prev, result.sceneObject));
-    state.setSelectedTarget({ kind: "OBJECT", id: String(result.sceneObject?.id ?? "") });
-    state.setFlashMessage(`Object #${result.sceneObject?.id ?? "?"} criado`);
-  }, [spawnObjectDefId, spawnObjectPos, state, token, useCurrentPositionObject]);
-
-  const handleSaveSelected = useCallback(async () => {
-    if (!token || !selectedEntry || !selectedForm) return;
-    const payload = {
-      pos: {
-        x: Number(selectedForm.posX ?? 0),
-        y: Number(selectedForm.posY ?? 0),
-        z: Number(selectedForm.posZ ?? 0),
-      },
-      yaw: Number(selectedForm.yaw ?? 0),
-      scale: {
-        x: Number(selectedForm.scaleX ?? 1),
-        y: Number(selectedForm.scaleY ?? 1),
-        z: Number(selectedForm.scaleZ ?? 1),
-      },
-    };
-
-    if (selectedEntry.kind === "ACTOR") {
-      const result = await updateActor(token, selectedEntry.entity.id, payload);
-      if (result?.error) {
-        state.setFlashMessage(`Falha ao atualizar actor: ${result.message}`);
-        return;
-      }
-      state.setSnapshot((prev) => mergeSnapshotActor(prev, result.actor));
-      state.setFlashMessage(`Actor #${result.actor?.id ?? "?"} atualizado`);
-      return;
-    }
-
-    const result = await updateSceneObject(token, selectedEntry.entity.id, payload);
-    if (result?.error) {
-      state.setFlashMessage(`Falha ao atualizar object: ${result.message}`);
-      return;
-    }
-    state.setSnapshot((prev) => mergeSnapshotSceneObject(prev, result.sceneObject));
-    state.setFlashMessage(`Object #${result.sceneObject?.id ?? "?"} atualizado`);
-  }, [selectedEntry, selectedForm, state, token]);
-
-  const handleDisableSelected = useCallback(async () => {
-    if (!token || !selectedEntry) return;
-
-    if (selectedEntry.kind === "ACTOR") {
-      const result = await disableActor(token, selectedEntry.entity.id);
-      if (result?.error) {
-        state.setFlashMessage(`Falha ao desativar actor: ${result.message}`);
-        return;
-      }
-      state.setSnapshot((prev) => mergeSnapshotActor(prev, result.actor));
-      state.setSelectedTarget(null);
-      state.setFlashMessage(`Actor #${result.actor?.id ?? "?"} desativado`);
-      return;
-    }
-
-    const result = await disableSceneObject(token, selectedEntry.entity.id);
-    if (result?.error) {
-      state.setFlashMessage(`Falha ao desativar object: ${result.message}`);
-      return;
-    }
-    state.setSnapshot((prev) => mergeSnapshotSceneObject(prev, result.sceneObject));
-    state.setSelectedTarget(null);
-    state.setFlashMessage(`Object #${result.sceneObject?.id ?? "?"} desativado`);
-  }, [selectedEntry, state, token]);
-
-  const actorDefs = state.catalogs?.actorDefs ?? [];
-  const objectDefs = state.catalogs?.objectDefs ?? [];
-
   return (
     <aside
       data-scene-creator-scroll-panel="true"
       style={{
         position: "fixed",
-        top: 16,
-        left: 16,
+        top: position.top,
+        left: position.left,
         zIndex: 1200,
         width: 360,
         maxHeight: "calc(100vh - 32px)",
@@ -684,6 +932,22 @@ function SidePanel({ state, onLogout }) {
         </div>
         <SectionButton onClick={onLogout}>Sair</SectionButton>
       </div>
+      <button
+        type="button"
+        onPointerDown={onDragPointerDown}
+        style={{
+          border: "1px dashed rgba(244, 185, 66, 0.35)",
+          borderRadius: 12,
+          background: "rgba(244, 185, 66, 0.08)",
+          color: "#f4b942",
+          padding: "8px 10px",
+          textAlign: "left",
+          cursor: "grab",
+          fontWeight: 700,
+        }}
+      >
+        Arrastar painel
+      </button>
 
       {state.flashMessage ? (
         <div
@@ -705,138 +969,51 @@ function SidePanel({ state, onLogout }) {
         <div>Status: {instance?.status ?? "-"}</div>
         <div>Actors: {state.counts.actors}</div>
         <div>Objects: {state.counts.sceneObjects}</div>
-        <div>
-          Posicao GM: {formatNumber(operator?.pos?.x)}, {formatNumber(operator?.pos?.y)}, {formatNumber(operator?.pos?.z)}
-        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection title="Locomocao GM" defaultOpen>
-        <LabeledInput label="Velocidade de movimento" value={moveStep} type="number" min="0.1" step="0.1" onChange={(e) => setMoveStep(e.target.value)} />
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 12, opacity: 0.82 }}>Selecionar actor ou object</span>
-          <select
-            value={selectedTargetKey}
-            onChange={(e) => handleSelectTarget(e.target.value)}
-            style={{
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(8,12,18,0.9)",
-              color: "#f3f2eb",
-              padding: "10px 12px",
-            }}
-          >
-            <option value="">Selecione um actor ou object</option>
-            {selectableTargets.map((entry) => (
-              <option key={`${entry.kind}:${entry.id}`} value={`${entry.kind}:${entry.id}`}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
-        </label>
+      <CollapsibleSection title="Selecionar Actor ou Object" defaultOpen>
+        <div style={{ display: "grid", gap: 8, maxHeight: 320, overflowY: "auto", paddingRight: 4 }}>
+          {selectableTargets.length === 0 ? (
+            <div style={{ opacity: 0.7 }}>Nenhuma entidade disponivel.</div>
+          ) : selectableTargets.map((entry, index) => {
+            const entryKey = `${entry.kind}:${entry.id}`;
+            const selected = entryKey === selectedTargetKey;
+            return (
+              <button
+                key={entryKey}
+                type="button"
+                onClick={() => onSelectTarget(entryKey)}
+                style={{
+                  textAlign: "left",
+                  borderRadius: 10,
+                  border: selected ? "1px solid rgba(244, 185, 66, 0.7)" : "1px solid rgba(255,255,255,0.08)",
+                  background: selected ? "rgba(244, 185, 66, 0.16)" : "rgba(8,12,18,0.9)",
+                  color: "#f3f2eb",
+                  padding: "10px 12px",
+                  cursor: "pointer",
+                  display: "grid",
+                  gap: 2,
+                }}
+              >
+                <span style={{ fontSize: 11, opacity: 0.65, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  {index + 1}. {entry.kind}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>{entry.label}</span>
+              </button>
+            );
+          })}
+        </div>
         <div style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.4 }}>
           Use `WASD` para mover o pivô invisível e `Ctrl` para acelerar. O seletor acima serve para recuperar entidades fora do raycast.
         </div>
       </CollapsibleSection>
 
-      <CollapsibleSection title="Spawn Actor" defaultOpen>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 12, opacity: 0.82 }}>Tipo de actor</span>
-          <select
-            value={spawnActorDefId}
-            onChange={(e) => setSpawnActorDefId(e.target.value)}
-            style={{
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(8,12,18,0.9)",
-              color: "#f3f2eb",
-              padding: "10px 12px",
-            }}
-          >
-            <option value="">Selecione um actor</option>
-            {actorDefs.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.code} - {entry.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="checkbox" checked={useCurrentPositionActor} onChange={(e) => setUseCurrentPositionActor(e.target.checked)} />
-          <span>Usar posicao atual do GM</span>
-        </label>
-        {!useCurrentPositionActor ? (
-          <>
-            <LabeledInput label="Position X" value={spawnActorPos.x} type="number" onChange={(e) => setSpawnActorPos((prev) => ({ ...prev, x: e.target.value }))} />
-            <LabeledInput label="Position Y" value={spawnActorPos.y} type="number" onChange={(e) => setSpawnActorPos((prev) => ({ ...prev, y: e.target.value }))} />
-            <LabeledInput label="Position Z" value={spawnActorPos.z} type="number" onChange={(e) => setSpawnActorPos((prev) => ({ ...prev, z: e.target.value }))} />
-          </>
-        ) : null}
-        <SectionButton onClick={handleSpawnActor} disabled={!spawnActorDefId}>OK</SectionButton>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Spawn Object" defaultOpen>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 12, opacity: 0.82 }}>Tipo de object</span>
-          <select
-            value={spawnObjectDefId}
-            onChange={(e) => setSpawnObjectDefId(e.target.value)}
-            style={{
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(8,12,18,0.9)",
-              color: "#f3f2eb",
-              padding: "10px 12px",
-            }}
-          >
-            <option value="">Selecione um object</option>
-            {objectDefs.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.code} - {entry.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="checkbox" checked={useCurrentPositionObject} onChange={(e) => setUseCurrentPositionObject(e.target.checked)} />
-          <span>Usar posicao atual do GM</span>
-        </label>
-        {!useCurrentPositionObject ? (
-          <>
-            <LabeledInput label="Position X" value={spawnObjectPos.x} type="number" onChange={(e) => setSpawnObjectPos((prev) => ({ ...prev, x: e.target.value }))} />
-            <LabeledInput label="Position Y" value={spawnObjectPos.y} type="number" onChange={(e) => setSpawnObjectPos((prev) => ({ ...prev, y: e.target.value }))} />
-            <LabeledInput label="Position Z" value={spawnObjectPos.z} type="number" onChange={(e) => setSpawnObjectPos((prev) => ({ ...prev, z: e.target.value }))} />
-          </>
-        ) : null}
-        <SectionButton onClick={handleSpawnObject} disabled={!spawnObjectDefId}>OK</SectionButton>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Selected" defaultOpen>
-        {!selectedEntry || !selectedForm ? (
-          <div style={{ opacity: 0.78 }}>Nenhuma entidade selecionada.</div>
-        ) : (
-          <>
-            <div>Kind: <strong>{selectedEntry.kind}</strong></div>
-            <div>ID: <strong>{selectedEntry.entity?.id}</strong></div>
-            <div>Type: <strong>{selectedEntry.type ?? "-"}</strong></div>
-             <LabeledInput label="Position X" value={selectedForm.posX} type="number" onChange={(e) => handleSelectedFormChange("posX", e.target.value)} />
-             <LabeledInput label="Position Y" value={selectedForm.posY} type="number" onChange={(e) => handleSelectedFormChange("posY", e.target.value)} />
-             <LabeledInput label="Position Z" value={selectedForm.posZ} type="number" onChange={(e) => handleSelectedFormChange("posZ", e.target.value)} />
-             <LabeledInput label="Yaw" value={selectedForm.yaw} type="number" onChange={(e) => handleSelectedFormChange("yaw", e.target.value)} />
-             <LabeledInput label="Scale X" value={selectedForm.scaleX} type="number" min="0.01" onChange={(e) => handleSelectedFormChange("scaleX", e.target.value)} />
-             <LabeledInput label="Scale Y" value={selectedForm.scaleY} type="number" min="0.01" onChange={(e) => handleSelectedFormChange("scaleY", e.target.value)} />
-             <LabeledInput label="Scale Z" value={selectedForm.scaleZ} type="number" min="0.01" onChange={(e) => handleSelectedFormChange("scaleZ", e.target.value)} />
-            <div style={{ display: "flex", gap: 8 }}>
-              <SectionButton onClick={handleSaveSelected}>Salvar</SectionButton>
-              <SectionButton tone="danger" onClick={handleDisableSelected}>Disable</SectionButton>
-            </div>
-          </>
-        )}
-      </CollapsibleSection>
     </aside>
   );
 }
 
 export function WorldCreatorView({ state, onLogout }) {
+  const persistedSettings = useMemo(() => loadSceneCreatorSettings(), []);
   const editorCameraOptions = useMemo(
     () => ({
       pivotHeight: 1.35,
@@ -847,10 +1024,216 @@ export function WorldCreatorView({ state, onLogout }) {
     }),
     []
   );
+  const [mainPanelOpen, setMainPanelOpen] = useState(Boolean(persistedSettings.mainPanelOpen ?? true));
+  const [mainPanelPosition, setMainPanelPosition] = useState(
+    persistedSettings.mainPanelPosition ?? { top: 16, left: 16 }
+  );
+  const [gmPanelOpen, setGmPanelOpen] = useState(Boolean(persistedSettings.gmPanelOpen ?? false));
+  const [spawnPanelOpen, setSpawnPanelOpen] = useState(Boolean(persistedSettings.spawnPanelOpen ?? false));
+  const [terrainPanelOpen, setTerrainPanelOpen] = useState(Boolean(persistedSettings.terrainPanelOpen ?? false));
+  const [gmMoveStep, setGmMoveStep] = useState(String(persistedSettings.gmMoveStep ?? state.editorMoveSpeedRef.current ?? 10));
+  const [gmCharacterVisible, setGmCharacterVisible] = useState(Boolean(persistedSettings.gmCharacterVisible ?? true));
+  const [spawnActorDefId, setSpawnActorDefId] = useState("");
+  const [spawnObjectDefId, setSpawnObjectDefId] = useState("");
+  const [useCurrentPositionActor, setUseCurrentPositionActor] = useState(true);
+  const [useCurrentPositionObject, setUseCurrentPositionObject] = useState(true);
+  const [spawnActorPos, setSpawnActorPos] = useState({ x: "0", y: "0", z: "0" });
+  const [spawnObjectPos, setSpawnObjectPos] = useState({ x: "0", y: "0", z: "0" });
+  const [terrainForm, setTerrainForm] = useState(() => buildTerrainDraftFromSnapshot(state.snapshot));
+  const selectableTargets = useMemo(() => buildSelectableTargets(state.snapshot), [state.snapshot]);
+  const selectedEntry = useMemo(
+    () => readSelectedEntity(state.snapshot, state.selectedTarget),
+    [state.selectedTarget, state.snapshot]
+  );
+  const actorDefs = state.catalogs?.actorDefs ?? [];
+  const objectDefs = state.catalogs?.objectDefs ?? [];
+  const selectedTargetKey = state.selectedTarget?.kind && state.selectedTarget?.id != null
+    ? `${state.selectedTarget.kind}:${state.selectedTarget.id}`
+    : "";
+  const [selectedForm, setSelectedForm] = useState(null);
+  const lastSelectedTargetKeyRef = useRef("");
+  const pendingPersistedGmPosRef = useRef(persistedSettings.gmPos ?? null);
+  const lastTerrainSignatureRef = useRef(getTerrainSignature(state.snapshot));
 
   const handleTargetSelect = useCallback((target) => state.setSelectedTarget(target), [state]);
   const handleTargetClear = useCallback(() => state.setSelectedTarget(null), [state]);
   const handleLogoutClick = useCallback(() => onLogout(), [onLogout]);
+  const handleMainPanelDragPointerDown = useCallback((event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+
+    const startX = Number(event.clientX ?? 0);
+    const startY = Number(event.clientY ?? 0);
+    const startTop = Number(mainPanelPosition.top ?? 16);
+    const startLeft = Number(mainPanelPosition.left ?? 16);
+
+    const handlePointerMove = (moveEvent) => {
+      const dx = Number(moveEvent.clientX ?? 0) - startX;
+      const dy = Number(moveEvent.clientY ?? 0) - startY;
+      setMainPanelPosition({
+        top: Math.max(8, startTop + dy),
+        left: Math.max(8, startLeft + dx),
+      });
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove, true);
+      window.removeEventListener("pointerup", handlePointerUp, true);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, true);
+    window.addEventListener("pointerup", handlePointerUp, true);
+  }, [mainPanelPosition.left, mainPanelPosition.top]);
+  const handleSelectTargetByKey = useCallback((value) => {
+    if (!value) {
+      state.setSelectedTarget(null);
+      return;
+    }
+    const [kind, ...rest] = String(value).split(":");
+    const id = rest.join(":");
+    if (!kind || !id) return;
+    state.setSelectedTarget({ kind, id });
+  }, [state]);
+  const handleSelectedFormChange = useCallback((field, value) => {
+    setSelectedForm((prev) => {
+      const base =
+        prev ??
+        buildSelectedFormFromEntry(selectedEntry) ?? {
+          posX: "0",
+          posY: "0",
+          posZ: "0",
+          rotXDeg: "0",
+          rotYDeg: "0",
+          rotZDeg: "0",
+          scaleX: "1",
+          scaleY: "1",
+          scaleZ: "1",
+        };
+      const next = {
+        ...base,
+        [field]: value,
+      };
+      state.setSnapshot((prevSnapshot) => applySelectedDraftToSnapshot(prevSnapshot, state.selectedTarget, next));
+      return next;
+    });
+  }, [selectedEntry, state]);
+  const handleSaveSelected = useCallback(async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token || !selectedEntry || !selectedForm) return;
+    const payload = {
+      pos: {
+        x: Number(selectedForm.posX ?? 0),
+        y: Number(selectedForm.posY ?? 0),
+        z: Number(selectedForm.posZ ?? 0),
+      },
+      yaw: degToRad(Number(selectedForm.rotYDeg ?? 0)),
+      scale: {
+        x: Number(selectedForm.scaleX ?? 1),
+        y: Number(selectedForm.scaleY ?? 1),
+        z: Number(selectedForm.scaleZ ?? 1),
+      },
+    };
+
+    if (selectedEntry.kind === "ACTOR") {
+      const result = await updateActor(token, selectedEntry.entity.id, payload);
+      if (result?.error) {
+        state.setFlashMessage(`Falha ao atualizar actor: ${result.message}`);
+        return;
+      }
+      state.setSnapshot((prev) => mergeSnapshotActor(prev, result.actor));
+      state.setFlashMessage(`Actor #${result.actor?.id ?? "?"} atualizado`);
+      return;
+    }
+
+    const result = await updateSceneObject(token, selectedEntry.entity.id, payload);
+    if (result?.error) {
+      state.setFlashMessage(`Falha ao atualizar object: ${result.message}`);
+      return;
+    }
+    state.setSnapshot((prev) => mergeSnapshotSceneObject(prev, result.sceneObject));
+    state.setFlashMessage(`Object #${result.sceneObject?.id ?? "?"} atualizado`);
+  }, [selectedEntry, selectedForm, state]);
+  const handleDisableSelected = useCallback(async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token || !selectedEntry) return;
+
+    if (selectedEntry.kind === "ACTOR") {
+      const result = await disableActor(token, selectedEntry.entity.id);
+      if (result?.error) {
+        state.setFlashMessage(`Falha ao desativar actor: ${result.message}`);
+        return;
+      }
+      state.setSnapshot((prev) => mergeSnapshotActor(prev, result.actor));
+      state.setSelectedTarget(null);
+      state.setFlashMessage(`Actor #${result.actor?.id ?? "?"} desativado`);
+      return;
+    }
+
+    const result = await disableSceneObject(token, selectedEntry.entity.id);
+    if (result?.error) {
+      state.setFlashMessage(`Falha ao desativar object: ${result.message}`);
+      return;
+    }
+    state.setSnapshot((prev) => mergeSnapshotSceneObject(prev, result.sceneObject));
+    state.setSelectedTarget(null);
+    state.setFlashMessage(`Object #${result.sceneObject?.id ?? "?"} desativado`);
+  }, [selectedEntry, state]);
+  const handleTerrainChange = useCallback(
+    (field, value) => {
+      setTerrainForm((prev) => {
+        const next = {
+          ...prev,
+          [field]: value,
+        };
+        lastTerrainSignatureRef.current = getTerrainDraftSignature(next);
+        state.setSnapshot((prevSnapshot) => applyTerrainDraftToSnapshot(prevSnapshot, next));
+        return next;
+      });
+    },
+    [state]
+  );
+  const handleSpawnActor = useCallback(async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token || !spawnActorDefId) return;
+    const payload = {
+      actorDefId: Number(spawnActorDefId),
+      useCurrentPosition: useCurrentPositionActor,
+      pos: {
+        x: Number(spawnActorPos.x ?? 0),
+        y: Number(spawnActorPos.y ?? 0),
+        z: Number(spawnActorPos.z ?? 0),
+      },
+    };
+    const result = await spawnActor(token, payload);
+    if (result?.error) {
+      state.setFlashMessage(`Falha ao spawnar actor: ${result.message}`);
+      return;
+    }
+    state.setSnapshot((prev) => mergeSnapshotActor(prev, result.actor));
+    state.setSelectedTarget({ kind: "ACTOR", id: String(result.actor?.id ?? "") });
+    state.setFlashMessage(`Actor #${result.actor?.id ?? "?"} criado`);
+  }, [spawnActorDefId, spawnActorPos, state, useCurrentPositionActor]);
+  const handleSpawnObject = useCallback(async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token || !spawnObjectDefId) return;
+    const payload = {
+      sceneObjectDefId: Number(spawnObjectDefId),
+      useCurrentPosition: useCurrentPositionObject,
+      pos: {
+        x: Number(spawnObjectPos.x ?? 0),
+        y: Number(spawnObjectPos.y ?? 0),
+        z: Number(spawnObjectPos.z ?? 0),
+      },
+    };
+    const result = await spawnSceneObject(token, payload);
+    if (result?.error) {
+      state.setFlashMessage(`Falha ao spawnar object: ${result.message}`);
+      return;
+    }
+    state.setSnapshot((prev) => mergeSnapshotSceneObject(prev, result.sceneObject));
+    state.setSelectedTarget({ kind: "OBJECT", id: String(result.sceneObject?.id ?? "") });
+    state.setFlashMessage(`Object #${result.sceneObject?.id ?? "?"} criado`);
+  }, [spawnObjectDefId, spawnObjectPos, state, useCurrentPositionObject]);
   const handleEditorTick = useCallback(
     ({ pos, yaw }) => {
       const nextPos = {
@@ -861,9 +1244,6 @@ export function WorldCreatorView({ state, onLogout }) {
       const cameraYaw = Number(yaw ?? 0);
       const nextYaw = cameraYaw + Math.PI;
 
-      if (state.editorCameraFocusRef?.current) {
-        state.editorCameraFocusRef.current = nextPos;
-      }
       if (state.editorAnchorRef?.current) {
         state.editorAnchorRef.current = nextPos;
       }
@@ -881,6 +1261,7 @@ export function WorldCreatorView({ state, onLogout }) {
           focusZ: nextPos.z,
         };
       }
+      pendingPersistedGmPosRef.current = nextPos;
     },
     [state]
   );
@@ -908,6 +1289,92 @@ export function WorldCreatorView({ state, onLogout }) {
     return createEditorCharacterMovementController({ state });
   }, [state]);
 
+  useEffect(() => {
+    state.editorMoveSpeedRef.current = Math.max(0.1, Number(gmMoveStep) || 10);
+  }, [gmMoveStep, state]);
+
+  useEffect(() => {
+    state.editorCharacterVisibleRef.current = gmCharacterVisible;
+  }, [gmCharacterVisible, state]);
+
+  useEffect(() => {
+    saveSceneCreatorSettings({
+      mainPanelOpen,
+      mainPanelPosition,
+      gmPanelOpen,
+      spawnPanelOpen,
+      terrainPanelOpen,
+      gmMoveStep,
+      gmCharacterVisible,
+    });
+  }, [gmCharacterVisible, gmMoveStep, gmPanelOpen, mainPanelOpen, mainPanelPosition, spawnPanelOpen, terrainPanelOpen]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!pendingPersistedGmPosRef.current) return;
+      saveSceneCreatorSettings({ gmPos: pendingPersistedGmPosRef.current });
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedEntry) {
+      setSelectedForm(null);
+      lastSelectedTargetKeyRef.current = "";
+      return;
+    }
+    if (lastSelectedTargetKeyRef.current === selectedTargetKey) return;
+    lastSelectedTargetKeyRef.current = selectedTargetKey;
+    setSelectedForm(buildSelectedFormFromEntry(selectedEntry));
+  }, [selectedEntry, selectedTargetKey]);
+
+  useEffect(() => {
+    const signature = getTerrainSignature(state.snapshot);
+    if (lastTerrainSignatureRef.current === signature) return;
+    lastTerrainSignatureRef.current = signature;
+    setTerrainForm(buildTerrainDraftFromSnapshot(state.snapshot));
+  }, [state.snapshot]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const key = String(event?.key ?? "");
+      const code = String(event?.code ?? "");
+      const isMainToggle = key === "1" || code === "Digit1" || code === "Numpad1";
+      const isGmToggle = key === "5" || code === "Digit5" || code === "Numpad5";
+      const isSpawnToggle = key === "2" || code === "Digit2" || code === "Numpad2";
+      const isTerrainToggle = key === "3" || code === "Digit3" || code === "Numpad3";
+      if (!isMainToggle && !isGmToggle && !isSpawnToggle && !isTerrainToggle) return;
+
+      const target = event?.target;
+      const tagName = String(target?.tagName ?? "").toLowerCase();
+      const editable = Boolean(
+        target?.isContentEditable ||
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select"
+      );
+      if (editable) return;
+
+      if (isMainToggle) {
+        setMainPanelOpen((prev) => !prev);
+      }
+      if (isGmToggle) {
+        setGmPanelOpen((prev) => !prev);
+      }
+      if (isSpawnToggle) {
+        setSpawnPanelOpen((prev) => !prev);
+      }
+      if (isTerrainToggle) {
+        setTerrainPanelOpen((prev) => !prev);
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, []);
+
   return (
     <>
       <EditorFpsBadge />
@@ -931,6 +1398,51 @@ export function WorldCreatorView({ state, onLogout }) {
         Scene Creator Live
       </div>
       <EditorCharacterLabel state={state} />
+      <GmPanel
+        open={gmPanelOpen}
+        moveStep={gmMoveStep}
+        onMoveStepChange={setGmMoveStep}
+        characterVisible={gmCharacterVisible}
+        onCharacterVisibleChange={setGmCharacterVisible}
+      />
+      <SpawnPanel
+        open={spawnPanelOpen}
+        actorDefs={actorDefs}
+        objectDefs={objectDefs}
+        spawnActorDefId={spawnActorDefId}
+        onSpawnActorDefIdChange={setSpawnActorDefId}
+        useCurrentPositionActor={useCurrentPositionActor}
+        onUseCurrentPositionActorChange={setUseCurrentPositionActor}
+        spawnActorPos={spawnActorPos}
+        onSpawnActorPosChange={setSpawnActorPos}
+        onSpawnActor={handleSpawnActor}
+        spawnObjectDefId={spawnObjectDefId}
+        onSpawnObjectDefIdChange={setSpawnObjectDefId}
+        useCurrentPositionObject={useCurrentPositionObject}
+        onUseCurrentPositionObjectChange={setUseCurrentPositionObject}
+        spawnObjectPos={spawnObjectPos}
+        onSpawnObjectPosChange={setSpawnObjectPos}
+        onSpawnObject={handleSpawnObject}
+        gmPanelOpen={gmPanelOpen}
+      />
+      <TerrainPanel
+        open={terrainPanelOpen}
+        snapshot={state.snapshot}
+        terrainForm={terrainForm}
+        onTerrainChange={handleTerrainChange}
+        gmPanelOpen={gmPanelOpen}
+        spawnPanelOpen={spawnPanelOpen}
+      />
+      <SelectedPanel
+        selectedEntry={selectedEntry}
+        selectedForm={selectedForm}
+        onSelectedFormChange={handleSelectedFormChange}
+        onSaveSelected={handleSaveSelected}
+        onDisableSelected={handleDisableSelected}
+        gmPanelOpen={gmPanelOpen}
+        spawnPanelOpen={spawnPanelOpen}
+        terrainPanelOpen={terrainPanelOpen}
+      />
       <GameCanvas
         containerRef={state.containerRef}
         snapshot={state.snapshot}
@@ -941,9 +1453,11 @@ export function WorldCreatorView({ state, onLogout }) {
         exposeCameraRef={state.cameraRef}
         exposeCameraApiRef={state.cameraApiRef}
         editorCameraFocusRef={state.editorCameraFocusRef}
+        editorAnchorRef={state.editorAnchorRef}
         editorMoveSpeedRef={state.editorMoveSpeedRef}
         editorMoveStateRef={state.editorMoveStateRef}
         editorInputStateRef={state.editorInputStateRef}
+        editorCharacterVisibleRef={state.editorCharacterVisibleRef}
         onEditorTick={handleEditorTick}
         disableSceneInput={true}
         buildPlacement={null}
@@ -952,12 +1466,22 @@ export function WorldCreatorView({ state, onLogout }) {
         disableInput={true}
         onTargetSelect={handleTargetSelect}
         onTargetClear={handleTargetClear}
+        selectedTarget={state.selectedTarget}
         allowObjectSelection={true}
         disableGroundMove={true}
         disableWorldEntities={true}
         cameraOptions={editorCameraOptions}
       />
-      <SidePanel state={state} onLogout={onLogout} />
+      <SidePanel
+        state={state}
+        onLogout={handleLogoutClick}
+        selectableTargets={selectableTargets}
+        selectedTargetKey={selectedTargetKey}
+        onSelectTarget={handleSelectTargetByKey}
+        open={mainPanelOpen}
+        position={mainPanelPosition}
+        onDragPointerDown={handleMainPanelDragPointerDown}
+      />
     </>
   );
 }

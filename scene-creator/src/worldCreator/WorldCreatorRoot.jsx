@@ -5,10 +5,19 @@ import { bootstrapWorldEditor } from "@editor/services/WorldEditor";
 import { createEditorCharacter } from "../Character/editorCharacter";
 import { useWorldCreatorState } from "@editor/worldCreator/useWorldCreatorState";
 import { WorldCreatorView } from "@editor/worldCreator/WorldCreatorView";
+import { loadSceneCreatorSettings } from "@editor/worldCreator/persistence";
 
 const TOKEN_KEY = "token";
 
 function buildEditorStartPos(data) {
+  const settings = loadSceneCreatorSettings();
+  if (settings?.gmPos && Number.isFinite(Number(settings.gmPos.x)) && Number.isFinite(Number(settings.gmPos.z))) {
+    return {
+      x: Number(settings.gmPos.x ?? 0),
+      y: Number(settings.gmPos.y ?? 0),
+      z: Number(settings.gmPos.z ?? 0),
+    };
+  }
   const sizeX = Number(data?.snapshot?.localTemplate?.geometry?.size_x ?? 100);
   const sizeZ = Number(data?.snapshot?.localTemplate?.geometry?.size_z ?? 100);
   return {

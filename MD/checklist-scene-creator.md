@@ -176,3 +176,12 @@
 - [x] Criar bases locais de `AuthPage`, `LoadingOverlay`, `Api`, `GameCanvas` e helpers
 - [x] Reaproveitar a geometria de terreno/procedural do bootstrap do mundo no editor
 - [x] Ajustar actors/objects para nascerem sobre o terreno correto do editor
+
+## 20. Painel de terreno
+
+- [x] Conferir contrato de terreno do client para `size_x`, `size_z`, `ground_render_material` e `proceduralMap`
+- [x] Criar painel de terreno no `scene-creator`
+- [x] Abrir e fechar o painel com a tecla `3`
+- [x] Aplicar alteracoes de terreno em tempo real no snapshot local
+- [x] Exibir informacoes somente leitura de `ground_material`, `ground_mesh` e `ground_render_material`
+- [x] Reposicionar o painel na lateral com o mesmo tema visual do editor

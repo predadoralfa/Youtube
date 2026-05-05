@@ -49,6 +49,50 @@ function getEntityYaw(entity) {
   return Number(entity?.yaw ?? 0);
 }
 
+function getEntityRotX(entity) {
+  return Number(entity?.rotX ?? 0);
+}
+
+function getEntityRotZ(entity) {
+  return Number(entity?.rotZ ?? 0);
+}
+
+function createSelectionMarker(radius = 1, height = 2) {
+  const markerRadius = Math.max(0.7, Number(radius ?? 1));
+  const markerHeight = Math.max(0.5, Number(height ?? 2));
+  const marker = new THREE.Mesh(
+    new THREE.CylinderGeometry(markerRadius, markerRadius, markerHeight, 24, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0xf4b942,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+  );
+  return marker;
+}
+
+function applySelectionAppearance(mesh, selected) {
+  if (!selected || !mesh) return;
+
+  mesh.traverse((child) => {
+    if (!child?.material) return;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) {
+      if (!material) continue;
+      if ("emissive" in material && material.emissive?.setHex) {
+        material.emissive.setHex(0x6a4b00);
+        if ("emissiveIntensity" in material) {
+          material.emissiveIntensity = 0.9;
+        }
+      } else if ("color" in material && material.color?.offsetHSL) {
+        material.color.offsetHSL(0, 0.04, 0.08);
+      }
+    }
+  });
+}
+
 function normalizePlanarVector(x, z) {
   const length = Math.hypot(Number(x ?? 0), Number(z ?? 0));
   if (!Number.isFinite(length) || length <= 0.000001) {
@@ -148,7 +192,7 @@ function createCameraApi(camera, options = {}) {
   };
 }
 
-function syncEntityMeshes(scene, entityGroupRef, snapshot, allowObjectSelection, sampleGroundHeight) {
+function syncEntityMeshes(scene, entityGroupRef, snapshot, allowObjectSelection, sampleGroundHeight, selectedTarget) {
   const previous = entityGroupRef.current;
   if (previous) {
     scene.remove(previous);
@@ -184,19 +228,17 @@ function syncEntityMeshes(scene, entityGroupRef, snapshot, allowObjectSelection,
     const pos = getEntityPos(entity);
     const scale = getEntityScale(entity);
     const yaw = getEntityYaw(entity);
+    const rotX = getEntityRotX(entity);
+    const rotZ = getEntityRotZ(entity);
+    const selected =
+      String(selectedTarget?.kind ?? "").toUpperCase() === getEntityKind(entity) &&
+      String(selectedTarget?.id ?? "") === getEntityId(entity, getEntityKind(entity));
     const groundY = Number(typeof sampleGroundHeight === "function" ? sampleGroundHeight(pos.x, pos.z) : 0);
-    const baseAnchor = Number(mesh.geometry?.parameters?.height ?? 1) / 2;
-    const anchor =
-      mesh.userData?.localOnly || mesh.userData?.editorOnly
-        ? 1.5
-        : Number.isFinite(baseAnchor)
-          ? baseAnchor
-          : 0.9;
-    mesh.position.set(pos.x, groundY + Number(pos.y ?? 0) + anchor + 0.2, pos.z);
+    mesh.position.set(pos.x, groundY + Number(pos.y ?? 0), pos.z);
     mesh.rotation.y = yaw;
     const tilt = sampleGroundTilt(sampleGroundHeight, pos.x, pos.z);
-    mesh.rotation.x = tilt.pitch;
-    mesh.rotation.z = tilt.roll;
+    mesh.rotation.x = tilt.pitch + rotX;
+    mesh.rotation.z = tilt.roll + rotZ;
     mesh.scale.set(
       Number.isFinite(scale.x) && scale.x > 0 ? scale.x : 1,
       Number.isFinite(scale.y) && scale.y > 0 ? scale.y : 1,
@@ -204,25 +246,37 @@ function syncEntityMeshes(scene, entityGroupRef, snapshot, allowObjectSelection,
     );
     mesh.userData.allowObjectSelection = allowObjectSelection;
     mesh.userData.groundY = groundY;
-    mesh.userData.anchor = anchor;
+    applySelectionAppearance(mesh, selected);
     group.add(mesh);
+    if (selected) {
+      const markerHeight = 2;
+      const marker = createSelectionMarker(
+        Math.max(1, Number(scale.x ?? 1), Number(scale.z ?? 1)) * 0.7,
+        markerHeight
+      );
+      marker.position.set(
+        pos.x,
+        groundY + Number(pos.y ?? 0) + markerHeight / 2,
+        pos.z
+      );
+      group.add(marker);
+    }
   }
   scene.add(group);
 }
 
-function syncLocalEditorMeshes(entityGroupRef, focus, yaw, sampleGroundHeight) {
+function syncLocalEditorMeshes(entityGroupRef, focus, yaw, sampleGroundHeight, editorCharacterVisible) {
   const group = entityGroupRef?.current ?? null;
   if (!group) return;
 
   for (const mesh of group.children ?? []) {
     if (!mesh?.userData?.localOnly && !mesh?.userData?.editorOnly) continue;
+    mesh.visible = editorCharacterVisible !== false;
 
-    const baseAnchor = Number(mesh.geometry?.parameters?.height ?? 1) / 2;
-    const anchor = Number.isFinite(baseAnchor) ? baseAnchor : 0.9;
     const groundY = Number(typeof sampleGroundHeight === "function" ? sampleGroundHeight(focus.x, focus.z) : 0);
     mesh.position.set(
       Number(focus.x ?? 0),
-      groundY + Number(focus.y ?? 0) + anchor + 0.2,
+      groundY + Number(focus.y ?? 0),
       Number(focus.z ?? 0)
     );
     mesh.rotation.y = Number(yaw ?? 0);
@@ -241,9 +295,12 @@ export function GameCanvas({
   exposeCameraRef,
   exposeCameraApiRef,
   editorCameraFocusRef,
+  editorAnchorRef,
   editorMoveSpeedRef,
   editorMoveStateRef,
   editorInputStateRef,
+  editorCharacterVisibleRef,
+  selectedTarget = null,
   onEditorTick,
   disableSceneInput = false,
   buildPlacement = null,
@@ -424,15 +481,15 @@ export function GameCanvas({
       lastFrame = now;
 
       const previousCameraState = cameraApiRef.current?.getState?.() ?? null;
-      const focusRef = editorCameraFocusRef?.current ?? { x: 0, y: 0, z: 0 };
+      const anchorRef = editorAnchorRef?.current ?? editorCameraFocusRef?.current ?? { x: 0, y: 0, z: 0 };
       const moveState = editorMoveStateRef?.current ?? null;
       const moveSpeed = Math.max(0, Number(editorMoveSpeedRef?.current ?? 0));
       const speedScale = Math.max(0, Number(moveState?.speedScale ?? 1));
       const moveDir = normalizePlanarVector(moveState?.dir?.x ?? 0, moveState?.dir?.z ?? 0);
-      const movedFocus = {
-        x: Number(focusRef.x ?? 0),
-        y: Number(focusRef.y ?? 0),
-        z: Number(focusRef.z ?? 0),
+      const movedAnchor = {
+        x: Number(anchorRef.x ?? 0),
+        y: Number(anchorRef.y ?? 0),
+        z: Number(anchorRef.z ?? 0),
       };
 
       if ((moveDir.x !== 0 || moveDir.z !== 0) && previousCameraState) {
@@ -446,21 +503,43 @@ export function GameCanvas({
           rightZ * moveDir.x + forwardZ * moveDir.z
         );
         const distance = moveSpeed * speedScale * dt;
-        movedFocus.x += worldDir.x * distance;
-        movedFocus.z += worldDir.z * distance;
+        movedAnchor.x += worldDir.x * distance;
+        movedAnchor.z += worldDir.z * distance;
       }
 
+      if (editorAnchorRef?.current) {
+        editorAnchorRef.current = movedAnchor;
+      }
+      const selectedEntity =
+        String(selectedTarget?.kind ?? "").toUpperCase() === "ACTOR"
+          ? snapshotRef.current?.actors?.find((entry) => String(entry?.id) === String(selectedTarget.id)) ?? null
+          : String(selectedTarget?.kind ?? "").toUpperCase() === "OBJECT"
+            ? snapshotRef.current?.sceneObjects?.find((entry) => String(entry?.id) === String(selectedTarget.id)) ?? null
+            : null;
+      const nextFocus = selectedEntity?.pos
+        ? {
+            x: Number(selectedEntity.pos.x ?? movedAnchor.x),
+            y: Number(selectedEntity.pos.y ?? movedAnchor.y),
+            z: Number(selectedEntity.pos.z ?? movedAnchor.z),
+          }
+        : movedAnchor;
       if (editorCameraFocusRef?.current) {
-        editorCameraFocusRef.current = movedFocus;
+        editorCameraFocusRef.current = nextFocus;
       }
       if (cameraApiRef.current) {
-        cameraApiRef.current.setFocus(movedFocus);
+        cameraApiRef.current.setFocus(nextFocus);
       }
 
       const currentCameraState = cameraApiRef.current?.getState?.() ?? null;
-      const currentFocus = currentCameraState?.focus ?? movedFocus;
+      const currentFocus = currentCameraState?.focus ?? nextFocus;
       const editorYaw = Number(currentCameraState?.yaw ?? 0) + Math.PI;
-      syncLocalEditorMeshes(entityGroupRef, currentFocus, editorYaw, groundSamplerRef.current);
+      syncLocalEditorMeshes(
+        entityGroupRef,
+        movedAnchor,
+        editorYaw,
+        groundSamplerRef.current,
+        editorCharacterVisibleRef?.current !== false
+      );
       if (editorInputStateRef?.current) {
         editorInputStateRef.current = {
           ...editorInputStateRef.current,
@@ -474,9 +553,9 @@ export function GameCanvas({
       if (exposeRuntimeRef) {
         exposeRuntimeRef.current = {
           pos: {
-            x: Number(currentFocus.x ?? 0),
-            y: Number(currentFocus.y ?? 0),
-            z: Number(currentFocus.z ?? 0),
+            x: Number(movedAnchor.x ?? 0),
+            y: Number(movedAnchor.y ?? 0),
+            z: Number(movedAnchor.z ?? 0),
           },
         };
       }
@@ -484,9 +563,9 @@ export function GameCanvas({
       if (onEditorTick) {
         onEditorTick({
           pos: {
-            x: Number(currentFocus.x ?? 0),
-            y: Number(currentFocus.y ?? 0),
-            z: Number(currentFocus.z ?? 0),
+            x: Number(movedAnchor.x ?? 0),
+            y: Number(movedAnchor.y ?? 0),
+            z: Number(movedAnchor.z ?? 0),
           },
           yaw: Number(currentCameraState?.yaw ?? 0),
         });
@@ -538,6 +617,7 @@ export function GameCanvas({
     mergedContainerRef,
     cameraOptions,
     editorCameraFocusRef,
+    editorAnchorRef,
     editorInputStateRef,
     onEditorTick,
     onTargetClear,
@@ -557,10 +637,23 @@ export function GameCanvas({
     const sizeX = Number(template?.geometry?.size_x ?? 100);
     const sizeZ = Number(template?.geometry?.size_z ?? 100);
     const proceduralMap = currentSnapshot?.proceduralMap ?? null;
+    const visual = template?.visual ?? {};
     const ground = scene.getObjectByName("scene-ground");
     if (ground) {
       ground.geometry?.dispose?.();
       ground.geometry = buildGroundGeometry(sizeX, sizeZ, proceduralMap);
+      if (ground.material) {
+        const nextColor = new THREE.Color(visual?.ground_render_material?.base_color ?? visual?.ground_color ?? "#5a5a5a");
+        if (Array.isArray(ground.material)) {
+          for (const material of ground.material) {
+            material.color?.copy?.(nextColor);
+            material.needsUpdate = true;
+          }
+        } else {
+          ground.material.color?.copy?.(nextColor);
+          ground.material.needsUpdate = true;
+        }
+      }
       ground.updateMatrixWorld(true);
       groundSamplerRef.current = createGroundSamplerFromMesh(
         ground,
@@ -585,8 +678,15 @@ export function GameCanvas({
       );
     }
 
-    syncEntityMeshes(scene, entityGroupRef, currentSnapshot, allowObjectSelection, groundSamplerRef.current);
-  }, [snapshot, allowObjectSelection]);
+    syncEntityMeshes(
+      scene,
+      entityGroupRef,
+      currentSnapshot,
+      allowObjectSelection,
+      groundSamplerRef.current,
+      selectedTarget
+    );
+  }, [snapshot, allowObjectSelection, selectedTarget]);
 
   return (
     <div
