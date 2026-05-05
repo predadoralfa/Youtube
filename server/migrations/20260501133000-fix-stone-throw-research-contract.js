@@ -59,7 +59,9 @@ module.exports = {
         title: "Stone Throw Crafting",
         description: "Unlock crafting the Stone Throw weapon.",
         grants_json: JSON.stringify({ unlock: ["recipe.craft:CRAFT_STONE_THROW"] }),
-        requirements_json: null,
+        requirements_json: JSON.stringify({
+          itemCosts: [{ itemCode: "SMALL_STONE", qty: 40 }],
+        }),
       };
 
       if (levelRows?.[0]?.id) {

@@ -175,7 +175,9 @@ module.exports = {
         title: "Stone Punch Crafting",
         description: "Unlock crafting the Stone Punch weapon.",
         grants: { unlock: ["recipe.craft:CRAFT_STONE_PUNCH"] },
-        requirements: null,
+        requirements: {
+          itemCosts: [{ itemCode: "SMALL_STONE", qty: 40 }],
+        },
       });
 
       const craftDefId = await upsertCraft(queryInterface, transaction, "CRAFT_STONE_PUNCH", {

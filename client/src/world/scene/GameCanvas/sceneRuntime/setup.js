@@ -5,7 +5,6 @@ import { applyDayNightCycle } from "../../light/dayNightCycle";
 import { createSkyDome } from "../../environment/SkyDome";
 import { readCameraStateFromRuntime } from "../helpers";
 import { buildGroundGeometry, createGroundSampler, createGroundSamplerFromMesh } from "./terrain";
-import { clearProceduralWorld, syncProceduralWorld } from "./procedural";
 import { createStatsPanel } from "../../debug/createStatsPanel";
 
 function buildGroundMaterial(visual = {}) {
@@ -17,7 +16,7 @@ function buildGroundMaterial(visual = {}) {
   return new THREE.MeshStandardMaterial({ color: new THREE.Color(groundColor) });
 }
 
-export function applySceneTemplate(runtime, tpl, proceduralMap = null) {
+export function applySceneTemplate(runtime, tpl) {
   if (!runtime) return;
 
   const sizeX = Number(tpl?.geometry?.size_x ?? 100);
@@ -28,7 +27,7 @@ export function applySceneTemplate(runtime, tpl, proceduralMap = null) {
 
   if (runtime.groundMesh) {
     runtime.groundMesh.geometry?.dispose?.();
-    runtime.groundMesh.geometry = buildGroundGeometry(sizeX, sizeZ, proceduralMap ?? null);
+    runtime.groundMesh.geometry = buildGroundGeometry(sizeX, sizeZ);
     runtime.groundMesh.position.set(sizeX / 2, 0, sizeZ / 2);
     runtime.groundMesh.updateMatrixWorld(true);
 
@@ -53,24 +52,11 @@ export function applySceneTemplate(runtime, tpl, proceduralMap = null) {
   }
 
   if (runtime.groundSamplerRef) {
-    const fallbackSampler = createGroundSampler(sizeX, sizeZ, proceduralMap ?? null);
+    const fallbackSampler = createGroundSampler();
     runtime.groundSamplerRef.current = createGroundSamplerFromMesh(
       runtime.groundMesh,
       fallbackSampler
     );
-  }
-
-  if (proceduralMap) {
-    runtime.proceduralMap = proceduralMap;
-    syncProceduralWorld(
-      runtime,
-      proceduralMap,
-      runtime.proceduralFocus?.x ?? 0,
-      runtime.proceduralFocus?.z ?? 0
-    );
-  } else {
-    runtime.proceduralMap = null;
-    clearProceduralWorld(runtime);
   }
 }
 
@@ -78,7 +64,6 @@ export function setupSceneRuntime({
   container,
   runtimeRef,
   templateRef,
-  proceduralMapRef,
   worldTimeRef,
   cameraRef,
   cameraOptions = {},
@@ -124,7 +109,7 @@ export function setupSceneRuntime({
   window.addEventListener("resize", cameraApi.onResize);
 
   const groundMesh = new THREE.Mesh(
-    buildGroundGeometry(sizeX, sizeZ, proceduralMapRef?.current ?? null),
+    buildGroundGeometry(sizeX, sizeZ),
     buildGroundMaterial(visual)
   );
   groundMesh.rotation.x = -Math.PI / 2;
@@ -134,7 +119,7 @@ export function setupSceneRuntime({
   groundMesh.updateMatrixWorld(true);
   groundSamplerRef.current = createGroundSamplerFromMesh(
     groundMesh,
-    createGroundSampler(sizeX, sizeZ, proceduralMapRef?.current ?? null)
+    createGroundSampler()
   );
 
   const points = [
@@ -163,18 +148,11 @@ export function setupSceneRuntime({
     boundsMaterial,
     cameraApi,
     groundSamplerRef,
-    proceduralWorldGroup: null,
-    proceduralWorldState: null,
-    proceduralMap: proceduralMapRef?.current ?? null,
-    proceduralFocus: {
-      x: Number(initialRuntime?.pos?.x ?? 0),
-      z: Number(initialRuntime?.pos?.z ?? 0),
-    },
     sampleGroundHeight: (x, z) =>
-      groundSamplerRef.current?.(x, z) ?? createGroundSampler(sizeX, sizeZ, proceduralMapRef?.current ?? null)(x, z),
+      groundSamplerRef.current?.(x, z) ?? createGroundSampler()(x, z),
   };
 
-  applySceneTemplate(runtime, tpl, proceduralMapRef?.current ?? null);
+  applySceneTemplate(runtime, tpl);
 
   if (initialRuntime?.pos) {
     const initialTarget = new THREE.Object3D();

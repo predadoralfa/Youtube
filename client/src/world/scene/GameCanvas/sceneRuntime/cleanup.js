@@ -5,7 +5,6 @@ export function cleanupSceneRuntime({
   boundsLine,
   boundsGeometry,
   boundsMaterial,
-  proceduralWorldGroup,
   skyDome,
   onResize,
   statsPanel,
@@ -77,20 +76,6 @@ export function cleanupSceneRuntime({
     } catch {}
   }
   state.meshBySceneObjectIdRef.current.clear();
-
-  if (proceduralWorldGroup) {
-    scene.remove(proceduralWorldGroup);
-    proceduralWorldGroup.traverse((child) => {
-      if (child.geometry) child.geometry.dispose?.();
-      if (child.material) {
-        if (Array.isArray(child.material)) {
-          for (const material of child.material) material?.dispose?.();
-        } else {
-          child.material.dispose?.();
-        }
-      }
-    });
-  }
 
   try {
     skyDome?.dispose?.();

@@ -5,7 +5,6 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
   const worldTimeRef = useRef(currentWorldTime);
   const runtimeRef = useRef(null);
   const templateRef = useRef(null);
-  const proceduralMapRef = useRef(null);
   const versionRef = useRef(null);
   const actorsRef = useRef([]);
   const sceneObjectsRef = useRef([]);
@@ -63,7 +62,6 @@ export function useGameCanvasState(currentWorldTime, buildPlacement = null) {
       worldTimeRef,
       runtimeRef,
       templateRef,
-      proceduralMapRef,
       versionRef,
       actorsRef,
       sceneObjectsRef,

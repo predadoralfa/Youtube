@@ -4,7 +4,6 @@ import { syncActorMeshes } from "../syncActors";
 import { syncSceneObjectMeshes } from "../syncSceneObjects";
 import { syncEnemyMeshes } from "../syncEnemies";
 import { syncPlayerMeshes } from "../syncPlayers";
-import { syncProceduralWorld } from "../procedural";
 import { updateOverlayState } from "../overlay";
 
 export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveState }) {
@@ -90,18 +89,6 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveSt
             )})`
         );
       }
-      if (focusPos) {
-        runtime.proceduralFocus = {
-          x: Number(focusPos.x ?? 0),
-          z: Number(focusPos.z ?? 0),
-        };
-      }
-      syncProceduralWorld(
-        runtime,
-        state.proceduralMapRef.current ?? null,
-        focusPos?.x ?? 0,
-        focusPos?.z ?? 0
-      );
     } else {
       const editorFocus = state.editorCameraFocusRef?.current ?? null;
       const moveState = getMoveState?.() ?? { dir: { x: 0, z: 0 }, speedScale: 1 };
@@ -115,16 +102,6 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveSt
           editorFocus.z += Number(moveDir.z ?? 0) * moveSpeed * dt;
         }
         editorFocus.y = 0;
-        runtime.proceduralFocus = {
-          x: Number(editorFocus.x ?? 0),
-          z: Number(editorFocus.z ?? 0),
-        };
-        syncProceduralWorld(
-          runtime,
-          state.proceduralMapRef.current ?? null,
-          Number(editorFocus.x ?? 0),
-          Number(editorFocus.z ?? 0)
-        );
         fallbackTarget.position.set(
           Number(editorFocus.x ?? 0),
           Number(runtime.sampleGroundHeight(editorFocus.x ?? 0, editorFocus.z ?? 0) ?? 0) +
@@ -168,8 +145,6 @@ export function startSceneTick({ runtime, tools, state, worldStoreRef, getMoveSt
         const x = Number(rt.pos?.x ?? 0);
         const y = Number(rt.pos?.y ?? 0);
         const z = Number(rt.pos?.z ?? 0);
-        runtime.proceduralFocus = { x, z };
-        syncProceduralWorld(runtime, state.proceduralMapRef.current ?? null, x, z);
         fallbackTarget.position.set(x, Number(runtime.sampleGroundHeight(x, z) ?? 0) + y, z);
       }
       runtime.cameraApi.update(fallbackTarget, dt);

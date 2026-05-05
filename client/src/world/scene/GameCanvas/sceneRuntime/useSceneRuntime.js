@@ -23,7 +23,6 @@ export function useSceneRuntime({
     if (snapshot) {
       state.runtimeRef.current = snapshot.runtime ?? null;
       state.templateRef.current = snapshot.localTemplate ?? null;
-      state.proceduralMapRef.current = snapshot.proceduralMap ?? null;
       state.versionRef.current = snapshot.localTemplateVersion ?? null;
       state.actorsRef.current = snapshot.actors ?? [];
       state.sceneObjectsRef.current = snapshot.sceneObjects ?? [];
@@ -45,7 +44,6 @@ export function useSceneRuntime({
       container,
       runtimeRef: state.runtimeRef,
       templateRef: state.templateRef,
-      proceduralMapRef: state.proceduralMapRef,
       worldTimeRef: state.worldTimeRef,
       cameraRef: state.cameraRef,
       cameraOptions,
@@ -110,7 +108,6 @@ export function useSceneRuntime({
         boundsLine: runtime.boundsLine,
         boundsGeometry: runtime.boundsGeometry,
         boundsMaterial: runtime.boundsMaterial,
-        proceduralWorldGroup: runtime.proceduralWorldGroup,
         onResize: runtime.cameraApi.onResize,
         statsPanel: runtime.statsPanel,
         state,
@@ -146,10 +143,6 @@ export function useSceneRuntime({
     const runtime = sceneRuntimeRef.current;
     if (!runtime) return;
 
-    applySceneTemplate(
-      runtime,
-      snapshot?.localTemplate ?? null,
-      snapshot?.proceduralMap ?? null
-    );
-  }, [snapshot?.localTemplateVersion, snapshot?.localTemplate, snapshot?.proceduralMap]);
+    applySceneTemplate(runtime, snapshot?.localTemplate ?? null);
+  }, [snapshot?.localTemplateVersion, snapshot?.localTemplate]);
 }
